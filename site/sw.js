@@ -1,5 +1,5 @@
 // Service worker : l'appli s'ouvre même sans réseau, et les cartes téléchargées (Plan IGN) restent disponibles hors ligne.
-const VERSION = 'champi-v13';
+const VERSION = 'champi-v14';
 const TILES = 'champi-tuiles-v1';           // cartes enregistrées par l'utilisateur (menu « Cartes hors ligne »)
 const SHELL = [
   './', 'index.html', 'css/app.css', 'js/app.js', 'js/logic.js', 'js/config.js', 'js/photos.js', 'js/advisor.js', 'js/weather.js',
@@ -30,4 +30,22 @@ self.addEventListener('fetch', (e) => {
       return res;
     }).catch(() => caches.match(e.request, { ignoreSearch: true }).then((r) => r || caches.match('index.html'))),
   );
+});
+
+// Alertes de pousse
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data?.text() }; }
+  e.waitUntil(self.registration.showNotification(d.title || '🍄 Carnet de champignons', {
+    body: d.body || '', icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: d.tag || 'champi', data: { url: d.url || './' },
+  }));
+});
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = new URL(e.notification.data?.url || './', self.registration.scope).href;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    const open = list.find((c) => c.url.startsWith(self.registration.scope));
+    if (open) { open.navigate(url).catch(() => {}); return open.focus(); }
+    return self.clients.openWindow(url);
+  }));
 });

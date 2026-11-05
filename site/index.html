@@ -124,6 +124,7 @@
           <button id="export-csv" class="btn small-btn" type="button">⬇️ Journal (CSV)</button>
         </div>
         <button id="offline-btn" class="btn" type="button">📥 Cartes hors ligne</button>
+        <button id="alerts-btn" class="btn" type="button">🔔 Alertes de pousse</button>
         <button id="help-btn" class="btn small-btn" type="button">❓ Aide</button>
         <div class="field">
           <span class="small">Thème</span>
@@ -339,6 +340,26 @@
         <button class="btn js-close" type="button">Annuler</button>
         <button id="share-save" class="btn primary" type="button">Enregistrer</button>
       </div>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-alerts" class="sheet">
+    <div class="stack">
+      <div class="sheet-head">
+        <h2>🔔 Alertes de pousse</h2>
+        <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
+      </div>
+      <p class="small">Chaque matin vers 7 h 30, l'appli vérifie la météo de tes coins (et de ceux de la famille).
+        Quand les conditions deviennent favorables pour une espèce en saison, tu reçois une notification sur ce téléphone.
+        Au plus une alerte par coin et par semaine.</p>
+      <p id="alerts-status" class="access-line small"></p>
+      <div class="row">
+        <button id="alerts-on" class="btn primary" type="button">Activer sur ce téléphone</button>
+        <button id="alerts-off" class="btn" type="button" hidden>Désactiver</button>
+        <button id="alerts-test" class="btn" type="button" hidden>Envoyer une alerte de test</button>
+      </div>
+      <p id="alerts-msg" class="small muted"></p>
+      <p class="small muted">Sur iPhone : ajoute d'abord l'appli à l'écran d'accueil (Safari → Partager → « Sur l'écran d'accueil »), ouvre-la depuis l'icône, puis active les alertes ici (iOS 16.4 ou plus récent).</p>
     </div>
   </dialog>
 

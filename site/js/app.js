@@ -356,6 +356,7 @@ async function loadData() {
   await applyPending();
   render();
   updateOfflineBar();
+  openSpotFromHash();
   if (state.openSpotId && $('#dlg-spot').open) renderSpot(state.openSpotId);
 }
 
@@ -1334,6 +1335,81 @@ $('#add-form').addEventListener('submit', async (e) => {
   } catch (err) { showError('#admin-error', frError(err)); }
   busy(btn, false);
 });
+
+// ---------------------------------------------------------------------------
+// Alertes de pousse (Web Push)
+
+const ALERTS_URL = `${SUPABASE_URL}/functions/v1/champi-alertes`;
+const isIos = /iP(hone|ad|od)/.test(navigator.userAgent);
+const isStandalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+function b64uToBytes(s) {
+  const b = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4));
+  return Uint8Array.from(b, (c) => c.charCodeAt(0));
+}
+async function currentSub() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  const reg = await navigator.serviceWorker.getRegistration();
+  return reg ? reg.pushManager.getSubscription() : null;
+}
+async function renderAlerts() {
+  const st = $('#alerts-status');
+  const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  let sub = null;
+  try { sub = await currentSub(); } catch { /* indisponible */ }
+  const on = !!sub && Notification.permission === 'granted';
+  $('#alerts-on').hidden = on; $('#alerts-off').hidden = !on; $('#alerts-test').hidden = !on;
+  if (isIos && !isStandalone) st.textContent = '📱 Sur iPhone, les alertes ne marchent que depuis l\'appli ajoutée à l\'écran d\'accueil.';
+  else if (!supported) st.textContent = 'Ce navigateur ne gère pas les notifications.';
+  else if (Notification.permission === 'denied') st.textContent = '🔕 Notifications refusées pour ce site : autorise-les dans les réglages du téléphone.';
+  else st.textContent = on ? '🔔 Alertes actives sur ce téléphone.' : '🔕 Alertes inactives sur ce téléphone.';
+  $('#alerts-on').disabled = !supported || (isIos && !isStandalone) || Notification.permission === 'denied';
+}
+$('#alerts-btn').addEventListener('click', () => { $('#menu').hidden = true; $('#alerts-msg').textContent = ''; renderAlerts(); $('#dlg-alerts').showModal(); });
+$('#dlg-alerts .js-close').addEventListener('click', () => $('#dlg-alerts').close());
+$('#alerts-on').addEventListener('click', async () => {
+  const btn = $('#alerts-on'); busy(btn, true); $('#alerts-msg').textContent = '';
+  try {
+    if (await Notification.requestPermission() !== 'granted') throw new Error('Notifications non autorisées.');
+    const reg = await navigator.serviceWorker.ready;
+    const { publicKey } = await (await fetch(ALERTS_URL)).json();
+    const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uToBytes(publicKey) });
+    const j = sub.toJSON();
+    const { error } = await sb.from('champi_push_subscriptions').insert({ endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth });
+    if (error && error.code !== '23505') throw error;
+    $('#alerts-msg').textContent = '✔ Alertes activées. Touche « Envoyer une alerte de test » pour vérifier.';
+  } catch (err) {
+    const m = String(err?.message ?? err);
+    $('#alerts-msg').textContent = /Registration failed|push service|AbortError/i.test(m)
+      ? 'Impossible d\'activer : le service de notifications de ce navigateur a refusé. Sur Android, utilise Chrome ; sur iPhone, l\'appli installée sur l\'écran d\'accueil.'
+      : `Impossible d'activer : ${frError(err)}`;
+  }
+  busy(btn, false);
+  renderAlerts();
+});
+$('#alerts-off').addEventListener('click', async () => {
+  try {
+    const sub = await currentSub();
+    if (sub) { await sb.from('champi_push_subscriptions').delete().eq('endpoint', sub.endpoint); await sub.unsubscribe(); }
+    $('#alerts-msg').textContent = 'Alertes désactivées sur ce téléphone.';
+  } catch (err) { $('#alerts-msg').textContent = frError(err); }
+  renderAlerts();
+});
+$('#alerts-test').addEventListener('click', async () => {
+  $('#alerts-msg').textContent = 'Envoi…';
+  const { data, error } = await sb.functions.invoke('champi-alertes', { body: { action: 'test' } });
+  $('#alerts-msg').textContent = error ? `Échec : ${frError(error)}` : (data?.envois ?? []).includes('ok') ? '✔ Envoyée : la notification doit apparaître dans quelques secondes.' : `Réponse : ${JSON.stringify(data)}`;
+});
+
+// Lien direct vers un coin (notification) : …/#spot=<id>
+function openSpotFromHash() {
+  const m = location.hash.match(/^#spot=([0-9a-f-]{36})$/i);
+  if (!m || !state.spots.some((s) => s.id === m[1])) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  const s = state.spots.find((x) => x.id === m[1]);
+  map.setView([s.lat, s.lon], Math.max(map.getZoom(), 14));
+  openSpot(s.id);
+}
+window.addEventListener('hashchange', openSpotFromHash);
 
 // ---------------------------------------------------------------------------
 // Partage d'un coin privé avec des personnes précises

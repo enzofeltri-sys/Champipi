@@ -58,6 +58,17 @@ Les migrations sont dans `supabase/migrations/`. Règles (RLS) :
 - **📖 Guide des espèces** : saison, milieux, sol, altitude et sosies dangereux (connaissances générales, à confirmer
   auprès d'une association mycologique).
 
+## Alertes de pousse
+
+- Menu ☰ → « 🔔 Alertes de pousse » → « Activer sur ce téléphone », puis « Envoyer une alerte de test ».
+  Sur iPhone : seulement depuis l'appli ajoutée à l'écran d'accueil (iOS 16.4+).
+- Chaque matin à 6 h 37 UTC (7 h 37 l'hiver, 8 h 37 l'été à Paris), `pg_cron` appelle la fonction `champi-alertes`.
+  Elle évalue chaque coin avec **les mêmes règles que l'appli** et notifie les membres concernés quand un coin passe
+  en « 🟢 favorable » ; au plus une alerte par coin et par semaine. Toucher la notification ouvre le coin.
+- Clés de notification (VAPID) générées par la fonction et gardées dans `champi_push_config` (aucun accès client).
+- **Après toute modification des règles** (`site/js/advisor.js` ou `logic.js`) : `npm install` puis `npm run build:alertes`,
+  et redéployer `supabase/functions/champi-alertes` (fichiers `index.ts` + `rules.js`).
+
 ## Apprentissage sur tes trouvailles
 
 - Fiche d'un coin → « 📊 Bilan du coin » : trouvailles par mois et par année, meilleur mois, espèces.
@@ -111,6 +122,7 @@ node tools/ui-access.cjs http://localhost:5173/ shots     # accès aux massifs (
 node tools/ui-offline.cjs http://localhost:5173/ shots tests/gps.jpg  # hors ligne (vraies tuiles IGN)
 node tools/ui-share.cjs http://localhost:5173/ shots      # partage d'un coin (3 personnes)
 node tools/ui-learn.cjs http://localhost:5173/ shots      # bilan et apprentissage (vraie archive ; FAKE_ARCHIVE=1 pour simuler)
+node tools/ui-alerts.cjs http://localhost:5173/ shots     # alertes : écran, notification simulée, lien direct
 ```
 
 ## Sécurité

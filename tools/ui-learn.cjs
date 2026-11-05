@@ -10,6 +10,7 @@ const finds = ['2024-10-28', '2024-11-08', '2025-10-25', '2025-11-12'].map((d, i
   const b = await chromium.launch();
   const ctx = await b.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
   const page = await ctx.newPage();
+  if (!process.env.FAKE_ARCHIVE) process.env.REAL_ARCHIVE = '1';
   await fakeMeteo(page);
   const errors = []; let archive = 0;
   if (process.env.FAKE_ARCHIVE) await page.route('https://archive-api.open-meteo.com/**', (route) => {
