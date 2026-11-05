@@ -1,6 +1,6 @@
 // Service worker : met en cache l'appli pour qu'elle s'ouvre même avec peu de réseau.
 // Les données (Supabase) et les tuiles de carte passent toujours par le réseau.
-const VERSION = 'champi-v3';
+const VERSION = 'champi-v4';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'js/app.js', 'js/logic.js', 'js/config.js', 'js/photos.js',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/supabase.js',

@@ -31,20 +31,20 @@
     <div class="card narrow">
       <div class="logo-big" aria-hidden="true">🍄</div>
       <h1>Carnet de champignons</h1>
-      <p class="muted">Nos coins en Provence. Pas de mot de passe : tu reçois un lien de connexion par e-mail.</p>
+      <p class="muted">Nos coins en Provence. Pas de mot de passe : tu reçois un code de connexion par e-mail.</p>
       <form id="login-form" class="stack">
         <label for="login-email">Ton adresse e-mail</label>
         <input id="login-email" type="email" autocomplete="email" inputmode="email" required placeholder="prenom@exemple.fr">
-        <button class="btn primary" type="submit">Recevoir le lien</button>
+        <button class="btn primary" type="submit">Recevoir mon code</button>
       </form>
       <div id="login-sent" class="stack" hidden>
-        <p class="ok">📬 E-mail envoyé à <b id="login-sent-to"></b>. Ouvre-le sur ce téléphone et touche le lien.</p>
-        <p class="muted small">Rien reçu après une minute ? Regarde dans les indésirables.</p>
+        <p class="ok">📬 E-mail envoyé à <b id="login-sent-to"></b>.</p>
         <form id="code-form" class="stack">
-          <label for="login-code">Ou saisis le code à 6 chiffres de l'e-mail</label>
+          <label for="login-code">Tape le code reçu dans l'e-mail</label>
           <input id="login-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" maxlength="8" placeholder="123456">
-          <button class="btn" type="submit">Valider le code</button>
+          <button class="btn primary" type="submit">Se connecter</button>
         </form>
+        <p class="muted small">Tu peux aussi toucher le lien de l'e-mail, sur ce téléphone. Rien reçu après une minute ? Regarde dans les indésirables.</p>
         <button id="login-again" class="btn link" type="button">Changer d'adresse</button>
       </div>
       <p id="login-error" class="error" role="alert" hidden></p>

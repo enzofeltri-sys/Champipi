@@ -136,7 +136,7 @@ $('#login-form').addEventListener('submit', async (e) => {
   const email = $('#login-email').value.trim().toLowerCase();
   const btn = e.submitter; busy(btn, true); showError('#login-error');
   const { error } = await sb.auth.signInWithOtp({
-    email, options: { emailRedirectTo: location.origin + location.pathname, shouldCreateUser: true },
+    email, options: { emailRedirectTo: new URL('./', location.href).href.split('#')[0].split('?')[0], shouldCreateUser: true },
   });
   busy(btn, false);
   if (error) { showError('#login-error', `Envoi impossible : ${frError(error)}`); return; }
@@ -144,6 +144,7 @@ $('#login-form').addEventListener('submit', async (e) => {
   $('#login-sent-to').textContent = email;
   $('#login-form').hidden = true;
   $('#login-sent').hidden = false;
+  setTimeout(() => $('#login-code').focus(), 50);
 });
 
 $('#code-form').addEventListener('submit', async (e) => {
