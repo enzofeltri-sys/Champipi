@@ -397,3 +397,15 @@ button, .btn, .chip, .sp-chip, .rail-btn, summary { -webkit-user-select: none; u
 /* Échelle et légende en haut à gauche, sous les filtres */
 .leaflet-top { margin-top: calc(96px + env(safe-area-inset-top)); }
 .leaflet-top.leaflet-left .leaflet-control-scale { margin-left: 10px; }
+.legend-moment .key { margin: 0 3px 0 6px; } .legend-moment .key:first-child { margin-left: 0; }
+/* Bandeau compact : une ligne par information, pour ne pas cacher les boutons de droite */
+.species-banner .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.35; }
+.species-banner .head b { font-size: 1rem; }
+.species-banner .icon-btn.mini { width: 30px; height: 30px; }
+/* Petits écrans : bandeau réduit à l'essentiel et boutons ronds plus petits, pour que rien ne se chevauche */
+@media (max-height: 720px) {
+  .species-banner .opt { display: none; }
+  .rail { gap: 6px; }
+  .rail-btn { width: 48px; height: 46px; border-radius: 14px; font-size: 1.1rem; }
+  .rail-btn span { font-size: .58rem; margin-top: 2px; }
+}

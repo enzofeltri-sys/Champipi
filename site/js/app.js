@@ -12,6 +12,7 @@ import { treesAt, soilKind, whatGrows, fix as cleanText } from './here.js';
 import { historyRange, findConditions, spotProfile, personalAdvice, profileSummary } from './learn.js';
 import { massifAt, accessFor, inFireSeason, DEPT_PAGES, ACCESS_ICON } from './access.js';
 import { favorableColors, favorableColorsMany, favorableLabels, colorKeyMap } from './forests.js';
+import { habitatTable, gridStep, cellsFor, cellCodes, pixelCode, pxLat, pxLon, COLORS, ALPHA } from './moment-map.js';
 import { avatarOf, avatarHtml, AVATAR_EMOJIS, AVATAR_COLORS } from './avatars.js';
 
 // ---------------------------------------------------------------------------
@@ -455,9 +456,9 @@ $('#dlg-list .js-close').addEventListener('click', () => $('#dlg-list').close())
 // « Quel champignon ? » : pastilles en haut, forêts favorables colorées, coins filtrés
 
 const MOMENT = {
-  bon: { cls: 'm-bon', text: 'bon moment ici' },
-  moyen: { cls: 'm-moyen', text: 'en saison, conditions moyennes ici' },
-  faible: { cls: 'm-faible', text: 'en saison, mais pas le bon moment ici (trop sec ou trop froid)' },
+  bon: { cls: 'm-bon', text: 'bon moment ici', short: 'bon moment ici' },
+  moyen: { cls: 'm-moyen', text: 'en saison, conditions moyennes ici', short: 'conditions moyennes ici' },
+  faible: { cls: 'm-faible', text: 'en saison, mais pas le bon moment ici (trop sec ou trop froid)', short: 'pas le moment ici (sec ou froid)' },
 };
 function momentOf(id) {
   const s = SPECIES.find((x) => x.id === id);
@@ -482,7 +483,7 @@ $('#species-bar').addEventListener('click', (e) => {
 
 // « Bon moment ? » : avis du conseiller (pluie, températures, saison) au centre de la carte, pour chaque espèce.
 let momentTimer = null, momentCell = '';
-function scheduleMoment() { clearTimeout(momentTimer); momentTimer = setTimeout(updateMoment, 700); }
+function scheduleMoment() { clearTimeout(momentTimer); momentTimer = setTimeout(() => { updateMoment(); updateHabitatWeather(); }, 700); }
 async function updateMoment() {
   const c = map.getCenter();
   const lat = Math.round(c.lat * 4) / 4, lon = Math.round(c.lng * 4) / 4;   // grille de 0,25° : peu d'appels
@@ -502,7 +503,33 @@ async function updateMoment() {
 // Calque « forêts favorables » : les tuiles BD Forêt de l'IGN sont repeintes sur le téléphone
 // (une couleur = un type de forêt) pour ne garder que les forêts où pousse le champignon choisi.
 let habitatLayer = null, habitatKeys = new Map();
-const HABITAT_STRONG = [22, 163, 74, 150], HABITAT_WEAK = [132, 204, 22, 95];
+// Forêts favorables coloriées selon le « bon moment » (vert / jaune / rouge, gris = hors saison ou en attente).
+const habitat = { ids: [], table: new Map(), step: 0.1, codes: new Map(), allOff: false };
+function paintTile(c) {
+  if (!c._w) return;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  const d = g.createImageData(256, 256), px = d.data;
+  const s = habitat.step, z = c._z;
+  const cols = new Int32Array(256);
+  for (let x = 0; x < 256; x++) cols[x] = Math.floor(pxLon(c._x * 256 + x + 0.5, z) / s);
+  for (let y = 0; y < 256; y++) {
+    const row = Math.floor(pxLat(c._y * 256 + y + 0.5, z) / s);
+    let lastJ = null, codes = null;
+    for (let x = 0; x < 256; x++) {
+      const p = y * 256 + x, w = c._w[p];
+      if (!w) continue;
+      if (cols[x] !== lastJ) { lastJ = cols[x]; codes = habitat.codes.get(`${row}:${lastJ}`) ?? null; }
+      const code = habitat.allOff ? 0 : codes ? pixelCode(c._m[p], codes) : -1;
+      const col = COLORS[code];
+      const i = p * 4; px[i] = col[0]; px[i + 1] = col[1]; px[i + 2] = col[2]; px[i + 3] = ALPHA[w];
+    }
+  }
+  g.putImageData(d, 0, 0);
+}
+function repaintHabitat() {
+  if (!habitatLayer || !map.hasLayer(habitatLayer)) return;
+  for (const t of Object.values(habitatLayer._tiles ?? {})) paintTile(t.el);
+}
 const HabitatLayer = L.GridLayer.extend({
   createTile(coords, done) {
     const c = document.createElement('canvas'); c.width = c.height = 256;
@@ -512,19 +539,46 @@ const HabitatLayer = L.GridLayer.extend({
       .then((img) => {
         const g = c.getContext('2d', { willReadFrequently: true });
         g.drawImage(img, 0, 0);
-        const d = g.getImageData(0, 0, 256, 256), px = d.data;
-        for (let i = 0; i < px.length; i += 4) {
-          const k = px[i + 3] > 200 ? habitatKeys.get((px[i] << 16) | (px[i + 1] << 8) | px[i + 2]) : 0;
-          const col = k === 2 ? HABITAT_STRONG : k === 1 ? HABITAT_WEAK : null;
-          if (col) { px[i] = col[0]; px[i + 1] = col[1]; px[i + 2] = col[2]; px[i + 3] = col[3]; } else px[i + 3] = 0;
+        const px = g.getImageData(0, 0, 256, 256).data;
+        // On garde, pour chaque pixel, le type de forêt utile (poids + espèces concernées) : on peut ensuite
+        // recolorier la tuile quand la météo arrive, sans la retélécharger.
+        c._w = new Uint8Array(65536); c._m = new Uint16Array(65536); c._z = coords.z; c._x = coords.x; c._y = coords.y;
+        for (let p = 0; p < 65536; p++) {
+          const i = p * 4;
+          if (px[i + 3] <= 200) continue;
+          const h = habitat.table.get((px[i] << 16) | (px[i + 1] << 8) | px[i + 2]);
+          if (h) { c._w[p] = h.w; c._m[p] = h.mask; }
         }
-        g.putImageData(d, 0, 0);
+        paintTile(c);
         done(null, c);
       })
       .catch((err) => done(err, c));
     return c;
   },
 });
+let habitatSeq = 0;
+async function updateHabitatWeather() {
+  if (!habitat.ids.length || !habitatLayer || !map.hasLayer(habitatLayer)) return;
+  const m = month();
+  habitat.allOff = !habitat.ids.some((id) => SPECIES.find((x) => x.id === id)?.months.includes(m));
+  if (habitat.allOff) { repaintHabitat(); return; }
+  const b0 = map.getBounds().pad(0.2);
+  const b = { south: b0.getSouth(), north: b0.getNorth(), west: b0.getWest(), east: b0.getEast() };
+  const step = gridStep(b), cells = cellsFor(b, step);
+  const seq = ++habitatSeq;
+  try {
+    const all = await dailyFor(cells.map((c) => [c.lat, c.lon]));
+    if (seq !== habitatSeq) return;
+    const today = todayIso(), codes = new Map();
+    cells.forEach((c, i) => codes.set(c.key, cellCodes(habitat.ids, m, all[i] ? summarizeWeather(all[i], today) : null, assess)));
+    habitat.step = step; habitat.codes = codes;
+  } catch {
+    if (seq !== habitatSeq) return;
+    habitat.codes = new Map();   // météo indisponible : forêts en gris
+    toast('Météo indisponible : les forêts restent en gris (sans avis).', 3500);
+  }
+  repaintHabitat();
+}
 const PLAN_FOREST = (z, x, y) => `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=LANDCOVER.FORESTINVENTORY.V2&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}&FORMAT=image/png`;
 
 function setSpecies(ids, remember = true) {
@@ -533,9 +587,11 @@ function setSpecies(ids, remember = true) {
   renderSpeciesBar();
   const any = state.species.length > 0;
   habitatKeys = colorKeyMap(favorableColorsMany(state.species));
+  habitat.ids = [...state.species]; habitat.table = habitatTable(habitat.ids); habitat.codes = new Map();
   if (any && habitatKeys.size) {
-    if (!habitatLayer) habitatLayer = new HabitatLayer({ minZoom: 8, maxNativeZoom: 16, maxZoom: 19, opacity: 1, zIndex: 250, attribution: 'BD Forêt® V2 © IGN' });
+    if (!habitatLayer) habitatLayer = new HabitatLayer({ minZoom: 8, maxNativeZoom: 16, maxZoom: 19, opacity: 1, zIndex: 250, attribution: 'BD Forêt® V2 © IGN, météo Open-Meteo' });
     if (map.hasLayer(habitatLayer)) habitatLayer.redraw(); else habitatLayer.addTo(map);
+    updateHabitatWeather();
   } else if (habitatLayer) habitatLayer.remove();
   $('#species-banner').hidden = !any;
   map.getContainer().classList.toggle('habitat-on', !!(any && habitatKeys.size));   // fond en gris : le vert ressort
@@ -548,14 +604,15 @@ function momentLine(id) {
   const peak = (s.peak ?? []).includes(m) ? ' · mois de pic' : '';
   const mo = state.moment.get(id);
   if (!mo) return `🟡 en saison${peak}`;
-  return `${LEVELS[mo].icon} ${esc(MOMENT[mo].text)}${peak}`;
+  return `${LEVELS[mo].icon} ${esc(MOMENT[mo].short)}${peak}`;
 }
+const HABITAT_LEGEND = '<div class="small legend-moment"><span class="key" style="background:#16a34a"></span>bon <span class="key" style="background:#eab308"></span>moyen <span class="key" style="background:#dc2626"></span>pas le moment <span class="key" style="background:#64748b"></span>hors saison</div>';
 function renderBanner() {
   const ids = state.species; if (!ids.length) return;
   const mine = filterSpots(state.spots, state.finds, { species: ids }).length;
   const tools = `<button class="icon-btn mini" type="button" data-banner="guide" aria-label="Fiche du champignon">📖</button>
       <button class="icon-btn mini" type="button" data-banner="clear" aria-label="Tous les champignons">✕</button>`;
-  const rain = state.momentRain != null ? ` <span class="muted">(pluie ici : ${state.momentRain} mm / 10 j)</span>` : '';
+  const rain = state.momentRain != null ? ` <span class="muted">· ${state.momentRain} mm / 10 j</span>` : '';
   if (ids.length === 1) {
     const id = ids[0]; const s = SPECIES.find((x) => x.id === id); const g = GUIDE[id] ?? {};
     const forests = favorableLabels(id);
@@ -563,16 +620,16 @@ function renderBanner() {
     const warn = look.includes('⚠️') ? look.replace(/⚠️/g, '').split(/[.(:]/)[0].trim() : '';
     $('#species-banner').innerHTML = `<div class="head"><b>${esc(s.label)}</b>${tools}</div>
       <div class="small">${momentLine(id)}${rain}</div>
-      <div class="small">${forests.length
-        ? `<span class="key" style="background:rgba(22,163,74,.6)"></span>${esc(forests.slice(0, 4).join(', '))}${forests.length > 4 ? '…' : ''}`
-        : `🌿 ${esc(g.habitat ?? 'Pas de forêt type.')}`}</div>
-      <div class="small">${mine ? `⭐ ${mine} de tes coins` : 'Aucun de tes coins'}${warn ? ` · <span class="warn">⚠️ sosie : ${esc(warn)}</span>` : ''} · <a class="tel" href="tel:+33491752525">antipoison</a></div>`;
+      <div class="small opt">${forests.length
+        ? `🌲 ${esc(forests.slice(0, 4).join(', '))}${forests.length > 4 ? '…' : ''}`
+        : `🌿 ${esc(g.habitat ?? 'Pas de forêt type.')}`}</div>${forests.length ? HABITAT_LEGEND : ''}
+      <div class="small opt">${mine ? `⭐ ${mine} de tes coins` : 'Aucun de tes coins'}${warn ? ` · <span class="warn">⚠️ sosie : ${esc(warn)}</span>` : ''} · <a class="tel" href="tel:+33491752525">antipoison</a></div>`;
     return;
   }
   $('#species-banner').innerHTML = `<div class="head"><b>${ids.length} champignons</b>${tools}</div>
-    ${ids.map((id) => `<div class="small"><b>${esc(speciesLabel(id))}</b> : ${momentLine(id)}</div>`).join('')}
-    <div class="small"><span class="key" style="background:rgba(22,163,74,.6)"></span>forêts favorables à l'un d'eux${rain}</div>
-    <div class="small">${mine ? `⭐ ${mine} de tes coins` : 'Aucun de tes coins'} · <a class="tel" href="tel:+33491752525">antipoison</a></div>`;
+    ${ids.slice(0, 3).map((id) => `<div class="small"><b>${esc(speciesLabel(id).replace(/ \(.*\)$/, ''))}</b> : ${momentLine(id)}</div>`).join('')}${ids.length > 3 ? `<div class="small muted">+ ${ids.length - 3} autre${ids.length > 4 ? 's' : ''} (voir les pastilles)</div>` : ''}
+    <div class="small opt">🌲 forêts favorables à l'un d'eux${rain}</div>${HABITAT_LEGEND}
+    <div class="small opt">${mine ? `⭐ ${mine} de tes coins` : 'Aucun de tes coins'} · <a class="tel" href="tel:+33491752525">antipoison</a></div>`;
 }
 $('#species-banner').addEventListener('click', (e) => {
   const b = e.target.closest('[data-banner]'); if (!b) return;

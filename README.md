@@ -58,6 +58,7 @@ Les migrations sont dans `supabase/migrations/`. Règles (RLS) :
 - « ❓ Aide complète » : 17 rubriques (installer l'app, connexion, carte, coins, journal, partage, alertes, hors ligne, conseiller, problèmes fréquents…).
 - « 🌱 Ici ? » : pour un endroit, forêt (IGN BD Forêt V2), sol calcaire/siliceux (carte des sols INRAE via l'IGN), altitude, pluie → champignons du carnet dont c'est le milieu (site/js/here.js).
 - Alertes : « Conditions favorables » et « Nouvelles de la famille » (déclencheur SQL sur champi_finds → fonction champi-alertes, action news), chacune désactivable dans le profil.
+- Champignon choisi : forêts favorables coloriées vert / jaune / rouge selon l'avis du conseiller sur une grille météo (≤ 100 points par vue, site/js/moment-map.js).
 - L'interface ne zoome pas (pincement, double-tap, champs de saisie) ; seule la carte se zoome.
 
 ## Conseiller, météo et forêts

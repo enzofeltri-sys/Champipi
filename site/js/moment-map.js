@@ -1,0 +1,63 @@
+// Carte « bon moment » : les forêts favorables au champignon choisi sont coloriées selon l'avis du conseiller
+// (pluie, températures, saison) calculé sur une grille de points : vert = bon moment, jaune = moyen,
+// rouge = pas le moment, gris = hors saison (ou météo pas encore chargée).
+import { SPECIES } from './logic.js';
+import { favorableColors } from './forests.js';
+
+/** Clé couleur RVB → { w: 2 (forêt pure) | 1 (mélange), mask: bits des espèces choisies concernées }. */
+export function habitatTable(ids) {
+  const out = new Map();
+  ids.forEach((id, i) => {
+    for (const [hex, k] of favorableColors(id)) {
+      const key = parseInt(hex.slice(1), 16);
+      const cur = out.get(key) ?? { w: 0, mask: 0 };
+      out.set(key, { w: Math.max(cur.w, k), mask: cur.mask | (1 << i) });
+    }
+  });
+  return out;
+}
+
+/** Pas de la grille (degrés) : le plus fin qui tient en 100 points (un seul appel météo). */
+export function gridStep(b, max = 100) {
+  for (const s of [0.1, 0.2, 0.3, 0.5]) {
+    const n = (Math.floor(b.north / s) - Math.floor(b.south / s) + 1) * (Math.floor(b.east / s) - Math.floor(b.west / s) + 1);
+    if (n <= max) return s;
+  }
+  return 1;
+}
+export const cellKey = (lat, lon, s) => `${Math.floor(lat / s)}:${Math.floor(lon / s)}`;
+/** Centres des cases couvrant la zone. */
+export function cellsFor(b, s) {
+  const out = [];
+  for (let i = Math.floor(b.south / s); i <= Math.floor(b.north / s); i++)
+    for (let j = Math.floor(b.west / s); j <= Math.floor(b.east / s); j++)
+      out.push({ key: `${i}:${j}`, lat: +((i + 0.5) * s).toFixed(3), lon: +((j + 0.5) * s).toFixed(3) });
+  return out;
+}
+
+export const CODE = { bon: 3, moyen: 2, faible: 1 };   // 0 = hors saison, -1 = inconnu
+export const COLORS = {
+  3: [22, 163, 74], 2: [234, 179, 8], 1: [220, 38, 38], 0: [100, 116, 139], [-1]: [148, 163, 184],
+};
+export const ALPHA = { 2: 205, 1: 120 };
+
+/** Avis pour une case : un code par espèce choisie (0 si hors saison). */
+export function cellCodes(ids, month, w, assess) {
+  return ids.map((id) => {
+    const s = SPECIES.find((x) => x.id === id);
+    if (!s?.months.includes(month)) return 0;
+    if (!w) return -1;
+    return CODE[assess(w, { month, species: [id] }).level] ?? -1;
+  });
+}
+
+/** Meilleur avis parmi les espèces concernées par ce pixel (mask), selon les codes de la case. */
+export function pixelCode(mask, codes) {
+  let best = -2;
+  for (let i = 0; i < codes.length; i++) if (mask & (1 << i)) best = Math.max(best, codes[i]);
+  return best === -2 ? -1 : best;
+}
+
+/** Coordonnées d'un pixel de tuile (Web Mercator). */
+export const pxLon = (gx, z) => (gx / (256 * 2 ** z)) * 360 - 180;
+export const pxLat = (gy, z) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * gy) / (256 * 2 ** z)))) * 180) / Math.PI;
