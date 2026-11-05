@@ -508,3 +508,16 @@ body:has(#screen-app:not([hidden])) { overflow: hidden; height: 100dvh; }
 .nf h3 { margin: 6px 0 0; font-size: 1rem; }
 .nf #nf-body { padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
 #dlg-near .bar-grid { margin-top: 6px; }
+
+/* Photos : bande qui défile, visionneuse avec flèches */
+.photos.strip { flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+.photos.strip .thumb { flex: 0 0 auto; width: 104px; height: 104px; scroll-snap-align: start; }
+#spot-gallery { display: flex; flex-direction: column; gap: 6px; }
+dialog.viewer { position: fixed; }
+.viewer-nav { position: absolute; top: calc(50dvh - 60px); width: 48px; height: 72px; border: 0; border-radius: 12px; background: rgba(0,0,0,.45); color: #fff; font-size: 2.4rem; line-height: 1; cursor: pointer; }
+.viewer-nav.prev { left: 8px; } .viewer-nav.next { right: 8px; }
+.viewer-nav[hidden] { display: none; }
+dialog.viewer[open] { display: flex; flex-direction: column; }
+dialog.viewer img { flex: 1 1 auto; min-height: 0; height: auto; }
+.viewer-bar { flex-wrap: wrap; gap: 8px; }
+.viewer-bar .small { flex: 1 1 100%; }

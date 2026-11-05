@@ -309,6 +309,10 @@
       </div>
       <div id="spot-badges" class="badges"></div>
       <section id="spot-found" class="found"></section>
+      <section id="spot-gallery" hidden>
+        <div class="small muted">📷 Les photos du coin (<span id="spot-gallery-n"></span>)</div>
+        <div class="photos strip"></div>
+      </section>
       <div class="row">
         <a id="spot-route" class="btn primary" target="_blank" rel="noopener">🚗 Itinéraire</a>
       </div>
@@ -458,7 +462,7 @@
       </details>
 
       <details><summary>📓 Le journal et les photos</summary>
-        <p>Touche un coin sur la carte : tu vois d'abord <b>ce que tu y as trouvé</b>, puis <b>🧺 Les trouvailles ici</b>.</p>
+        <p>Touche un coin sur la carte : tu vois d'abord <b>ce que tu y as trouvé</b>, puis <b>📷 les photos du coin</b> (fais glisser la bande) et <b>🧺 Les trouvailles ici</b>. Touche une photo pour la voir en grand ; glisse le doigt ou touche ‹ › pour passer aux autres.</p>
         <p><b>« ＋ Nouvelle trouvaille ici »</b> (en haut de la liste) : date, espèces, quantité, état, météo, note et photos. La date est reprise de la photo quand c'est possible.</p>
         <p>Les photos sont réduites et <b>la position GPS cachée dedans est effacée</b> avant l'envoi. Elles suivent la visibilité du coin.</p>
         <p>« 📍 Le coin : météo, bilan et détails » : pluie des derniers jours, avis du conseiller, bilan du coin (meilleurs mois), accès au massif, modifier, partager.</p>
@@ -703,6 +707,8 @@
 
   <dialog id="dlg-photo" class="viewer">
     <img id="photo-full" alt="">
+    <button id="photo-prev" class="viewer-nav prev" type="button" aria-label="Photo précédente">‹</button>
+    <button id="photo-next" class="viewer-nav next" type="button" aria-label="Photo suivante">›</button>
     <div class="row viewer-bar">
       <span id="photo-meta" class="small"></span>
       <button id="photo-delete" class="btn danger" type="button" hidden>Supprimer</button>

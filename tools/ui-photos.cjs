@@ -136,6 +136,30 @@ const ME = '11111111-1111-1111-1111-111111111111';
   }
   console.log('photo originale :', (fs.statSync(PHOTO).size / 1024).toFixed(0), 'Ko, GPS=', JSON.stringify(exifGps(fs.readFileSync(PHOTO).buffer)));
 
+  // 2 bis. Bande des photos du coin, visionneuse avec défilement, journal
+  await page.waitForFunction(() => [...document.querySelectorAll('#spot-gallery img')].every((i) => i.naturalWidth > 0), null, { timeout: 10000 }).catch(() => {});
+  console.log('bande du coin :', await page.textContent('#spot-gallery .small'), '| vignettes :', await page.locator('#spot-gallery .thumb').count());
+  await page.screenshot({ path: `${OUT}/24-bande-coin.png` });
+  await page.locator('#spot-gallery .thumb').first().click();
+  await page.waitForFunction(() => document.querySelector('#photo-full').naturalWidth > 0, null, { timeout: 10000 });
+  const nav = async () => [await page.textContent('#photo-meta'), await page.isVisible('#photo-prev'), await page.isVisible('#photo-next')];
+  console.log('visionneuse 1 :', JSON.stringify(await nav()));
+  await page.screenshot({ path: `${OUT}/25-visionneuse-nav.png` });
+  await page.click('#photo-next'); await page.waitForTimeout(400);
+  console.log('après › :', JSON.stringify(await nav()));
+  await page.click('#photo-next'); await page.waitForTimeout(400);
+  console.log('après › › :', JSON.stringify(await nav()));
+  await page.click('#dlg-photo .js-close');
+  await page.click('#dlg-spot .js-close');
+  await page.click('#menu-btn'); await page.click('#journal-btn');
+  await page.waitForFunction(() => [...document.querySelectorAll('#journal-list img')].length && [...document.querySelectorAll('#journal-list img')].every((i) => i.naturalWidth > 0), null, { timeout: 10000 }).catch(() => {});
+  console.log('journal · photos :', await page.locator('#journal-list .thumb').count());
+  await page.screenshot({ path: `${OUT}/26-journal-photos.png` });
+  await page.locator('#journal-list .thumb').first().click();
+  await page.waitForSelector('#dlg-photo[open]');
+  console.log('journal → visionneuse :', JSON.stringify(await nav()), '| journal toujours ouvert :', await page.evaluate(() => document.querySelector('#dlg-journal').open));
+  await page.click('#dlg-photo .js-close'); await page.click('#dlg-journal .js-close');
+  await openSpot(page, 'Croix de Provence', { more: false });
   // 3. Visionneuse + suppression d'une photo
   const nImg = await page.locator('#find-list .photos img').count();
   await page.locator('#find-list .photos .thumb').first().click();
@@ -143,7 +167,7 @@ const ME = '11111111-1111-1111-1111-111111111111';
   await page.screenshot({ path: `${OUT}/23-visionneuse.png` });
   page.once('dialog', (d) => d.accept());
   await page.click('#photo-delete');
-  await page.waitForFunction(() => (n) => document.querySelectorAll('#find-list .photos img').length === n - 1, nImg, { timeout: 10000 });
+  await page.waitForFunction((n) => document.querySelectorAll('#find-list .photos img').length === n - 1, nImg, { timeout: 10000 });
   console.log('après suppression : lignes', data.photos.length, 'fichiers', data.files.size, 'retirés', data.removed.length);
 
   // 4. Supprimer le coin → fichiers supprimés

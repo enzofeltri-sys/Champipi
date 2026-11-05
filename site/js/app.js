@@ -1205,6 +1205,10 @@ function renderSpot(id) {
   const mine = s.owner === me;
   $('#spot-name').textContent = s.name;
   renderFound(s);
+  const gal = state.photos.filter((p) => p.spot_id === id).sort((a, b) => (photoDay(a) < photoDay(b) ? 1 : -1));
+  $('#spot-gallery').hidden = !gal.length;
+  $('#spot-gallery-n').textContent = gal.length;
+  $('#spot-gallery .photos').innerHTML = thumbs(gal);
   $('#spot-badges').innerHTML = badgesHtml(s, season)
     + `<span class="badge by">${byHtml(s.owner)}</span>`;
   $('#spot-species').innerHTML = sp.length
@@ -1306,16 +1310,39 @@ $('#spot-photo-input').addEventListener('change', async (e) => {
 
 // Visionneuse
 let viewing = null;
-$('#dlg-spot').addEventListener('click', (e) => { const b = e.target.closest('[data-photo]'); if (b) openPhoto(b.dataset.photo); });
+let viewSet = [];
+/** Date d'une photo : celle de sa trouvaille, sinon celle de l'envoi. */
+function photoDay(p) { return state.finds.find((f) => f.id === p.find_id)?.found_on ?? String(p.created_at ?? '').slice(0, 10); }
+/** Ouvre une photo ; on peut ensuite glisser vers les autres photos de la même bande. */
+function openPhotoFrom(btn) {
+  const box = btn.closest('.photos');
+  viewSet = box ? [...box.querySelectorAll('[data-photo]')].map((b) => b.dataset.photo) : [btn.dataset.photo];
+  openPhoto(btn.dataset.photo);
+}
+$('#dlg-spot').addEventListener('click', (e) => { const b = e.target.closest('[data-photo]'); if (b) openPhotoFrom(b); });
 async function openPhoto(id) {
   const p = state.photos.find((x) => x.id === id); if (!p) return;
   viewing = p;
+  if (!viewSet.includes(id)) viewSet = [id];
+  const i = viewSet.indexOf(id);
+  $('#photo-prev').hidden = i <= 0; $('#photo-next').hidden = i >= viewSet.length - 1;
   $('#photo-full').removeAttribute('src');
-  $('#photo-meta').textContent = `par ${p.user_id === state.user.id ? 'moi' : p.author?.display_name ?? '?'} · ${formatDate(p.created_at)}`;
+  const spot = state.spots.find((s) => s.id === p.spot_id);
+  const who = p.user_id === state.user.id ? 'moi' : nameOf(p.user_id);
+  $('#photo-meta').textContent = [spot && `📍 ${spot.name}`, formatDate(photoDay(p)), `par ${who}`, viewSet.length > 1 && `${i + 1}/${viewSet.length}`].filter(Boolean).join(' · ');
   $('#photo-delete').hidden = p.user_id !== state.user.id;
-  $('#dlg-photo').showModal();
-  try { $('#photo-full').src = (await photos.urls([p.path]))[p.path]; } catch (err) { toast(frError(err)); }
+  if (!$('#dlg-photo').open) $('#dlg-photo').showModal();
+  try { const url = (await photos.urls([p.path]))[p.path]; if (viewing === p) $('#photo-full').src = url; } catch (err) { toast(frError(err)); }
 }
+function stepPhoto(d) { const i = viewSet.indexOf(viewing?.id) + d; if (i >= 0 && i < viewSet.length) openPhoto(viewSet[i]); }
+$('#photo-prev').addEventListener('click', () => stepPhoto(-1));
+$('#photo-next').addEventListener('click', () => stepPhoto(1));
+let swipeX = null;
+$('#photo-full').addEventListener('touchstart', (e) => { swipeX = e.touches[0].clientX; }, { passive: true });
+$('#photo-full').addEventListener('touchend', (e) => {
+  if (swipeX == null) return; const dx = e.changedTouches[0].clientX - swipeX; swipeX = null;
+  if (Math.abs(dx) > 50) stepPhoto(dx < 0 ? 1 : -1);
+});
 $('#dlg-photo .js-close').addEventListener('click', () => $('#dlg-photo').close());
 $('#photo-delete').addEventListener('click', async () => {
   if (!viewing || !confirm('Supprimer cette photo ?')) return;
@@ -2027,14 +2054,14 @@ function renderJournal(focus = null) {
     if (it.type === 'find') {
       const f = it.find;
       const what = f.species?.length ? f.species.map((x) => speciesLabel(x).replace(/ \(.*\)$/, '')).join(', ') : 'rien de noté';
-      const pics = state.photos.filter((p) => p.find_id === f.id).slice(0, 4);
+      const pics = state.photos.filter((p) => p.find_id === f.id);
       const extra = [f.quantity && labelOf(QUANTITIES, f.quantity), f.condition && labelOf(CONDITIONS, f.condition)].filter(Boolean).map(esc).join(' · ');
       html += `<div class="${cls}" data-key="${it.key}" data-spot="${it.spot.id}">
         <div class="j-who">${avatarHtml(personOf(f.user_id), 34)}</div>
-        <div class="j-body"><div>${f.user_id === state.user?.id ? '<b>Tu</b> as trouvé' : `<b>${esc(nameOf(f.user_id))}</b> a trouvé`} <b>${esc(what)}</b>${tag}</div>
+        <div class="j-body"><div>${f.user_id === state.user?.id ? '<b>Tu</b> as ' : `<b>${esc(nameOf(f.user_id))}</b> a `}${f.species?.length ? `trouvé <b>${esc(what)}</b>` : 'noté une trouvaille'}${tag}</div>
           <div class="small muted">📍 ${esc(it.spot.name)}${extra ? ' · ' + extra : ''}</div>
           ${f.note ? `<div class="small j-note">${esc(f.note)}</div>` : ''}
-          ${pics.length ? `<div class="photos">${thumbs(pics)}</div>` : ''}</div></div>`;
+          ${pics.length ? `<div class="photos strip">${thumbs(pics)}</div>` : ''}</div></div>`;
     } else {
       html += `<div class="${cls}" data-key="${it.key}" data-spot="${it.spot.id}">
         <div class="j-who"><span class="j-bell">🔔</span></div>
@@ -2062,7 +2089,7 @@ for (const b of $$('#journal-seg button')) b.addEventListener('click', () => {
   renderJournal();
 });
 $('#journal-list').addEventListener('click', (e) => {
-  const ph = e.target.closest('[data-photo]'); if (ph) { openPhoto(ph.dataset.photo); return; }
+  const ph = e.target.closest('[data-photo]'); if (ph) { openPhotoFrom(ph); return; }
   const it = e.target.closest('[data-spot]'); if (!it) return;
   const s = state.spots.find((x) => x.id === it.dataset.spot); if (!s) return;
   $('#dlg-journal').close();
