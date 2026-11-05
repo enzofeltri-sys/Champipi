@@ -11,7 +11,7 @@ const [, , SITE, OUT] = process.argv;
     r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
   await page.addInitScript(() => {
-    localStorage.setItem('champi-tuto', '1'); localStorage.setItem('sb-vvegujltsjgwszeloyaz-auth-token', JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 99999, user: { id: 'u', email: 'x@y.fr' } }));
+    localStorage.setItem('champi-tuto', '2'); localStorage.setItem('sb-vvegujltsjgwszeloyaz-auth-token', JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 99999, user: { id: 'u', email: 'x@y.fr' } }));
     localStorage.setItem('champi-massifs', '1');
   });
   const tiles = {};

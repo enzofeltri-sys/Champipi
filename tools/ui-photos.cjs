@@ -81,7 +81,7 @@ const ME = '11111111-1111-1111-1111-111111111111';
     return send({ message: 'non simulé ' + m + ' ' + path }, 500);
   });
   await page.addInitScript(([ref, me]) => {
-    localStorage.setItem('champi-tuto', '1'); localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 99999, user: { id: me, email: 'enzo@test.fr' } }));
+    localStorage.setItem('champi-tuto', '2'); localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 99999, user: { id: me, email: 'enzo@test.fr' } }));
     localStorage.setItem('champi-view', JSON.stringify({ lat: 43.53, lon: 5.585, zoom: 13 }));
   }, [REF, ME]);
 

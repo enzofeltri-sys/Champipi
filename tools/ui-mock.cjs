@@ -46,7 +46,7 @@ async function setup(page, data, { session = true } = {}) {
   if (session) {
     await page.addInitScript(([ref, me]) => {
       const now = Math.floor(Date.now() / 1000);
-      localStorage.setItem('champi-tuto', '1'); localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({
+      localStorage.setItem('champi-tuto', '2'); localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({
         access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: now + 360000,
         user: { id: me, email: 'enzo@test.fr', aud: 'authenticated', role: 'authenticated' },
       }));

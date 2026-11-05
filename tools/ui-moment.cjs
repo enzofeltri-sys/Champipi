@@ -24,7 +24,7 @@ const REF = 'vvegujltsjgwszeloyaz', ME = '11111111-1111-1111-1111-111111111111';
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(obj ? body[0] ?? null : body) });
   });
   await page.addInitScript(([ref, me]) => {
-    localStorage.setItem('champi-tuto', '1');
+    localStorage.setItem('champi-tuto', '2');
     localStorage.setItem('champi-view', JSON.stringify({ lat: 43.40, lon: 6.20, zoom: 10 }));
     localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 9999999, user: { id: me, email: 'x@y.fr' } }));
   }, [REF, ME]);

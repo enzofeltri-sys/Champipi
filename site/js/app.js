@@ -112,7 +112,7 @@ async function doRoute(session) {
   $('#admin-btn').hidden = !state.isAdmin;
   await loadData();
   if (state.isAdmin) refreshAdminBadge().catch(fatal);
-  if (!store.get('champi-tuto')) setTimeout(openTuto, 400);
+  if (store.get('champi-tuto') !== TUTO_VERSION) setTimeout(openTuto, 400);   // nouvelle version de la visite : on la remontre à tout le monde
 }
 
 function showDenied() {
@@ -1353,6 +1353,8 @@ $('#export-csv').addEventListener('click', () => {
 // ---------------------------------------------------------------------------
 // Visite guidée : une bulle à côté de chaque bouton, qui pointe dessus (première ouverture, puis menu « Aide »)
 
+// Changer ce numéro remontre la visite à tout le monde à la prochaine ouverture.
+const TUTO_VERSION = '2';
 const COACH = [
   ['#species-bar', '🍄 Choisis un champignon', 'Touche une ou plusieurs pastilles : les forêts où il pousse se colorent (vert = bon moment, jaune = moyen, rouge = pas le moment). Le point de couleur sur la pastille dit pareil pour le secteur affiché.'],
   ['#menu-btn', '☰ Le menu', 'Tout le reste est ici : journal de la famille, liste de tes coins, conseiller, guide, cartes hors ligne, alertes, aide.'],
@@ -1415,7 +1417,7 @@ function openTuto() {
   for (const d of $$('dialog[open]')) d.close();
   coachI = 0; $('#coach').hidden = false; placeCoach();
 }
-function endTuto() { store.set('champi-tuto', '1'); $('#coach').hidden = true; $('#menu').hidden = true; }
+function endTuto() { store.set('champi-tuto', TUTO_VERSION); $('#coach').hidden = true; $('#menu').hidden = true; }
 $('#coach-next').addEventListener('click', (e) => { e.stopPropagation(); if (coachI < COACH.length - 1) { coachI++; placeCoach(); } else endTuto(); });
 $('#coach-skip').addEventListener('click', (e) => { e.stopPropagation(); endTuto(); });
 $('#coach').addEventListener('click', (e) => { if (!e.target.closest('#coach-bubble')) $('#coach-next').click(); });   // toucher ailleurs = suivant
