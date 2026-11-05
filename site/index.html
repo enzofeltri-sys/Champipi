@@ -99,7 +99,10 @@
       </header>
 
       <div id="menu" class="menu card" hidden>
-        <button id="profile-btn" class="btn profile-line" type="button"><span id="me-avatar"></span> <b id="me-name"></b> <span class="small muted">· mon profil</span></button>
+        <div class="menu-top">
+          <button id="profile-btn" class="btn profile-line" type="button"><span id="me-avatar"></span> <b id="me-name"></b> <span class="small muted">· mon profil</span></button>
+          <button id="refresh-btn" class="icon-btn" type="button" aria-label="Actualiser" title="Actualiser">🔄</button>
+        </div>
         <button id="admin-btn" class="btn" type="button" hidden>👑 Gérer la famille <span id="admin-count" class="badge season" hidden></span></button>
         <div class="field">
           <span class="small">Fond de carte</span>
@@ -119,10 +122,6 @@
         <button id="list-btn" class="btn" type="button">📋 Mes coins (liste)</button>
         <button id="advisor-btn2" class="btn" type="button">🤖 Conseiller du jour</button>
         <button id="guide-btn" class="btn" type="button">📖 Guide des espèces</button>
-        <div class="row">
-          <button id="export-gpx" class="btn small-btn" type="button">⬇️ Coins (GPX)</button>
-          <button id="export-csv" class="btn small-btn" type="button">⬇️ Journal (CSV)</button>
-        </div>
         <button id="offline-btn" class="btn" type="button">📥 Cartes hors ligne</button>
         <button id="alerts-btn" class="btn" type="button">🔔 Alertes de pousse</button>
         <button id="help-btn" class="btn" type="button">❓ Aide complète</button>
@@ -345,6 +344,14 @@
       <div id="prof-emojis" class="pick-grid"></div>
       <span class="small">Couleur de fond</span>
       <div id="prof-colors" class="pick-grid colors"></div>
+      <details class="more">
+        <summary>⬇️ Sauvegarder mes données</summary>
+        <p class="small muted">Une copie de tes coins et du journal, à garder sur le téléphone ou l'ordinateur.</p>
+        <div class="bar-grid">
+          <button id="export-gpx" class="btn" type="button">Coins (GPX)</button>
+          <button id="export-csv" class="btn" type="button">Journal (CSV)</button>
+        </div>
+      </details>
       <p id="prof-error" class="error" role="alert" hidden></p>
       <div class="row end">
         <button class="btn js-close" type="button">Annuler</button>
@@ -359,7 +366,7 @@
         <h2>❓ Aide</h2>
         <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
       </div>
-      <button id="help-tuto" class="btn" type="button">▶️ Revoir la visite rapide</button>
+      <button id="help-tuto" class="btn" type="button">▶️ Revoir la visite guidée (bulles sur chaque bouton)</button>
 
       <details open><summary>📲 Installer l'appli sur le téléphone</summary>
         <p><b>iPhone (Safari)</b> : ouvre le site dans <b>Safari</b> → bouton <b>Partager</b> (carré avec une flèche) → <b>« Sur l'écran d'accueil »</b> → Ajouter. Ouvre ensuite toujours l'appli depuis cette icône (indispensable pour les alertes).</p>
@@ -381,7 +388,7 @@
           <li><b>🛰️ Photo</b> : passe en photo aérienne, et retour au plan.</li>
           <li><b>🌱 Ici ?</b> : ce qui peut pousser à un endroit (voir la rubrique suivante).</li>
           <li><b>📍 Moi</b> : centre la carte sur ta position (point bleu).</li>
-          <li><b>☰ Menu</b> : liste des coins, conseiller, guide, hors ligne, alertes, famille, profil.</li>
+          <li><b>☰ Menu</b> : journal de la famille, liste des coins, conseiller, guide, hors ligne, alertes, aide, profil ; <b>🔄</b> (à côté de ton nom) actualise tout.</li>
         </ul>
       </details>
 
@@ -479,7 +486,7 @@
       </details>
 
       <details><summary>⬇️ Sauvegarder mes coins</summary>
-        <p>Menu → <b>⬇️ Coins (GPX)</b> pour OsmAnd, Garmin, etc. ; <b>⬇️ Journal (CSV)</b> pour Excel.</p>
+        <p>Menu ☰ → ton nom (<b>Mon profil</b>) → <b>⬇️ Sauvegarder mes données</b> : <b>Coins (GPX)</b> pour OsmAnd, Garmin, etc. ; <b>Journal (CSV)</b> pour Excel.</p>
       </details>
 
       <details><summary>🛠️ Problèmes fréquents</summary>
@@ -496,16 +503,19 @@
     </div>
   </dialog>
 
-  <dialog id="dlg-tuto" class="sheet">
-    <div class="stack">
-      <div id="tuto-body"></div>
-      <div class="row end">
-        <span id="tuto-step" class="small muted" style="margin-right:auto"></span>
-        <button id="tuto-skip" class="btn" type="button">Passer</button>
-        <button id="tuto-next" class="btn primary" type="button">Suivant</button>
+  <div id="coach" class="coach" hidden>
+    <div id="coach-hole" class="coach-hole"></div>
+    <div id="coach-bubble" class="coach-bubble" role="dialog" aria-live="polite">
+      <div id="coach-text"></div>
+      <div class="coach-foot">
+        <span id="coach-step" class="small muted"></span>
+        <button id="coach-skip" class="btn" type="button">Passer</button>
+        <button id="coach-next" class="btn primary" type="button">Suivant</button>
       </div>
+      <span id="coach-arrow" class="coach-arrow"></span>
     </div>
-  </dialog>
+  </div>
+
 
   <dialog id="dlg-share" class="sheet">
     <div class="stack">

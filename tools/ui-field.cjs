@@ -32,10 +32,10 @@ const finds = [{ id: 'f1', spot_id: 's2', user_id: ME, found_on: '2026-10-01', s
   await page.goto(SITE); await page.waitForSelector('#screen-app:not([hidden])');
 
   // 1. Tutoriel à la première ouverture
-  await page.waitForSelector('#dlg-tuto[open]');
+  await page.waitForSelector('#coach:not([hidden])');
   const titles = [];
-  for (let i = 0; i < 6; i++) { titles.push(await page.textContent('#tuto-body h2')); if (i === 1) await page.screenshot({ path: `${OUT}/60-tuto.png` }); await page.click('#tuto-next'); }
-  console.log('tutoriel :', titles.join(' → '), '| fermé :', !(await page.isVisible('#dlg-tuto')), '| mémorisé :', await page.evaluate(() => localStorage.getItem('champi-tuto')));
+  for (let i = 0; i < 9; i++) { titles.push(await page.textContent('#coach-text b')); if (i === 1) await page.screenshot({ path: `${OUT}/60-tuto.png` }); await page.click('#coach-next'); await page.waitForTimeout(100); }
+  console.log('visite guidée :', titles.join(' → '), '| fermée :', await page.isHidden('#coach'), '| mémorisée :', await page.evaluate(() => localStorage.getItem('champi-tuto')));
 
   // 3. Recherche
   await openList(page);
@@ -47,11 +47,10 @@ const finds = [{ id: 'f1', spot_id: 's2', user_id: ME, found_on: '2026-10-01', s
 
   // 4. Exports
   await closeDialogs(page);
-  await page.click('#menu-btn');
+  await page.click('#menu-btn'); await page.click('#profile-btn'); await page.click('#dlg-profile details.more summary');   // exports rangés dans « Mon profil »
   const [g] = await Promise.all([page.waitForEvent('download'), page.click('#export-gpx')]);
   const gpx = fs.readFileSync(await g.path(), 'utf8');
   console.log('GPX :', g.suggestedFilename(), '| points :', (gpx.match(/<wpt /g) || []).length, '| nom échappé :', gpx.includes('<name>Pinède du Vallon</name>'));
-  await page.click('#menu-btn');
   const [c] = await Promise.all([page.waitForEvent('download'), page.click('#export-csv')]);
   const csv = fs.readFileSync(await c.path(), 'utf8');
   console.log('CSV :', c.suggestedFilename(), '|', JSON.stringify(csv.split('\r\n').slice(0, 2)));

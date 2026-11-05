@@ -1306,28 +1306,69 @@ $('#export-csv').addEventListener('click', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Petit tutoriel (première ouverture, puis menu « Aide »)
+// Visite guidée : une bulle à côté de chaque bouton, qui pointe dessus (première ouverture, puis menu « Aide »)
 
-const TUTO = [
-  ['🍄', 'Choisis un champignon', 'Touche une pastille en haut (Cèpe, Girolle…) : la carte colore en vert les forêts où il pousse, et ne garde que tes coins où tu l\'as déjà trouvé. Le point vert = en saison.'],
-  ['⭐', 'Tes coins', 'Les épingles sont tes coins (violet : à toi seul, orange : famille). Touche-en une pour voir ce que tu y as trouvé. Le bouton ⭐ à droite les masque ou les affiche.'],
-  ['＋', 'Noter un coin', 'Touche « ＋ Noter un coin », fais glisser la carte pour mettre le viseur dessus (ou « Ma position »), puis « C\'est ici ».'],
-  ['📍', 'Sur le terrain', 'Dans un coin : « Itinéraire » ouvre Google Maps. Les boutons ronds : 🌧️ pluie des 10 derniers jours, 🛰️ photo aérienne, 📍 ta position.'],
-  ['☰', 'Le reste', 'Dans le menu : liste de tes coins, conseiller du jour, guide des espèces, cartes hors ligne, alertes de pousse.'],
-  ['⚠️', 'Sécurité', 'Fais contrôler <b>chaque récolte</b> par un pharmacien ou une association mycologique. Antipoison Marseille : <a class="tel" href="tel:+33491752525">04 91 75 25 25</a>.'],
+const COACH = [
+  ['#species-bar', '🍄 Choisis un champignon', 'Touche une ou plusieurs pastilles : les forêts où il pousse se colorent (vert = bon moment, jaune = moyen, rouge = pas le moment). Le point de couleur sur la pastille dit pareil pour le secteur affiché.'],
+  ['#menu-btn', '☰ Le menu', 'Journal de la famille, liste de tes coins, conseiller, guide des espèces, cartes hors ligne, alertes, aide… et 🔄 pour actualiser.'],
+  ['#rail-spots', '⭐ Tes coins', 'Affiche ou masque les épingles. Touche une épingle pour voir ce que tu y as trouvé et y aller.'],
+  ['#rail-rain', '🌧️ La pluie', 'La pluie tombée ces 10 derniers jours sur la région : plus c\'est bleu foncé, plus il a plu.'],
+  ['#rail-base', '🛰️ Photo aérienne', 'Passe en photo aérienne pour voir les clairières et les chemins, puis revient au plan.'],
+  ['#rail-here', '🌱 Ici ?', 'Place le viseur sur un endroit (ou prends ta position) : l\'appli dit la forêt, le sol, l\'altitude, la pluie… et les champignons dont c\'est le milieu.'],
+  ['#rail-locate', '📍 Moi', 'Centre la carte sur ta position (point bleu).'],
+  ['#btn-add', '＋ Noter un coin', 'Fais glisser la carte pour mettre le viseur sur ton coin (ou « Ma position » / « Photo »), puis « C\'est ici ».'],
+  [null, '⚠️ Sécurité', 'L\'appli n\'identifie aucun champignon. Fais contrôler <b>chaque récolte</b> par un pharmacien ou une association mycologique. Antipoison Marseille : <a class="tel" href="tel:+33491752525">04 91 75 25 25</a>.'],
 ];
-let tutoI = 0;
-function showTuto(i) {
-  tutoI = i;
-  const [e, t, txt] = TUTO[i];
-  $('#tuto-body').innerHTML = `<div class="tuto-emoji">${e}</div><h2>${t}</h2><p>${txt}</p>`;
-  $('#tuto-step').textContent = `${i + 1} / ${TUTO.length}`;
-  $('#tuto-next').textContent = i === TUTO.length - 1 ? 'C\'est parti' : 'Suivant';
+let coachI = 0;
+function placeCoach() {
+  const [sel, title, txt] = COACH[coachI];
+  const el = sel ? document.querySelector(sel) : null;
+  const r = el && el.offsetParent !== null ? el.getBoundingClientRect() : null;
+  const hole = $('#coach-hole'), bub = $('#coach-bubble'), arrow = $('#coach-arrow');
+  $('#coach-text').innerHTML = `<b>${title}</b><p>${txt}</p>`;
+  $('#coach-step').textContent = `${coachI + 1} / ${COACH.length}`;
+  $('#coach-next').textContent = coachI === COACH.length - 1 ? 'C\'est parti' : 'Suivant';
+  const W = innerWidth, H = innerHeight, M = 12;
+  bub.style.cssText = ''; arrow.style.cssText = ''; arrow.className = 'coach-arrow';
+  if (!r) {   // pas de bouton visé : bulle au centre, sans trou
+    hole.hidden = true;
+    bub.style.left = `${M}px`; bub.style.right = `${M}px`; bub.style.top = '50%'; bub.style.transform = 'translateY(-50%)';
+    arrow.hidden = true; return;
+  }
+  hole.hidden = false; arrow.hidden = false;
+  const pad = 6;
+  Object.assign(hole.style, { left: `${r.left - pad}px`, top: `${r.top - pad}px`, width: `${r.width + 2 * pad}px`, height: `${r.height + 2 * pad}px` });
+  const bw = Math.min(300, W - 2 * M);
+  bub.style.width = `${bw}px`;
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const bh = bub.offsetHeight;
+  if (r.left > W * 0.6 && r.width < W * 0.3) {          // bouton à droite (boutons ronds, menu) : bulle à gauche, flèche vers la droite
+    bub.style.left = `${Math.max(M, r.left - pad - 14 - bw)}px`;
+    const top = Math.min(Math.max(M, cy - bh / 2), H - bh - M);
+    bub.style.top = `${top}px`;
+    arrow.classList.add('right'); arrow.style.top = `${cy - top - 9}px`;
+  } else if (cy < H / 2) {                              // en haut : bulle en dessous, flèche vers le haut
+    bub.style.top = `${r.bottom + pad + 14}px`;
+    const left = Math.min(Math.max(M, cx - bw / 2), W - bw - M);
+    bub.style.left = `${left}px`;
+    arrow.classList.add('up'); arrow.style.left = `${Math.min(bw - 26, Math.max(8, cx - left - 9))}px`;
+  } else {                                              // en bas : bulle au-dessus, flèche vers le bas
+    bub.style.top = `${r.top - pad - 14 - bh}px`;
+    const left = Math.min(Math.max(M, cx - bw / 2), W - bw - M);
+    bub.style.left = `${left}px`;
+    arrow.classList.add('down'); arrow.style.left = `${Math.min(bw - 26, Math.max(8, cx - left - 9))}px`;
+  }
 }
-function openTuto() { $('#menu').hidden = true; showTuto(0); $('#dlg-tuto').showModal(); }
-function endTuto() { store.set('champi-tuto', '1'); $('#dlg-tuto').close(); }
-$('#tuto-next').addEventListener('click', () => (tutoI < TUTO.length - 1 ? showTuto(tutoI + 1) : endTuto()));
-$('#tuto-skip').addEventListener('click', endTuto);
+function openTuto() {
+  $('#menu').hidden = true;
+  for (const d of $$('dialog[open]')) d.close();
+  coachI = 0; $('#coach').hidden = false; placeCoach();
+}
+function endTuto() { store.set('champi-tuto', '1'); $('#coach').hidden = true; }
+$('#coach-next').addEventListener('click', (e) => { e.stopPropagation(); if (coachI < COACH.length - 1) { coachI++; placeCoach(); } else endTuto(); });
+$('#coach-skip').addEventListener('click', (e) => { e.stopPropagation(); endTuto(); });
+$('#coach').addEventListener('click', (e) => { if (!e.target.closest('#coach-bubble')) $('#coach-next').click(); });   // toucher ailleurs = suivant
+addEventListener('resize', () => { if (!$('#coach').hidden) placeCoach(); });
 $('#help-btn').addEventListener('click', () => { $('#menu').hidden = true; $('#dlg-help').showModal(); $('#dlg-help').scrollTop = 0; });
 $$('#dlg-help .js-close').forEach((b) => b.addEventListener('click', () => $('#dlg-help').close()));
 $('#help-tuto').addEventListener('click', () => { $('#dlg-help').close(); openTuto(); });
@@ -1839,6 +1880,20 @@ $('#journal-list').addEventListener('click', (e) => {
   $('#dlg-journal').close();
   map.setView([s.lat, s.lon], Math.max(map.getZoom(), 14));
   openSpot(s.id);
+});
+
+// 🔄 Actualiser : données de la famille, pluie mesurée, avis du moment, et nouvelle version de l'appli si elle existe.
+$('#refresh-btn').addEventListener('click', async () => {
+  const b = $('#refresh-btn'); b.disabled = true; b.classList.add('spin');
+  toast('Actualisation…', 15000);
+  try {
+    rainIdx = null; rainIdxAt = 0; momentCell = '';
+    await loadData();
+    updateMoment(); updateHabitatWeather();
+    navigator.serviceWorker?.getRegistration().then((r) => r?.update()).catch(() => {});
+    toast('✔ À jour', 1800);
+  } catch (err) { toast(`Actualisation impossible : ${frError(err)}`, 4000); }
+  b.disabled = false; b.classList.remove('spin');
 });
 
 // Lien direct vers un coin (notification) : …/#spot=<id>

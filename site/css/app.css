@@ -450,3 +450,25 @@ button, .btn, .chip, .sp-chip, .rail-btn, summary { -webkit-user-select: none; u
 .j-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .j-note { white-space: pre-wrap; overflow-wrap: anywhere; }
 .j-body .photos { margin-top: 4px; }
+
+/* ===== Menu : profil + 🔄 Actualiser sur la même ligne ===== */
+.menu-top { display: flex; gap: 8px; align-items: center; }
+.menu-top .profile-line { flex: 1; min-width: 0; }
+.icon-btn.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== Visite guidée : bulles qui pointent sur les boutons ===== */
+.coach { position: fixed; inset: 0; z-index: 4000; }
+.coach-hole { position: fixed; border-radius: 16px; box-shadow: 0 0 0 9999px rgba(0,0,0,.6); outline: 3px solid #fff; pointer-events: none; transition: all .25s ease; }
+.coach-hole[hidden] { display: block; box-shadow: none; outline: 0; width: 0; height: 0; }
+.coach:has(.coach-hole[hidden]) { background: rgba(0,0,0,.6); }
+.coach-bubble { position: fixed; background: var(--surface); color: var(--text); border-radius: 16px; padding: 14px 16px 12px; box-shadow: 0 10px 30px rgba(0,0,0,.35); transition: top .25s ease, left .25s ease; }
+.coach-bubble p { margin: 6px 0 10px; line-height: 1.4; }
+.coach-foot { display: flex; gap: 8px; align-items: center; }
+.coach-foot .small { margin-right: auto; }
+.coach-foot .btn { min-height: 40px; padding: 6px 14px; }
+.coach-arrow { position: absolute; width: 18px; height: 18px; background: var(--surface); transform: rotate(45deg); }
+.coach-arrow.up { top: -8px; }
+.coach-arrow.down { bottom: -8px; }
+.coach-arrow.right { right: -8px; }
+.coach-arrow[hidden] { display: none; }
