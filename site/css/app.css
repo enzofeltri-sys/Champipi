@@ -357,3 +357,25 @@ button, .btn, .chip, .sp-chip, .rail-btn, summary { -webkit-user-select: none; u
 .help details[open] > summary { display: list-item; margin-bottom: 4px; }
 .help p, .help li { font-size: .92rem; margin: 4px 0; }
 .help ul, .help ol { padding-left: 20px; margin: 4px 0; }
+
+/* ===== Filtres un peu plus bas (moins collés au haut de l'écran) ===== */
+.topbar { top: calc(20px + env(safe-area-inset-top)); }
+.rail { top: calc(78px + env(safe-area-inset-top)); }
+.menu { top: calc(72px + env(safe-area-inset-top)); }
+.offline-bar { top: calc(78px + env(safe-area-inset-top)); }
+
+/* ===== Qu'est-ce qui pousse ici ? ===== */
+.here-dot { width: 34px; height: 34px; border-radius: 50%; background: var(--surface); border: 3px solid var(--primary); display: flex; align-items: center; justify-content: center; font-size: 1.05rem; box-shadow: var(--shadow); }
+.here-place { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.here-place details { margin-top: 4px; }
+.here-place summary { cursor: pointer; color: var(--muted, inherit); }
+.here-h { margin: 14px 0 6px; font-size: 1rem; }
+.here-sp { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
+.here-sp .head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.here-sp .head b { margin-right: auto; }
+.here-sp .why { margin: 0; padding-left: 4px; list-style: none; font-size: .88rem; }
+.here-sp .tag { font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); }
+.here-sp .tag.probable { background: rgba(22,163,74,.18); color: var(--primary); }
+.here-sp .small-btn { align-self: flex-start; min-height: 36px; padding: 4px 12px; font-size: .85rem; }
+.notify-prefs { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.notify-prefs .check { align-items: flex-start; } .notify-prefs .check input { flex: none; margin-top: 2px; }

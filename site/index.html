@@ -140,6 +140,7 @@
         <button id="rail-spots" class="rail-btn" type="button" aria-pressed="true">⭐<span>Coins</span></button>
         <button id="rail-rain" class="rail-btn" type="button" aria-pressed="false">🌧️<span>Pluie</span></button>
         <button id="rail-base" class="rail-btn" type="button" aria-pressed="false">🛰️<span>Photo</span></button>
+        <button id="rail-here" class="rail-btn" type="button">🌱<span>Ici ?</span></button>
         <button id="rail-locate" class="rail-btn" type="button">📍<span>Moi</span></button>
       </div>
 
@@ -156,6 +157,16 @@
         <div class="row end">
           <button id="add-cancel" class="btn" type="button">Annuler</button>
           <button id="add-here" class="btn primary" type="button">✓ C'est ici</button>
+        </div>
+      </div>
+
+      <div id="here-bar" class="add-bar card" hidden>
+        <b>🌱 Qu'est-ce qui pousse ici ?</b>
+        <span class="small muted">Place le viseur sur l'endroit à analyser (fais glisser la carte), ou prends ta position.</span>
+        <div class="row end">
+          <button id="here-cancel" class="btn" type="button">Annuler</button>
+          <button id="here-locate" class="btn" type="button">📍 Ma position</button>
+          <button id="here-go" class="btn primary" type="button">Analyser ici</button>
         </div>
       </div>
 
@@ -374,6 +385,7 @@
           <li><b>⭐ Coins</b> : affiche ou masque les coins (les tiens et ceux de la famille).</li>
           <li><b>🌧️ Pluie</b> : pluie tombée ces 10 derniers jours sur la région (plus c'est bleu foncé, plus il a plu).</li>
           <li><b>🛰️ Photo</b> : passe en photo aérienne, et retour au plan.</li>
+          <li><b>🌱 Ici ?</b> : ce qui peut pousser à un endroit (voir la rubrique suivante).</li>
           <li><b>📍 Moi</b> : centre la carte sur ta position (point bleu).</li>
           <li><b>☰ Menu</b> : liste des coins, conseiller, guide, hors ligne, alertes, famille, profil.</li>
         </ul>
@@ -387,6 +399,17 @@
           <li>Le bandeau du bas rappelle la saison, les forêts, le <b>sosie dangereux</b> ; 📖 ouvre la fiche du guide ; ✕ revient à tous les champignons.</li>
         </ul>
         <p class="small muted">Forêts : carte forestière BD Forêt® de l'IGN. C'est une aide pour chercher, pas une garantie.</p>
+      </details>
+
+      <details><summary>🌱 Qu'est-ce qui pousse ici ?</summary>
+        <p>Touche <b>🌱 Ici ?</b> à droite, place le viseur sur un endroit (ou « 📍 Ma position »), puis « Analyser ici ».</p>
+        <ul>
+          <li><b>Le lieu</b> : type de forêt et arbres, <b>sol calcaire ou siliceux</b> (avec la description du terrain), altitude, pluie des 10 derniers jours.</li>
+          <li><b>Les champignons dont c'est le milieu</b> : « milieu typique » (les bons arbres) ou « possible » (arbres mélangés), avec la saison et, s'ils sont en saison, les conditions du moment.</li>
+          <li>Un champignon qui demande un autre sol (ex. girolle sur calcaire) ou une autre altitude n'est pas proposé.</li>
+          <li>« Voir ses forêts sur la carte » colore les forêts favorables autour ; « ＋ Noter un coin ici » crée un coin à cet endroit.</li>
+        </ul>
+        <p class="small muted">Sols : carte INRAE au 1/250 000, précise à quelques kilomètres près. Quand la carte ne permet pas de trancher (ex. Alpilles), l'appli écrit « non déterminé » au lieu de deviner. Ça n'identifie aucun champignon.</p>
       </details>
 
       <details><summary>➕ Noter un coin</summary>
@@ -432,6 +455,8 @@
         </ul>
         <p>Chaque matin vers 7 h 30, si un de tes coins (ou de la famille) devient 🟢 favorable pour une espèce en saison, tu reçois une notification ; au plus une par coin et par semaine. Toucher la notification ouvre le coin.</p>
         <p>Il faut que le coin ait au moins une espèce notée. Pour arrêter : même écran → « Désactiver ».</p>
+        <p><b>👪 Nouvelles de la famille</b> : quand quelqu'un note une trouvaille récente dans un coin que tu vois (coin « famille » ou partagé avec toi), tu reçois « 🦊 Tata a trouvé : cèpe ». Jamais pour tes propres trouvailles, ni pour une trouvaille vieille de plus de 3 jours.</p>
+        <p>Chaque sorte d'alerte se coupe séparément avec sa case dans le même écran.</p>
       </details>
 
       <details><summary>📥 Sans réseau en forêt</summary>
@@ -502,9 +527,11 @@
         <h2>🔔 Alertes de pousse</h2>
         <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
       </div>
-      <p class="small">Chaque matin vers 7 h 30, l'appli vérifie la météo de tes coins (et de ceux de la famille).
-        Quand les conditions deviennent favorables pour une espèce en saison, tu reçois une notification sur ce téléphone.
-        Au plus une alerte par coin et par semaine.</p>
+      <p class="small">Deux sortes d'alertes, sur ce téléphone :</p>
+      <div class="notify-prefs">
+        <label class="check"><input id="notify-pousse" type="checkbox" checked> <span><b>🍄 Conditions favorables</b><br><span class="small muted">Chaque matin vers 7 h 30, si la météo devient favorable à un de tes coins (ou de la famille). Au plus une alerte par coin et par semaine.</span></span></label>
+        <label class="check"><input id="notify-news" type="checkbox" checked> <span><b>👪 Nouvelles de la famille</b><br><span class="small muted">Quand quelqu'un note une trouvaille dans un coin que tu vois (coin « famille » ou partagé avec toi).</span></span></label>
+      </div>
       <p id="alerts-status" class="access-line small"></p>
       <div class="row">
         <button id="alerts-on" class="btn primary" type="button">Activer sur ce téléphone</button>
@@ -531,6 +558,22 @@
       <ul id="zone-list" class="find-list"></ul>
       <p id="offline-storage" class="small muted"></p>
       <p class="small muted">Plan IGN © IGN – Géoplateforme (Licence Ouverte Etalab). Une zone = ~1 500 tuiles au plus.</p>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-here" class="sheet">
+    <div class="stack">
+      <div class="sheet-head">
+        <h2>🌱 Qu'est-ce qui pousse ici ?</h2>
+        <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
+      </div>
+      <div id="here-body"><p class="muted">Analyse en cours…</p></div>
+      <p class="small muted">Règles simples : les arbres, le sol, l'altitude et la saison de chaque champignon du carnet.
+        Un milieu favorable ne garantit pas la pousse ; la pluie compte autant.
+        Sources : forêts <a href="https://geoservices.ign.fr/bdforet" target="_blank" rel="noopener">IGN BD Forêt V2</a>,
+        sols <a href="https://www.gissol.fr/" target="_blank" rel="noopener">INRAE / Gis Sol</a> (1/250 000 : quelques kilomètres de précision),
+        altitude IGN, météo <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.</p>
+      <p class="safety small">⚠️ L'appli n'identifie aucun champignon. Fais contrôler chaque récolte (pharmacien, association mycologique). Antipoison : <a class="tel" href="tel:+33491752525">04 91 75 25 25</a></p>
     </div>
   </dialog>
 

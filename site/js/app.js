@@ -7,7 +7,8 @@ import {
 } from './logic.js';
 import { createPhotoStore, thumbPath } from './photos.js';
 import { GUIDE, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown } from './advisor.js';
-import { dailyFor, forestAt, historyFor } from './weather.js';
+import { dailyFor, forestAt, soilAt, historyFor } from './weather.js';
+import { treesAt, soilKind, whatGrows, fix as cleanText } from './here.js';
 import { historyRange, findConditions, spotProfile, personalAdvice, profileSummary } from './learn.js';
 import { massifAt, accessFor, inFireSeason, DEPT_PAGES, ACCESS_ICON } from './access.js';
 import { favorableColors, favorableLabels, colorKeyMap } from './forests.js';
@@ -85,7 +86,7 @@ async function doRoute(session) {
   state.request = request.data;
   if (!allowed.data.length) { showDenied(); return; }
   const { data: profile, error: e2 } = await sb.from('champi_profiles')
-    .select('id, display_name, avatar_emoji, avatar_color').eq('id', state.user.id).maybeSingle();
+    .select('id, display_name, avatar_emoji, avatar_color, notify_pousse, notify_news').eq('id', state.user.id).maybeSingle();
   if (e2) throw e2;
   if (!profile) {
     // Prénom déjà donné dans la demande d'accès : on crée le profil directement.
@@ -592,6 +593,85 @@ $('#add-here').addEventListener('click', () => {
   if (photo) state.draft.photo = photo;
   $('#adjust-bar').hidden = true;
   openEdit();
+});
+
+// ---------------------------------------------------------------------------
+// « 🌱 Qu'est-ce qui pousse ici ? » : forêt + sol + altitude + saison → champignons dont c'est le milieu
+let hereMarker = null;
+function enterHereMode() {
+  cancelDraft();
+  $('#menu').hidden = true;
+  for (const el of ['#bottom', '.rail']) $(el).hidden = true;
+  $('#crosshair').hidden = false; $('#here-bar').hidden = false;
+  if (map.getZoom() < 13) toast('Zoome sur l\'endroit, puis place le viseur dessus.', 3500);
+}
+function exitHereMode() {
+  for (const el of ['#bottom', '.rail']) $(el).hidden = false;
+  $('#crosshair').hidden = true; $('#here-bar').hidden = true;
+}
+$('#rail-here').addEventListener('click', enterHereMode);
+$('#here-cancel').addEventListener('click', exitHereMode);
+$('#here-locate').addEventListener('click', () => locate((lat, lon) => { exitHereMode(); analyzeHere(lat, lon); }));
+$('#here-go').addEventListener('click', () => { const c = map.getCenter(); exitHereMode(); analyzeHere(c.lat, c.lng); });
+$('#dlg-here .js-close').addEventListener('click', () => $('#dlg-here').close());
+$('#dlg-here').addEventListener('close', () => { hereMarker?.remove(); hereMarker = null; });
+
+const SOIL_TEXT = { calcaire: 'calcaire', siliceux: 'siliceux (acide)' };
+let herePoint = null;
+async function analyzeHere(lat, lon) {
+  herePoint = { lat: round6(lat), lon: round6(lon) };
+  hereMarker?.remove();
+  hereMarker = L.marker([lat, lon], { icon: L.divIcon({ className: '', html: '<div class="here-dot">🌱</div>', iconSize: [34, 34], iconAnchor: [17, 17] }), interactive: false, zIndexOffset: 950 }).addTo(map);
+  $('#here-body').innerHTML = '<p class="muted">Analyse en cours… (forêt, sol, altitude, météo)</p>';
+  $('#dlg-here').showModal();
+  const [forest, soil, alt, daily] = await Promise.allSettled([
+    forestAt(lat, lon), soilAt(lat, lon), fetchAltitude(lat, lon), dailyFor([[lat, lon]]).then((d) => d[0]),
+  ]);
+  if (!$('#dlg-here').open || herePoint.lat !== round6(lat) || herePoint.lon !== round6(lon)) return;
+  const m = month();
+  const tfv = forest.status === 'fulfilled' ? (forest.value?.tfv ? cleanText(forest.value.tfv) : null) : undefined;
+  const sk = soil.status === 'fulfilled' ? soilKind(soil.value) : undefined;
+  const z = alt.status === 'fulfilled' ? alt.value : null;
+  const trees = treesAt(tfv);
+  const w = daily.status === 'fulfilled' && daily.value ? summarizeWeather(daily.value, todayIso()) : null;
+  const list = whatGrows({ trees, soil: sk?.kind ?? null, alt: z, month: m });
+  const mainTrees = [...trees].filter(([, k]) => k === 2).map(([t]) => t);
+
+  const place = `<div class="here-place">
+    <div>🌲 <b>Forêt</b> : ${tfv === undefined ? '<span class="muted">service IGN indisponible</span>'
+      : tfv ? esc(tfv) : '<span class="muted">pas de forêt cartographiée ici</span>'}</div>
+    <div>🪨 <b>Sol</b> : ${sk === undefined ? '<span class="muted">service indisponible</span>'
+      : !sk.name && !sk.text ? '<span class="muted">pas de donnée de sol pour cet endroit</span>'
+      : `${sk.kind ? `<b>${SOIL_TEXT[sk.kind]}</b>` : '<span class="muted">calcaire ou siliceux : non déterminé</span>'}${sk.name ? ` · <span class="small muted">${esc(sk.name.toLowerCase())}</span>` : ''}
+        ${sk.text ? `<details class="small"><summary>Description du terrain</summary>${esc(sk.text)}</details>` : ''}`}</div>
+    <div>⛰️ ${z != null ? `<b>${z} m</b>` : '<span class="muted">altitude inconnue</span>'} · 📅 ${esc(MONTHS[m - 1])}</div>
+    <div>🌧️ ${w ? `<b>${w.rain10} mm</b> sur 10 jours${w.bigRainAgo != null ? ` · grosse pluie il y a ${w.bigRainAgo} j` : ''}` : '<span class="muted">météo indisponible</span>'}</div>
+  </div>`;
+
+  const items = list.map((r) => {
+    const a = r.inSeason && w ? assess(w, { month: m, species: [r.id], trees: mainTrees.length ? mainTrees : [...trees.keys()] }) : null;
+    const lv = a?.level ? LEVELS[a.level] : null;
+    return `<div class="here-sp">
+      <div class="head"><b>${esc(r.label)}</b>
+        <span class="badge ${r.inSeason ? 'season' : ''}">${r.inSeason ? (r.peak ? 'pic' : 'en saison') : `saison : ${esc(r.season)}`}</span>
+        <span class="tag ${r.level}">${r.level === 'probable' ? 'milieu typique' : 'possible'}</span></div>
+      <ul class="why">${r.why.map((x) => `<li>${x.ok ? '✓' : '?'} ${esc(x.text)}</li>`).join('')}</ul>
+      ${lv ? `<div class="small">${lv.icon} ${esc(lv.label)} en ce moment</div>` : ''}
+      <button class="btn small-btn" type="button" data-here-sp="${r.id}">Voir ses forêts sur la carte</button>
+    </div>`;
+  }).join('');
+  const empty = !list.length ? `<p>${tfv ? 'Aucun champignon du carnet n\'a son milieu typique ici.' : 'Pas de forêt cartographiée à cet endroit : essaie au cœur d\'un bois.'}</p>` : '';
+  $('#here-body').innerHTML = `${place}
+    <h3 class="here-h">${list.length ? `Champignons dont c'est le milieu (${list.length})` : 'Champignons'}</h3>${empty}${items}
+    <div class="row end"><button class="btn" type="button" data-here-add>＋ Noter un coin ici</button></div>`;
+}
+$('#here-body').addEventListener('click', (e) => {
+  const sp = e.target.closest('[data-here-sp]');
+  if (sp) { $('#dlg-here').close(); setSpecies(sp.dataset.hereSp); if (herePoint) map.setView([herePoint.lat, herePoint.lon], Math.max(map.getZoom(), 13)); return; }
+  if (e.target.closest('[data-here-add]') && herePoint) {
+    const p = herePoint; $('#dlg-here').close();
+    startDraft(p.lat, p.lon); $('#adjust-bar').hidden = true; openEdit();
+  }
 });
 
 // Menu
@@ -1503,7 +1583,20 @@ async function renderAlerts() {
   else st.textContent = on ? '🔔 Alertes actives sur ce téléphone.' : '🔕 Alertes inactives sur ce téléphone.';
   $('#alerts-on').disabled = !supported || (isIos && !isStandalone) || Notification.permission === 'denied';
 }
-$('#alerts-btn').addEventListener('click', () => { $('#menu').hidden = true; $('#alerts-msg').textContent = ''; renderAlerts(); $('#dlg-alerts').showModal(); });
+$('#alerts-btn').addEventListener('click', () => { $('#menu').hidden = true; $('#alerts-msg').textContent = ''; renderAlerts(); renderNotifyPrefs(); $('#dlg-alerts').showModal(); });
+function renderNotifyPrefs() {
+  $('#notify-pousse').checked = state.profile?.notify_pousse !== false;
+  $('#notify-news').checked = state.profile?.notify_news !== false;
+}
+for (const [id, col] of [['#notify-pousse', 'notify_pousse'], ['#notify-news', 'notify_news']]) {
+  $(id).addEventListener('change', async (e) => {
+    const value = e.target.checked;
+    const { error } = await sb.from('champi_profiles').update({ [col]: value }).eq('id', state.user.id);
+    if (error) { e.target.checked = !value; $('#alerts-msg').textContent = `Échec : ${frError(error)}`; return; }
+    state.profile = { ...state.profile, [col]: value };
+    $('#alerts-msg').textContent = value ? '✔ Activé.' : '✔ Coupé.';
+  });
+}
 $('#dlg-alerts .js-close').addEventListener('click', () => $('#dlg-alerts').close());
 $('#alerts-on').addEventListener('click', async () => {
   const btn = $('#alerts-on'); busy(btn, true); $('#alerts-msg').textContent = '';

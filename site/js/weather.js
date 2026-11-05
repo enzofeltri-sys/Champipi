@@ -83,6 +83,23 @@ export async function forestAt(lat, lon) {
   return v;
 }
 
+// Sol dominant à un point : carte des sols de France (INRAE, référentiels régionaux au 1/250 000), diffusée par l'IGN.
+const soilCache = new Map();
+export async function soilAt(lat, lon) {
+  const k = lat.toFixed(4) + ',' + lon.toFixed(4);
+  if (soilCache.has(k)) return soilCache.get(k);
+  const d = 0.0005;
+  const url = 'https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetFeatureInfo'
+    + '&LAYERS=INRAE_CARTE-SOLS&QUERY_LAYERS=INRAE_CARTE-SOLS&STYLES=&FORMAT=image/png'
+    + `&CRS=EPSG:4326&BBOX=${lat - d},${lon - d},${lat + d},${lon + d}&WIDTH=101&HEIGHT=101&I=50&J=50`
+    + '&INFO_FORMAT=application/json&FEATURE_COUNT=1';
+  // Le service répond parfois une erreur XML passagère : fetchJson réessaie.
+  const j = await fetchJson(url, 2);
+  const p = j.features?.[0]?.properties ?? null;
+  soilCache.set(k, p);
+  return p;
+}
+
 // ---------------------------------------------------------------------------
 // Historique (archive Open-Meteo) pour un coin : météo réelle avant chaque trouvaille.
 // Le passé ne change plus : mémorisé sans limite (sauf les 7 derniers jours, mémorisés 1 h).

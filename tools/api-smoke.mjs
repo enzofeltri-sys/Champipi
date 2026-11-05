@@ -25,7 +25,7 @@ const WRITES = {
   champi_spots: { id: U, name: 'x', visibility: 'private', species: [], note: null, lat: 43, lon: 5, trees: [], soil: null, exposure: null, access: null, altitude: null, forest_type: null },
   champi_finds: { id: U, spot_id: U, found_on: '2026-01-01', species: [], note: null, quantity: null, condition: null, weather: null },
   champi_photos: { spot_id: U, find_id: null, path: U + '/x.jpg' },
-  champi_profiles: { display_name: 'x' },
+  champi_profiles: { display_name: 'x', avatar_emoji: null, avatar_color: null, notify_pousse: true, notify_news: true },
   champi_access_requests: { display_name: 'x', message: null },
   champi_allowed_emails: { email: 'x@x.fr', label: null },
   champi_spot_shares: { spot_id: U, user_id: U },
