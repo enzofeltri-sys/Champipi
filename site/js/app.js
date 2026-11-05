@@ -26,6 +26,7 @@ const photos = createPhotoStore(sb);
 const state = {
   user: null, profile: null,
   spots: [], finds: [], photos: [],
+  isAdmin: false, request: null,
   scope: store.get('champi-scope') || 'all',
   species: '',
   draft: null,          // { lat, lon, id?: string } pendant la création / modification
@@ -47,21 +48,46 @@ async function doRoute(session) {
   state.user = session?.user ?? null;
   if (!state.user) { showLogin(); return; }
 
-  const { data: allowed, error } = await sb.from('champi_allowed_emails').select('email');
-  if (error) throw error;
-  if (!allowed.length) {
-    $('#denied-email').textContent = state.user.email;
-    show('denied');
-    return;
-  }
+  const email = (state.user.email || '').toLowerCase();
+  const [allowed, admin, request] = await Promise.all([
+    sb.from('champi_allowed_emails').select('email, label').eq('email', email),
+    sb.from('champi_admins').select('email').eq('email', email),
+    sb.from('champi_access_requests').select('display_name, message').eq('email', email).maybeSingle(),
+  ]);
+  for (const r of [allowed, admin, request]) if (r.error) throw r.error;
+  state.isAdmin = admin.data.length > 0;
+  state.request = request.data;
+  if (!allowed.data.length) { showDenied(); return; }
   const { data: profile, error: e2 } = await sb.from('champi_profiles')
     .select('id, display_name').eq('id', state.user.id).maybeSingle();
   if (e2) throw e2;
-  if (!profile) { show('name'); $('#name-input').focus(); return; }
+  if (!profile) {
+    // Prénom déjà donné dans la demande d'accès : on crée le profil directement.
+    const known = state.request?.display_name || allowed.data[0].label;
+    if (known) {
+      const { error } = await sb.from('champi_profiles').insert({ display_name: known });
+      if (!error) {
+        await sb.from('champi_access_requests').delete().eq('email', email);
+        return doRoute(session);
+      }
+    }
+    show('name'); $('#name-input').focus(); return;
+  }
   state.profile = profile;
   $('#me-name').textContent = profile.display_name;
   show('app');
+  $('#admin-btn').hidden = !state.isAdmin;
   await loadData();
+  if (state.isAdmin) refreshAdminBadge().catch(fatal);
+}
+
+function showDenied() {
+  $('#denied-email').textContent = state.user.email;
+  $('#request-form').hidden = !!state.request;
+  $('#request-pending').hidden = !state.request;
+  showError('#request-error');
+  show('denied');
+  if (!state.request) $('#request-name').focus();
 }
 
 function showLogin() {
@@ -137,9 +163,26 @@ $$('.js-logout').forEach((b) => b.addEventListener('click', async () => {
   await sb.auth.signOut();
 }));
 $('#denied-retry').addEventListener('click', async () => {
-  await sb.auth.refreshSession();
   const { data } = await sb.auth.getSession();
-  route(data.session);
+  await route(data.session);
+  if (!$('#screen-denied').hidden) toast('Pas encore acceptée. Réessaie un peu plus tard.');
+});
+$('#request-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const row = { display_name: $('#request-name').value.trim(), message: $('#request-msg').value.trim() || null };
+  if (!row.display_name) return;
+  const btn = e.submitter; busy(btn, true);
+  const { error } = await sb.from('champi_access_requests').insert(row);
+  busy(btn, false);
+  if (error && error.code !== '23505') { showError('#request-error', `Envoi impossible : ${frError(error)}`); return; }
+  state.request = row;
+  showDenied();
+});
+$('#request-cancel').addEventListener('click', async () => {
+  const { error } = await sb.from('champi_access_requests').delete().eq('email', state.user.email.toLowerCase());
+  if (error) { showError('#request-error', frError(error)); return; }
+  state.request = null;
+  showDenied();
 });
 
 $('#name-form').addEventListener('submit', async (e) => {
@@ -741,8 +784,99 @@ sb.auth.onAuthStateChange((event, session) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Administration (Enzo)
+
+async function refreshAdminBadge() {
+  const { data, error } = await sb.from('champi_access_requests').select('email');
+  if (error) throw error;
+  const count = data.length;
+  $('#menu-dot').hidden = !count;
+  $('#admin-count').hidden = !count;
+  $('#admin-count').textContent = count || '';
+  return count;
+}
+
+async function loadAdmin() {
+  const [reqs, members] = await Promise.all([
+    sb.from('champi_access_requests').select('email, display_name, message, created_at').order('created_at'),
+    sb.from('champi_allowed_emails').select('email, label, added_at').order('added_at'),
+  ]);
+  if (reqs.error) throw reqs.error;
+  if (members.error) throw members.error;
+  const me = state.user.email.toLowerCase();
+  $('#req-list').innerHTML = reqs.data.length ? reqs.data.map((r) => `<li>
+      <div class="head"><span>${esc(r.display_name)}</span><span class="small muted">${formatDate(r.created_at)}</span></div>
+      <div class="small muted">${esc(r.email)}</div>
+      ${r.message ? `<div class="note">« ${esc(r.message)} »</div>` : ''}
+      <div class="req-actions">
+        <button class="btn primary" type="button" data-accept="${esc(r.email)}" data-name="${esc(r.display_name)}">Accepter</button>
+        <button class="btn" type="button" data-refuse="${esc(r.email)}">Refuser</button>
+      </div></li>`).join('') : '<li class="muted small">Aucune demande.</li>';
+  $('#member-count').textContent = `(${members.data.length})`;
+  $('#member-list').innerHTML = members.data.map((m) => `<li>
+      <div class="head"><span>${esc(m.label || m.email.split('@')[0])}${m.email === me ? ' 👑' : ''}</span>
+        ${m.email === me ? '' : `<button class="del" type="button" data-remove="${esc(m.email)}">Retirer</button>`}</div>
+      <div class="small muted">${esc(m.email)} · depuis le ${formatDate(m.added_at)}</div></li>`).join('');
+  await refreshAdminBadge();
+}
+
+$('#admin-btn').addEventListener('click', async () => {
+  $('#menu').hidden = true;
+  showError('#admin-error');
+  $('#dlg-admin').showModal();
+  try { await loadAdmin(); } catch (err) { showError('#admin-error', frError(err)); }
+});
+$('#dlg-admin .js-close').addEventListener('click', () => $('#dlg-admin').close());
+
+async function addMember(email, label) {
+  const { error } = await sb.from('champi_allowed_emails').insert({ email, label: label || null });
+  if (error && error.code !== '23505') throw error;     // 23505 : déjà dans la liste
+}
+
+$('#dlg-admin').addEventListener('click', async (e) => {
+  const acc = e.target.closest('[data-accept]'), ref = e.target.closest('[data-refuse]'), rem = e.target.closest('[data-remove]');
+  if (!acc && !ref && !rem) return;
+  showError('#admin-error');
+  try {
+    if (acc) {
+      await addMember(acc.dataset.accept, acc.dataset.name);
+      const { error } = await sb.from('champi_access_requests').delete().eq('email', acc.dataset.accept);
+      if (error) throw error;
+      toast(`${acc.dataset.name} fait partie de la famille ✔`);
+    } else if (ref) {
+      if (!confirm('Refuser cette demande ?')) return;
+      const { error } = await sb.from('champi_access_requests').delete().eq('email', ref.dataset.refuse);
+      if (error) throw error;
+    } else {
+      if (!confirm(`Retirer ${rem.dataset.remove} ? Cette personne ne verra plus les coins de la famille (ses propres coins restent à elle).`)) return;
+      const { error } = await sb.from('champi_allowed_emails').delete().eq('email', rem.dataset.remove);
+      if (error) throw error;
+    }
+    await loadAdmin();
+  } catch (err) { showError('#admin-error', frError(err)); }
+});
+
+$('#add-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = $('#add-email').value.trim().toLowerCase();
+  const label = $('#add-label').value.trim();
+  const btn = e.submitter; busy(btn, true); showError('#admin-error');
+  try {
+    await addMember(email, label);
+    await sb.from('champi_access_requests').delete().eq('email', email);   // si elle avait déjà demandé
+    $('#add-email').value = ''; $('#add-label').value = '';
+    toast(`${label || email} ajouté(e) ✔`);
+    await loadAdmin();
+  } catch (err) { showError('#admin-error', frError(err)); }
+  busy(btn, false);
+});
+
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && !$('#screen-app').hidden) loadData().catch(fatal);
+  if (document.visibilityState === 'visible' && !$('#screen-app').hidden) {
+    loadData().catch(fatal);
+    if (state.isAdmin) refreshAdminBadge().catch(() => {});
+  }
 });
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {

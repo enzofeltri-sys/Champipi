@@ -9,16 +9,18 @@ Site : **https://enzofeltri-sys.github.io/Champipi/**
 
 ## Ajouter un membre de la famille
 
-Dans Supabase → projet **Garmin** → *SQL Editor* :
+**Depuis l'appli (admin : enzofeltri@gmail.com)** : menu ☰ → « 👑 Gérer la famille ».
+- La personne ouvre le site, se connecte avec son e-mail, donne son prénom et touche « Demander l'accès ».
+  Une pastille rouge apparaît sur le menu de l'admin → **Accepter** ou **Refuser**.
+- Ou bien l'admin ajoute directement une adresse (+ prénom) : la personne arrive alors directement dans l'appli.
+- **Retirer** un membre : il ne voit plus les coins de la famille (ses propres coins restent à lui). L'admin ne peut pas se retirer lui-même.
+
+**En SQL (secours)**, Supabase → projet Garmin → *SQL Editor* :
 
 ```sql
-insert into public.champi_allowed_emails (email) values ('prenom@exemple.fr');
+insert into public.champi_allowed_emails (email, label) values ('prenom@exemple.fr', 'Prénom');  -- en minuscules
+insert into public.champi_admins (email) values ('autre-admin@exemple.fr');                     -- nouvel admin
 ```
-
-L'adresse doit être **en minuscules**. La personne ouvre le site, saisit son e-mail, touche le lien reçu, puis donne son prénom.
-Retirer quelqu'un : `delete from public.champi_allowed_emails where email = 'prenom@exemple.fr';` (il ne verra plus les coins famille ; ses propres coins restent à lui).
-
-Voir la liste : `select * from public.champi_allowed_emails;`
 
 ## Mettre à jour le site
 

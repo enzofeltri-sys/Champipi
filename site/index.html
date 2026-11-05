@@ -51,17 +51,26 @@
     </div>
   </section>
 
-  <!-- Hors liste -->
+  <!-- Hors liste : demande d'accès -->
   <section id="screen-denied" class="screen center" hidden>
     <div class="card narrow">
-      <div class="logo-big" aria-hidden="true">🔒</div>
-      <h1>Pas encore dans la famille</h1>
-      <p>Tu es bien connecté avec <b id="denied-email"></b>, mais cette adresse n'est pas dans la liste des personnes autorisées.</p>
-      <p>Demande à Enzo de t'ajouter, puis rouvre l'appli. Tu ne vois aucun coin tant que ce n'est pas fait.</p>
-      <div class="row">
-        <button id="denied-retry" class="btn primary" type="button">Réessayer</button>
-        <button class="btn js-logout" type="button">Se déconnecter</button>
+      <div class="logo-big" aria-hidden="true">🍄</div>
+      <h1>Rejoindre le carnet</h1>
+      <p>Tu es connecté avec <b id="denied-email"></b>. Pour voir les coins de la famille, Enzo doit accepter ta demande.</p>
+      <form id="request-form" class="stack">
+        <label for="request-name">Ton prénom</label>
+        <input id="request-name" required maxlength="40" autocomplete="given-name" placeholder="Prénom">
+        <label for="request-msg">Un mot pour Enzo <span class="muted small">(facultatif)</span></label>
+        <input id="request-msg" maxlength="300" placeholder="Ex. c'est Mamie !">
+        <button class="btn primary" type="submit">Demander l'accès</button>
+      </form>
+      <div id="request-pending" class="stack" hidden>
+        <p class="ok">✅ Demande envoyée. Dès qu'Enzo l'accepte, touche « Vérifier ».</p>
+        <button id="denied-retry" class="btn primary" type="button">Vérifier</button>
+        <button id="request-cancel" class="btn link" type="button">Annuler ma demande</button>
       </div>
+      <p id="request-error" class="error" role="alert" hidden></p>
+      <button class="btn js-logout" type="button">Se déconnecter</button>
     </div>
   </section>
 
@@ -91,11 +100,12 @@
           <button type="button" data-scope="family" role="radio" aria-checked="false">Famille</button>
         </div>
         <select id="filter-species" aria-label="Filtrer par espèce"><option value="">Espèces</option></select>
-        <button id="menu-btn" class="icon-btn" type="button" aria-label="Menu" aria-haspopup="true">☰</button>
+        <button id="menu-btn" class="icon-btn" type="button" aria-label="Menu" aria-haspopup="true">☰<span id="menu-dot" class="menu-dot" hidden></span></button>
       </header>
 
       <div id="menu" class="menu card" hidden>
         <p class="small muted">Connecté : <b id="me-name"></b></p>
+        <button id="admin-btn" class="btn" type="button" hidden>👑 Gérer la famille <span id="admin-count" class="badge season" hidden></span></button>
         <div class="field">
           <span class="small">Fond de carte</span>
           <div class="seg small-seg" id="base-seg">
@@ -262,6 +272,29 @@
         <button class="btn primary" value="ok">Placer l'épingle</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="dlg-admin" class="sheet">
+    <div class="stack">
+      <div class="sheet-head">
+        <h2>👑 Gérer la famille</h2>
+        <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
+      </div>
+      <h3>Demandes en attente</h3>
+      <ul id="req-list" class="find-list"></ul>
+      <h3>Ajouter quelqu'un</h3>
+      <form id="add-form" class="stack">
+        <div class="grid2">
+          <label>E-mail<input id="add-email" type="email" required inputmode="email" autocomplete="off" placeholder="prenom@exemple.fr"></label>
+          <label>Prénom<input id="add-label" maxlength="40" placeholder="Prénom"></label>
+        </div>
+        <button class="btn primary" type="submit">Ajouter à la famille</button>
+        <p class="small muted">La personne pourra ensuite se connecter avec cette adresse et verra directement les coins de la famille.</p>
+      </form>
+      <p id="admin-error" class="error" role="alert" hidden></p>
+      <h3>Membres <span id="member-count" class="muted small"></span></h3>
+      <ul id="member-list" class="find-list"></ul>
+    </div>
   </dialog>
 
   <dialog id="dlg-photo" class="viewer">

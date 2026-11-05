@@ -58,6 +58,7 @@ const ME = '11111111-1111-1111-1111-111111111111';
     if (path.startsWith('/auth/')) return send({});
     const table = path.replace('/rest/v1/', '');
     const idEq = () => url.searchParams.get('id')?.slice(3);
+    if (table === 'champi_admins' || table === 'champi_access_requests') return send([]);
     if (table === 'champi_allowed_emails') return send([{ email: 'x' }]);
     if (table === 'champi_profiles') return send([{ id: ME, ...prof }]);
     const T = { champi_spots: 'spots', champi_finds: 'finds', champi_photos: 'photos' }[table];

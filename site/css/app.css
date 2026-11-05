@@ -209,3 +209,9 @@ dialog.viewer img { width: 100%; height: calc(100dvh - 64px); object-fit: contai
 .viewer-bar .small { margin-right: auto; }
 .viewer-bar .danger { margin-right: 0; }
 .find-list .photos { margin-top: 6px; }
+
+/* Admin */
+#menu-btn { position: relative; }
+.menu-dot { position: absolute; top: 6px; right: 6px; width: 11px; height: 11px; border-radius: 50%; background: var(--danger); border: 2px solid var(--surface); }
+.req-actions { display: flex; gap: 8px; margin-top: 6px; }
+.req-actions .btn { min-height: 38px; padding: 6px 14px; }
