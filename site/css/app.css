@@ -267,3 +267,10 @@ dialog.viewer img { width: 100%; height: calc(100dvh - 64px); object-fit: contai
 .access-line { background: var(--surface-2); border-radius: 10px; padding: 8px 10px; margin: 6px 0; }
 .access-line.closed { background: color-mix(in srgb, var(--danger) 20%, transparent); font-weight: 600; }
 .access-line.warn { background: color-mix(in srgb, #f0a020 25%, transparent); }
+
+/* Hors ligne */
+.offline-bar { position: absolute; z-index: 1000; bottom: 132px; left: 50%; transform: translateX(-50%);
+  background: #3b3b3b; color: #fff; padding: 5px 12px; border-radius: 999px; font-size: .8rem; box-shadow: var(--shadow); white-space: nowrap; max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; }
+.progress { height: 10px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.progress span { display: block; height: 100%; width: 0; background: var(--primary); transition: width .2s; }
+.pending-tag { font-size: .75rem; color: var(--muted); }

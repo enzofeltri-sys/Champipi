@@ -9,6 +9,7 @@ import { createPhotoStore, thumbPath } from './photos.js';
 import { GUIDE, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown } from './advisor.js';
 import { dailyFor, forestAt } from './weather.js';
 import { massifAt, accessFor, inFireSeason, DEPT_PAGES, ACCESS_ICON } from './access.js';
+import { tilesFor, bestMaxZoom, PLAN_IGN, TILE_CACHE, TILE_LIMIT, isNetworkError, queue, mergePending, sendOrder } from './offline.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -54,12 +55,17 @@ async function doRoute(session) {
   if (!state.user) { showLogin(); return; }
 
   const email = (state.user.email || '').toLowerCase();
+  const snap = readSnapshot();
+  if (snap && (!navigator.onLine)) { openFromSnapshot(snap); return; }
   const [allowed, admin, request] = await Promise.all([
     sb.from('champi_allowed_emails').select('email, label').eq('email', email),
     sb.from('champi_admins').select('email').eq('email', email),
     sb.from('champi_access_requests').select('display_name, message').eq('email', email).maybeSingle(),
   ]);
-  for (const r of [allowed, admin, request]) if (r.error) throw r.error;
+  for (const r of [allowed, admin, request]) {
+    if (r.error && isNetworkError(r.error) && snap) { openFromSnapshot(snap); return; }
+    if (r.error) throw r.error;
+  }
   state.isAdmin = admin.data.length > 0;
   state.request = request.data;
   if (!allowed.data.length) { showDenied(); return; }
@@ -311,6 +317,18 @@ function pinIcon(kind, seasonal = false, draft = false) {
 // Données
 
 async function loadData() {
+  // Affichage immédiat de la copie locale (ouverture rapide, réseau faible en forêt), puis mise à jour.
+  const snap0 = readSnapshot();
+  if (snap0 && !state.loadedOnce) {
+    Object.assign(state, { spots: snap0.spots, finds: snap0.finds, photos: snap0.photos });
+    state.loadedOnce = true;
+    await applyPending(); render();
+  }
+  if (!navigator.onLine && snap0) {
+    Object.assign(state, { spots: snap0.spots, finds: snap0.finds, photos: snap0.photos, offlineSince: snap0.at });
+    await applyPending(); render(); updateOfflineBar();
+    return;
+  }
   const [spots, finds, pics] = await Promise.all([
     sb.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, note, trees, soil, exposure, access, altitude, forest_type, created_at, updated_at, author:champi_profiles(display_name)'),
     sb.from('champi_finds').select('id, spot_id, user_id, found_on, species, note, quantity, condition, weather, created_at, author:champi_profiles(display_name)')
@@ -318,13 +336,21 @@ async function loadData() {
     sb.from('champi_photos').select('id, spot_id, find_id, user_id, path, created_at, author:champi_profiles(display_name)')
       .order('created_at', { ascending: true }),
   ]);
-  if (spots.error) throw spots.error;
-  if (finds.error) throw finds.error;
-  if (pics.error) throw pics.error;
-  state.spots = spots.data;
-  state.finds = finds.data;
-  state.photos = pics.data;
+  const failed = [spots, finds, pics].find((r) => r.error);
+  if (failed) {
+    const snap = isNetworkError(failed.error) ? readSnapshot() : null;
+    if (!snap) throw failed.error;
+    Object.assign(state, { spots: snap.spots, finds: snap.finds, photos: snap.photos, offlineSince: snap.at });
+  } else {
+    state.spots = spots.data;
+    state.finds = finds.data;
+    state.photos = pics.data;
+    state.offlineSince = null;
+    writeSnapshot();
+  }
+  await applyPending();
   render();
+  updateOfflineBar();
   if (state.openSpotId && $('#dlg-spot').open) renderSpot(state.openSpotId);
 }
 
@@ -354,7 +380,7 @@ function render() {
     const author = s.visibility === 'family' && s.owner !== me ? ` · par ${esc(s.author?.display_name ?? '?')}` : '';
     return `<li><button class="spot-item ${s.visibility}" data-id="${s.id}" type="button">
       <span class="grow">
-        <span class="title">${esc(s.name)}</span>
+        <span class="title">${esc(s.name)}${s.pending ? ' <span class="pending-tag">⏳ en attente d\'envoi</span>' : ''}</span>
         <span class="badges">${badgesHtml(s, season)}</span>
         <span class="meta">${sp.length ? esc(sp.map(speciesLabel).join(', ')) : 'Aucune espèce notée'}</span>
         <span class="meta">${lf ? `Dernière trouvaille : ${formatDate(lf)}` : 'Pas encore de trouvaille'}${author}</span>
@@ -579,12 +605,21 @@ $('#edit-form').addEventListener('submit', async (e) => {
   };
   if (!row.name) { showError('#edit-error', 'Donne un nom au coin.'); return; }
   const btn = $('#edit-save'); busy(btn, true);
+  if (!d.id) row.id = crypto.randomUUID();      // identifiant choisi ici : permet de créer le coin hors ligne
   const q = d.id
     ? sb.from('champi_spots').update(row).eq('id', d.id).select('id').single()
     : sb.from('champi_spots').insert(row).select('id').single();
   const { data, error } = await q;
   busy(btn, false);
-  if (error) { showError('#edit-error', `Enregistrement impossible : ${frError(error)}`); return; }
+  if (error && !d.id && isNetworkError(error)) {
+    await queue.add({ kind: 'spot', row, photo: d.photo ?? null });
+    closeEdit(true);
+    toast('📴 Pas de réseau : coin gardé sur le téléphone, envoi au retour du réseau.', 5000);
+    await applyPending(); render(); updateOfflineBar();
+    openSpot(row.id);
+    return;
+  }
+  if (error) { showError('#edit-error', isNetworkError(error) ? 'Pas de réseau : la modification d\'un coin existant doit attendre le retour du réseau.' : `Enregistrement impossible : ${frError(error)}`); return; }
   store.set('champi-last-vis', row.visibility);
   const pending = d.photo;
   closeEdit(true);
@@ -688,16 +723,16 @@ function renderSpot(id) {
   $('#spot-details').hidden = !det.length;
   $('#spot-coords').textContent = `📌 ${formatCoords(s.lat, s.lon)}`;
   $('#spot-photos').innerHTML = thumbs(state.photos.filter((p) => p.spot_id === id && !p.find_id));
-  $('#spot-photo-add').hidden = !mine;
+  $('#spot-photo-add').hidden = !mine || !!s.pending;
   renderMeteo(s);
   renderAccess(s);
   $('#spot-route').href = directionsUrl(s.lat, s.lon);
-  $('#spot-edit').hidden = !mine;
+  $('#spot-edit').hidden = !mine || !!s.pending;
 
   const finds = state.finds.filter((f) => f.spot_id === id);
   $('#find-list').innerHTML = finds.length ? finds.map((f) => `<li>
-      <div class="head"><span>${formatDate(f.found_on)}</span>
-        ${f.user_id === me ? `<button class="del" type="button" data-find="${f.id}">Supprimer</button>` : ''}</div>
+      <div class="head"><span>${formatDate(f.found_on)}${f.pending ? ` <span class="pending-tag">⏳ en attente d'envoi${f.pendingPhotos ? ` (${f.pendingPhotos} photo${f.pendingPhotos > 1 ? 's' : ''})` : ''}</span>` : ''}</span>
+        ${f.user_id === me && !f.pending ? `<button class="del" type="button" data-find="${f.id}">Supprimer</button>` : ''}</div>
       <div class="small muted">par ${esc(f.user_id === me ? 'moi' : f.author?.display_name ?? '?')}${f.species?.length ? ' · ' + esc(f.species.map(speciesLabel).join(', ')) : ''}</div>
       ${findDetails(f)}
       ${f.note ? `<div class="note">${esc(f.note)}</div>` : ''}
@@ -807,8 +842,19 @@ $('#find-form').addEventListener('submit', async (e) => {
     condition: $('#find-condition').value || null,
     weather: $('#find-weather').value.trim() || null,
   };
+  row.id = crypto.randomUUID();
   const btn = e.submitter; busy(btn, true);
-  const { data, error } = await sb.from('champi_finds').insert(row).select('id').single();
+  const spotPending = state.spots.find((s) => s.id === row.spot_id)?.pending;
+  const { data, error } = spotPending ? { error: { message: 'Failed to fetch (coin pas encore envoyé)' } }
+    : await sb.from('champi_finds').insert(row).select('id').single();
+  if (error && isNetworkError(error)) {
+    await queue.add({ kind: 'find', row, files: [...findFiles] });
+    busy(btn, false);
+    toast('📴 Pas de réseau : trouvaille gardée sur le téléphone, envoi au retour du réseau.', 5000);
+    await applyPending(); render(); updateOfflineBar();
+    renderSpot(row.spot_id);
+    return;
+  }
   if (error) { busy(btn, false); showError('#find-error', `Ajout impossible : ${frError(error)}`); return; }
   const files = findFiles;
   if (files.length) await uploadAll(row.spot_id, data.id, files);
@@ -1235,13 +1281,152 @@ $('#add-form').addEventListener('submit', async (e) => {
   busy(btn, false);
 });
 
+// ---------------------------------------------------------------------------
+// Hors ligne : copie locale, envois en attente, cartes enregistrées
+
+const SNAP_KEY = 'champi-snapshot';
+function writeSnapshot() {
+  store.set(SNAP_KEY, JSON.stringify({ uid: state.user.id, at: new Date().toISOString(), profile: state.profile, isAdmin: state.isAdmin,
+    spots: state.spots.filter((s) => !s.pending), finds: state.finds.filter((f) => !f.pending), photos: state.photos }));
+}
+function readSnapshot() {
+  try { const s = JSON.parse(store.get(SNAP_KEY) || 'null'); return s && s.uid === state.user?.id ? s : null; } catch { return null; }
+}
+function openFromSnapshot(snap) {
+  state.profile = snap.profile; state.isAdmin = false;
+  $('#me-name').textContent = snap.profile?.display_name ?? '';
+  show('app');
+  loadData().catch(fatal);
+}
+let pendingCount = 0;
+async function applyPending() {
+  let items = [];
+  try { items = await queue.all(); } catch { /* IndexedDB indisponible */ }
+  pendingCount = items.length;
+  if (!items.length) return;
+  const me = { owner: state.user.id, user_id: state.user.id, author: { display_name: state.profile?.display_name } };
+  const mine = items.map((it) => ({ ...it, row: { ...me, created_at: new Date(it.at).toISOString(), ...it.row } }));
+  const m = mergePending({ spots: state.spots.filter((s) => !s.pending), finds: state.finds.filter((f) => !f.pending) }, mine);
+  state.spots = m.spots; state.finds = m.finds;
+}
+function updateOfflineBar() {
+  const bar = $('#offline-bar');
+  const off = !navigator.onLine || state.offlineSince;
+  const parts = [];
+  if (off) parts.push(`📴 Hors ligne${state.offlineSince ? ` · données du ${formatDate(state.offlineSince)} ${state.offlineSince.slice(11, 16)}` : ''}`);
+  if (pendingCount) parts.push(`⏳ ${pendingCount} envoi${pendingCount > 1 ? 's' : ''} en attente`);
+  bar.textContent = parts.join(' · ');
+  bar.hidden = !parts.length;
+}
+let flushing = false;
+async function flushQueue() {
+  if (flushing || !navigator.onLine) return;
+  flushing = true;
+  let sent = 0;
+  try {
+    for (const it of sendOrder(await queue.all())) {
+      let error;
+      if (it.kind === 'spot') {
+        ({ error } = await sb.from('champi_spots').insert(it.row));
+        if (!error && it.photo) { try { await photos.upload({ spotId: it.row.id, file: it.photo }); } catch { /* photo : réessai impossible, coin envoyé */ } }
+      } else {
+        ({ error } = await sb.from('champi_finds').insert(it.row));
+        if (!error) for (const f of it.files ?? []) { try { await photos.upload({ spotId: it.row.spot_id, findId: it.row.id, file: f }); } catch { /* idem */ } }
+      }
+      if (error && isNetworkError(error)) break;                           // toujours pas de réseau : on réessaiera
+      if (error && error.code !== '23505') { toast(`Envoi refusé : ${frError(error)}`, 6000); }   // 23505 : déjà envoyé
+      await queue.remove(it.qid);
+      if (!error) sent++;
+    }
+  } finally { flushing = false; }
+  if (sent) { toast(`✔ ${sent} envoi${sent > 1 ? 's' : ''} en attente transmis.`); await loadData().catch(() => {}); }
+  else { await applyPending(); updateOfflineBar(); }
+}
+window.addEventListener('online', () => { updateOfflineBar(); flushQueue(); loadData().catch(() => {}); });
+window.addEventListener('offline', updateOfflineBar);
+setInterval(() => { if (pendingCount) flushQueue(); }, 60000);
+
+// Cartes hors ligne (Plan IGN d'une zone)
+const ZONES_KEY = 'champi-zones';
+const zones = () => { try { return JSON.parse(store.get(ZONES_KEY) || '[]'); } catch { return []; } };
+const zoneUrls = (z) => tilesFor(z.bounds, z.zMin, z.zMax).map((t) => PLAN_IGN(t.z, t.x, t.y));
+let dlAbort = null;
+async function renderZones() {
+  const list = zones();
+  $('#zone-list').innerHTML = list.length ? list.map((z) => `<li><div class="head"><span>🗺️ ${esc(z.name)}</span>
+      <button class="del" type="button" data-zone="${z.id}">Supprimer</button></div>
+      <div class="small muted">${z.count} tuiles · ${(z.bytes / 1e6).toFixed(1).replace('.', ',')} Mo · zooms ${z.zMin}–${z.zMax} · ${formatDate(z.date)}</div></li>`).join('')
+    : '<li class="muted small">Aucune zone enregistrée.</li>';
+  try {
+    const est = await navigator.storage?.estimate?.();
+    if (est) $('#offline-storage').textContent = `Espace utilisé par l'appli : ${(est.usage / 1e6).toFixed(0)} Mo.`;
+  } catch { /* non disponible */ }
+}
+$('#offline-btn').addEventListener('click', () => { $('#menu').hidden = true; $('#offline-msg').textContent = ''; renderZones(); $('#dlg-offline').showModal(); });
+$('#dlg-offline .js-close').addEventListener('click', () => $('#dlg-offline').close());
+$('#offline-dl').addEventListener('click', async () => {
+  if (dlAbort) { dlAbort.abort = true; return; }
+  if (map.getZoom() < 11) { $('#offline-msg').textContent = 'Zoome d\'abord sur le massif (la zone affichée est trop grande).'; return; }
+  const b = map.getBounds();
+  const bounds = { west: b.getWest(), east: b.getEast(), south: b.getSouth(), north: b.getNorth() };
+  const zMin = Math.max(10, Math.min(map.getZoom(), 13));
+  const zMax = bestMaxZoom(bounds, zMin, 16, TILE_LIMIT);
+  const urls = tilesFor(bounds, zMin, zMax).map((t) => PLAN_IGN(t.z, t.x, t.y));
+  if (urls.length > TILE_LIMIT) { $('#offline-msg').textContent = 'Zone trop grande : zoome un peu plus.'; return; }
+  try { await navigator.storage?.persist?.(); } catch { /* facultatif */ }
+  const cache = await caches.open(TILE_CACHE);
+  dlAbort = { abort: false };
+  $('#offline-dl').textContent = 'Arrêter';
+  $('#offline-progress').hidden = false;
+  let done = 0, bytes = 0, failed = 0;
+  const bar = $('#offline-progress span');
+  const worker = async () => {
+    while (urls.length && !dlAbort.abort) {
+      const u = urls.shift();
+      try {
+        let res = await cache.match(u);
+        if (!res) { res = await fetch(u, { mode: 'cors' }); if (!res.ok) throw new Error(res.status); await cache.put(u, res.clone()); }
+        bytes += Number(res.headers.get('content-length')) || (await res.clone().blob()).size;
+      } catch { failed++; }
+      done++;
+      bar.style.width = `${Math.round((done / (done + urls.length)) * 100)}%`;
+      $('#offline-msg').textContent = `${done} tuiles…`;
+    }
+  };
+  const total = urls.length;
+  await Promise.all([worker(), worker(), worker(), worker()]);   // 4 téléchargements à la fois, pas plus
+  const aborted = dlAbort.abort;
+  dlAbort = null;
+  $('#offline-dl').textContent = 'Enregistrer la zone affichée';
+  $('#offline-progress').hidden = true;
+  if (aborted) { $('#offline-msg').textContent = `Arrêté après ${done} tuiles.`; return; }
+  const c = map.getCenter();
+  const massif = massifAt(c.lat, c.lng, (await loadMassifs()) ?? {});
+  const list = zones();
+  list.push({ id: crypto.randomUUID(), name: massif ? `Massif ${massif.name}` : `Près de ${nearestTown(c.lat, c.lng)}`, bounds, zMin, zMax, count: total, bytes, date: todayIso() });
+  store.set(ZONES_KEY, JSON.stringify(list));
+  $('#offline-msg').textContent = failed ? `Enregistré, mais ${failed === 1 ? '1 tuile a échoué' : `${failed} tuiles ont échoué`} : touche à nouveau le bouton pour compléter.` : `✔ Zone enregistrée : ${total} tuiles, ${(bytes / 1e6).toFixed(1).replace('.', ',')} Mo.`;
+  renderZones();
+});
+$('#zone-list').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-zone]'); if (!b) return;
+  const list = zones(); const z = list.find((x) => x.id === b.dataset.zone); if (!z) return;
+  const rest = list.filter((x) => x.id !== z.id);
+  const keep = new Set(rest.flatMap(zoneUrls));                 // tuiles partagées avec une autre zone : on les garde
+  const cache = await caches.open(TILE_CACHE);
+  await Promise.all(zoneUrls(z).filter((u) => !keep.has(u)).map((u) => cache.delete(u)));
+  store.set(ZONES_KEY, JSON.stringify(rest));
+  renderZones();
+});
+
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && !$('#screen-app').hidden) {
+    flushQueue();
     loadData().catch(fatal);
     if (state.isAdmin) refreshAdminBadge().catch(() => {});
   }
 });
 
-if ('serviceWorker' in navigator && location.protocol === 'https:') {
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }

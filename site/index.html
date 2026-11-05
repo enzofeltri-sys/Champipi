@@ -123,6 +123,7 @@
           <button id="export-gpx" class="btn small-btn" type="button">⬇️ Coins (GPX)</button>
           <button id="export-csv" class="btn small-btn" type="button">⬇️ Journal (CSV)</button>
         </div>
+        <button id="offline-btn" class="btn" type="button">📥 Cartes hors ligne</button>
         <button id="help-btn" class="btn small-btn" type="button">❓ Aide</button>
         <div class="field">
           <span class="small">Thème</span>
@@ -134,6 +135,8 @@
         </div>
         <button class="btn js-logout" type="button">Se déconnecter</button>
       </div>
+
+      <div id="offline-bar" class="offline-bar" role="status" hidden></div>
 
       <div id="adjust-bar" class="adjust-bar card" hidden>
         <span class="small">Fais glisser l'épingle (ou touche la carte) pour l'ajuster</span>
@@ -317,6 +320,24 @@
         <button id="tuto-skip" class="btn" type="button">Passer</button>
         <button id="tuto-next" class="btn primary" type="button">Suivant</button>
       </div>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-offline" class="sheet">
+    <div class="stack">
+      <div class="sheet-head">
+        <h2>📥 Cartes hors ligne</h2>
+        <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
+      </div>
+      <p class="small">Avant de partir, enregistre la carte (Plan IGN) du massif où tu vas : cadre la zone sur la carte, puis touche le bouton.
+        En forêt, sans réseau, la carte, tes coins, la boussole et le journal fonctionnent ; les trouvailles et photos notées partent au retour du réseau.</p>
+      <button id="offline-dl" class="btn primary" type="button">Enregistrer la zone affichée</button>
+      <div id="offline-progress" class="progress" hidden><span></span></div>
+      <p id="offline-msg" class="small muted"></p>
+      <h3>Zones enregistrées</h3>
+      <ul id="zone-list" class="find-list"></ul>
+      <p id="offline-storage" class="small muted"></p>
+      <p class="small muted">Plan IGN © IGN – Géoplateforme (Licence Ouverte Etalab). Une zone = ~1 500 tuiles au plus.</p>
     </div>
   </dialog>
 

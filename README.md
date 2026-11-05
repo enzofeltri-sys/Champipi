@@ -58,6 +58,15 @@ Les migrations sont dans `supabase/migrations/`. Règles (RLS) :
 - **📖 Guide des espèces** : saison, milieux, sol, altitude et sosies dangereux (connaissances générales, à confirmer
   auprès d'une association mycologique).
 
+## Hors ligne
+
+- Menu ☰ → « 📥 Cartes hors ligne » : enregistre le Plan IGN de la zone affichée (≤ 1 500 tuiles, zooms jusqu'à 16),
+  dans le cache `champi-tuiles-v1` du service worker (`site/sw.js`). Les zones se suppriment depuis le même écran.
+- Sans réseau : l'appli s'ouvre sur la dernière copie des données (bandeau « 📴 Hors ligne »), la boussole et le journal
+  marchent ; les nouveaux coins et trouvailles (avec photos) attendent dans IndexedDB et partent au retour du réseau
+  (`site/js/offline.js`). La modification/suppression d'un coin existant demande le réseau.
+- Plan IGN sous Licence Ouverte Etalab ; OpenTopoMap n'est pas enregistré (sa politique l'interdit).
+
 ## Accès aux massifs (risque incendie)
 
 - Fiche d'un coin : massif officiel et accès du jour (🟢 autorisé, 🟠 déconseillé, ⛔ interdit), d'après les cartes publiées
@@ -83,6 +92,9 @@ node tools/ui-mock.cjs http://localhost:5173/ shots   # parcours Chromium avec u
 node tools/ui-photos.cjs http://localhost:5173/ shots <photo.jpg avec GPS>   # parcours photos et détails
 node tools/ui-admin.cjs http://localhost:5173/ shots      # demande d'accès + admin
 node tools/ui-advisor.cjs http://localhost:5173/ shots    # conseiller (vraies API Open-Meteo et IGN)
+node tools/ui-field.cjs http://localhost:5173/ shots tests/date.jpg   # tutoriel, boussole, recherche, exports
+node tools/ui-access.cjs http://localhost:5173/ shots     # accès aux massifs (hors saison et été simulé)
+node tools/ui-offline.cjs http://localhost:5173/ shots tests/gps.jpg  # hors ligne (vraies tuiles IGN)
 ```
 
 ## Sécurité
