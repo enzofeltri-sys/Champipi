@@ -64,6 +64,8 @@ Les migrations sont dans `supabase/migrations/`. Règles (RLS) :
   - API Package Observations : cumul du jour en cours, chaque heure (action hourly, ~160 stations) ;
   - prévisions et zones sans station : modèles Météo-France via Open-Meteo (models=meteofrance_seamless, repli sur le modèle par défaut) ;
   - fusion dans site/js/rain.js (stations à moins de 25 km, températures corrigées de l'altitude) ; chaque source sert de secours à l'autre.
+- Sol, exposition, choc thermique (site/js/advisor.js, terrain.js) : température et humidité du sol 0–7 cm (modèle Open-Meteo ; seules 5 stations Météo-France PACA ont une sonde de sol), plage idéale par espèce (SOIL_T), pente et exposition calculées avec 5 altitudes IGN, chute des nuits ≥ 4 °C.
+- Grille météo serveur (table champi_meteo_grid, action grid de champi-meteo, 448 cases de 0,1°, toutes les 6 h en 3 passages) : les téléphones lisent la base au lieu d'appeler Open-Meteo (limites gratuites : 600/min, 5 000/h, 10 000/jour).
 - L'interface ne zoome pas (pincement, double-tap, champs de saisie) ; seule la carte se zoome.
 
 ## Conseiller, météo et forêts

@@ -112,3 +112,39 @@ test('fin de saison : cèpe en décembre seulement s\'il fait doux, sans gel, à
   // en saison normale, pas de malus
   assert.ok(!assess(doux, { month: 11, species: ['cepe'] }).perSpecies[0].reasons.some((r) => r.startsWith('fin de saison')));
 });
+
+import { SOIL_T } from '../site/js/advisor.js';
+function wx(days, f) {   // jours relatifs à aujourd'hui (2026-11-05) → daily Open-Meteo
+  const time = [], rr = [], tx = [], tn = [], st = [], sm = [];
+  for (let i = -14; i <= 2; i++) { const d = new Date(Date.UTC(2026, 10, 5 + i)).toISOString().slice(0, 10); const v = f(i); time.push(d); rr.push(v.rr ?? 0); tx.push(v.tx ?? 16); tn.push(v.tn ?? 7); st.push(v.st ?? null); sm.push(v.sm ?? null); }
+  return summarizeWeather({ time, precipitation_sum: rr, temperature_2m_max: tx, temperature_2m_min: tn, soil_temperature_0_to_7cm_mean: st, soil_moisture_0_to_7cm_mean: sm }, '2026-11-05');
+}
+test('sol : température idéale par espèce, humidité, choc thermique', () => {
+  assert.deepEqual(SOIL_T.cepe, [12, 18]);
+  const w = wx(0, (i) => ({ rr: i === -8 ? 30 : 0, st: 14, sm: 0.36, tn: i < -10 ? 13 : 7 }));
+  assert.equal(w.soilT3, 14); assert.equal(w.soilM3, 0.36);
+  assert.ok(w.shockAgo >= 3 && w.shockAgo <= 14, String(w.shockAgo));
+  const a = assess(w, { month: 10, species: ['cepe', 'chanterelle-grise'] });
+  assert.ok(a.reasons.some((r) => r.startsWith('Sol bien humide')));
+  assert.ok(a.reasons.some((r) => r.startsWith('Choc thermique')));
+  const cepe = a.perSpecies.find((x) => x.id === 'cepe'), grise = a.perSpecies.find((x) => x.id === 'chanterelle-grise');
+  assert.ok(cepe.reasons.some((r) => r.includes('idéal')));          // 14 °C dans 12–18
+  assert.ok(grise.reasons.some((r) => r.includes('un peu chaud')));  // 14 °C au-dessus de 4–12
+  assert.ok(cepe.score > grise.score);
+  // sol froid : le cèpe chute, la chanterelle grise est dans sa plage
+  const froid = assess(wx(0, (i) => ({ rr: i === -8 ? 30 : 0, st: 6, sm: 0.36 })), { month: 11, species: ['cepe', 'chanterelle-grise'] });
+  assert.ok(froid.perSpecies.find((x) => x.id === 'cepe').reasons.includes('sol trop froid (6 °C)'));
+  assert.equal(froid.perSpecies[0].id, 'chanterelle-grise');
+  // sol sec selon le modèle, sans grosse pluie : rouge
+  assert.equal(assess(wx(0, () => ({ rr: 1, st: 15, sm: 0.1 })), { month: 10, species: ['cepe'] }).level, 'faible');
+});
+test('exposition : nord par temps sec, sud quand il fait frais', () => {
+  const sec = wx(0, (i) => ({ rr: i === -8 ? 16 : 0, st: 15, sm: 0.18 }));
+  const n = assess(sec, { month: 10, species: ['cepe'], exposure: 'N' }).perSpecies[0];
+  const s = assess(sec, { month: 10, species: ['cepe'], exposure: 'S' }).perSpecies[0];
+  assert.ok(n.reasons.includes('versant nord : garde l\'humidité') && n.score === s.score + 2);
+  const frais = wx(0, (i) => ({ rr: i === -8 ? 30 : 0, st: 10, sm: 0.36 }));
+  const sud = assess(frais, { month: 11, species: ['cepe'], exposure: 'SO' }).perSpecies[0];
+  assert.ok(sud.reasons.includes('versant sud : plus chaud'));
+  assert.equal(assess(frais, { month: 11, species: ['cepe'], exposure: 'plat' }).perSpecies[0].reasons.some((r) => r.startsWith('versant')), false);
+});

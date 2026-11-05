@@ -106,6 +106,22 @@ export async function soilAt(lat, lon) {
   return p;
 }
 
+// Altitude, pente et exposition d'un point (IGN RGE ALTI : le point et 4 voisins à 40 m, en une requête).
+import { slopeAspect, offsets } from './terrain.js';
+const terrainCache = new Map();
+export async function terrainAt(lat, lon) {
+  const k = lat.toFixed(4) + ',' + lon.toFixed(4);
+  if (terrainCache.has(k)) return terrainCache.get(k);
+  const { dlat, dlon } = offsets(lat);
+  const pts = [[lat, lon], [lat + dlat, lon], [lat - dlat, lon], [lat, lon + dlon], [lat, lon - dlon]];
+  const j = await fetchJson(`https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?lon=${pts.map((p) => p[1].toFixed(6)).join('%7C')}&lat=${pts.map((p) => p[0].toFixed(6)).join('%7C')}&resource=ign_rge_alti_wld&zonly=true`, 1);
+  const [c, n, s, e, o] = j.elevations ?? [];
+  if (![c, n, s, e, o].every((z) => typeof z === 'number' && z > -100)) throw new Error('altitude indisponible');
+  const v = { alt: Math.round(c), ...slopeAspect({ n, s, e, o }) };
+  terrainCache.set(k, v);
+  return v;
+}
+
 // ---------------------------------------------------------------------------
 // Historique (archive Open-Meteo) pour un coin : météo réelle avant chaque trouvaille.
 // Le passé ne change plus : mémorisé sans limite (sauf les 7 derniers jours, mémorisés 1 h).

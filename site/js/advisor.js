@@ -4,6 +4,12 @@ import { SPECIES, MONTHS, LATE_MAX_ALT } from './logic.js';
 
 // Fiches des espèces : milieux, sol, altitude indicative, sosies dangereux.
 // Source : connaissances mycologiques générales (à confirmer auprès d'une société mycologique).
+export const SOIL_WET = 0.33, SOIL_DRY = 0.26;   // humidité du sol (m³/m³), à affiner avec vos trouvailles
+export const SOIL_T = {
+  'lactaire-sanguin': [8, 16], 'petit-gris': [5, 12], cepe: [12, 18], girolle: [12, 18], 'pied-de-mouton': [6, 14],
+  trompette: [8, 15], oronge: [16, 24], coulemelle: [12, 20], berigoule: [10, 18], morille: [8, 14],
+  'saint-georges': [8, 14], 'chanterelle-grise': [4, 12],
+};
 export const GUIDE = {
   'lactaire-sanguin': { latin: 'Lactarius sanguifluus', trees: ['pin-alep', 'pin-sylvestre', 'pin-maritime'], soil: 'calcaire', alt: [0, 1200],
     habitat: 'Sous les pins (surtout pin d\'Alep), sols calcaires, pinèdes claires.',
@@ -58,6 +64,8 @@ export function summarizeWeather(daily, today) {
     rain: daily.precipitation_sum?.[i] ?? 0,
     tmax: daily.temperature_2m_max?.[i] ?? null,
     tmin: daily.temperature_2m_min?.[i] ?? null,
+    soilT: daily.soil_temperature_0_to_7cm_mean?.[i] ?? null,
+    soilM: daily.soil_moisture_0_to_7cm_mean?.[i] ?? null,
   }));
   const past = rows.filter((r) => r.date < today);
   const last10 = past.slice(-10);
@@ -65,6 +73,7 @@ export function summarizeWeather(daily, today) {
   const future = rows.filter((r) => r.date > today);
   const sum = (a) => Math.round(a.reduce((s, r) => s + (r.rain || 0), 0) * 10) / 10;
   const avg = (a, k) => { const v = a.map((r) => r[k]).filter((x) => x != null); return v.length ? Math.round((v.reduce((s, x) => s + x, 0) / v.length) * 10) / 10 : null; };
+  const avg2 = (a, k) => { const v = a.map((r) => r[k]).filter((x) => x != null); return v.length ? Math.round((v.reduce((s, x) => s + x, 0) / v.length) * 100) / 100 : null; };
 
   // Dernière « grosse pluie » : un jour ≥ 15 mm, ou deux jours consécutifs ≥ 20 mm (sur les 14 derniers jours).
   let bigRainAgo = null, bigRainMm = 0;
@@ -75,6 +84,17 @@ export function summarizeWeather(daily, today) {
   }
   let lastRainAgo = null;
   for (let i = past.length - 1; i >= 0; i--) if (past[i].rain >= 2) { lastRainAgo = dayDiff(past[i].date, today); break; }
+
+  // Sol (modèle) : moyenne des 3 derniers jours, aujourd'hui compris.
+  const recent = [...past.slice(-2), ...rows.filter((r) => r.date === today)];
+  const soilT3 = avg(recent, 'soilT'), soilM3 = avg2(recent, 'soilM');
+  // Choc thermique : les nuits (moyenne sur 3 jours) chutent d'au moins 4 °C par rapport aux 3 jours d'avant.
+  let shockAgo = null, shockDrop = 0;
+  const p = past.slice(-17);
+  for (let i = p.length - 3; i >= 3; i--) {
+    const after = avg(p.slice(i, i + 3), 'tmin'), before = avg(p.slice(i - 3, i), 'tmin');
+    if (after != null && before != null && before - after >= 4) { shockAgo = dayDiff(p[i].date, today); shockDrop = Math.round(before - after); break; }
+  }
 
   return {
     days: last10,
@@ -88,6 +108,7 @@ export function summarizeWeather(daily, today) {
     tmin7: avg(last7, 'tmin'),
     tmax7: avg(last7, 'tmax'),
     frost7: last7.filter((r) => r.tmin != null && r.tmin < 0).length,
+    soilT3, soilM3, shockAgo, shockDrop,
   };
 }
 
@@ -112,7 +133,7 @@ export function nextSeason(id, month) {
  * @param w résumé météo (summarizeWeather) ou null
  * @param ctx { month, species: ids, trees: ids, history: [{ found_on, species[] }] }
  */
-export function assess(w, { month, species = [], trees = [], history = [], personal = null, alt = null }) {
+export function assess(w, { month, species = [], trees = [], history = [], personal = null, alt = null, exposure = null }) {
   const known = species.filter((id) => SPECIES.some((s) => s.id === id && s.months.length));
   // Fin de saison (ex. cèpe en décembre en Provence) : seulement par temps doux, sans gel, à basse altitude.
   const mild = !!w && w.frost7 === 0 && w.tmin7 != null && w.tmin7 >= 4 && (alt == null || alt < LATE_MAX_ALT);
@@ -137,8 +158,18 @@ export function assess(w, { month, species = [], trees = [], history = [], perso
     else if (w.bigRainAgo != null && w.bigRainAgo < 5) common.push(`Grosse pluie (${w.bigRainMm} mm) il y a ${w.bigRainAgo} j : les pousses arrivent en général 5 à 10 jours après`);
 
     if (w.frost7 >= 3 || (w.tmin7 != null && w.tmin7 < 1)) { base -= 2; common.push(`Froid : ${w.frost7} nuit(s) de gel cette semaine`); }
-    else if (w.tmax7 != null && w.tmax7 > 26) { base -= 1; common.push(`Chaud : ${w.tmax7} °C de max en moyenne`); }
-    else if (w.tmin7 != null) { base += 1; common.push(`Températures douces (${w.tmin7}–${w.tmax7} °C)`); }
+    else if (w.soilT3 == null) {   // sans température du sol : on juge sur l'air
+      if (w.tmax7 != null && w.tmax7 > 26) { base -= 1; common.push(`Chaud : ${w.tmax7} °C de max en moyenne`); }
+      else if (w.tmin7 != null) { base += 1; common.push(`Températures douces (${w.tmin7}–${w.tmax7} °C)`); }
+    }
+    // Humidité du sol (modèle, couche 0–7 cm, m³/m³) : la pluie compte, mais surtout ce que le sol a gardé.
+    // Seuils réglés sur la Provence (près d'Aix : ~0,27 après deux semaines sèches, ~0,40 après une bonne pluie).
+    if (w.soilM3 != null) {
+      if (w.soilM3 >= SOIL_WET) { base += 1; common.push(`Sol bien humide (${Math.round(w.soilM3 * 100)} %)`); }
+      else if (w.soilM3 < SOIL_DRY) { base -= 1; common.push(`Sol sec (${Math.round(w.soilM3 * 100)} %)`); }
+      else common.push(`Sol moyennement humide (${Math.round(w.soilM3 * 100)} %)`);
+    }
+    if (w.shockAgo != null && w.shockAgo >= 3 && w.shockAgo <= 14) { base += 1; common.push(`Choc thermique il y a ${w.shockAgo} j (nuits plus fraîches de ${w.shockDrop} °C) : souvent un déclencheur`); }
   }
 
   const perSpecies = inSeason.map((id) => {
@@ -146,6 +177,21 @@ export function assess(w, { month, species = [], trees = [], history = [], perso
     const g = GUIDE[id];
     let score = base; const reasons = [];
     if ((sp.peak ?? []).includes(month)) { score += 1; reasons.push('mois de pic'); }
+    const st = SOIL_T[id];
+    if (w?.soilT3 != null && st && !(w.frost7 >= 3)) {
+      if (w.soilT3 >= st[0] && w.soilT3 <= st[1]) { score += 1; reasons.push(`sol à ${w.soilT3} °C : idéal (${st[0]}–${st[1]} °C)`); }
+      else if (w.soilT3 < st[0] - 3) { score -= 2; reasons.push(`sol trop froid (${w.soilT3} °C)`); }
+      else if (w.soilT3 > st[1] + 3) { score -= 2; reasons.push(`sol trop chaud (${w.soilT3} °C)`); }
+      else reasons.push(`sol à ${w.soilT3} °C : un peu ${w.soilT3 < st[0] ? 'frais' : 'chaud'}`);
+    }
+    // Exposition : par temps sec, un versant nord garde l'humidité ; quand il fait frais, un versant sud se réchauffe.
+    const face = exposure && exposure !== 'plat' ? (/^N/.test(exposure) ? 'nord' : /^S/.test(exposure) ? 'sud' : null) : null;
+    if (w && face) {
+      const dryish = (w.soilM3 != null ? w.soilM3 < SOIL_WET - 0.04 : w.rain10 < 20);
+      const cool = w.soilT3 != null && st ? w.soilT3 < st[0] : (w.tmin7 != null && w.tmin7 < 5);
+      if (dryish && !cool) { score += face === 'nord' ? 1 : -1; reasons.push(face === 'nord' ? 'versant nord : garde l\'humidité' : 'versant sud : sèche vite'); }
+      else if (cool && !dryish) { score += face === 'sud' ? 1 : -1; reasons.push(face === 'sud' ? 'versant sud : plus chaud' : 'versant nord : plus froid'); }
+    }
     if (!sp.months.includes(month)) { score -= 1; reasons.push('fin de saison : possible car doux et sans gel'); }
     if (g?.trees.length && trees.length) {
       if (trees.some((t) => g.trees.includes(t))) { score += 1; reasons.push('milieu typique'); }
@@ -163,7 +209,7 @@ export function assess(w, { month, species = [], trees = [], history = [], perso
   }
   const best = perSpecies[0].score;
   // Sans pluie notable (< 10 mm et aucune grosse pluie sur 14 jours), rien ne pousse : avis plafonné.
-  const dry = w && w.rain10 < 10 && w.bigRainAgo == null;
+  const dry = w && w.bigRainAgo == null && (w.soilM3 != null ? w.soilM3 < SOIL_DRY - 0.02 && w.rain10 < 20 : w.rain10 < 10);
   // Pluie toute récente sur un sol sec avant : trop tôt, les pousses ne sont pas encore sorties.
   const early = w && w.bigRainAgo != null && w.bigRainAgo < 5 && (w.rain10 - w.bigRainMm) < 10;
   let level = !w ? 'moyen' : dry ? 'faible' : best >= 6 ? 'bon' : best >= 3 ? 'moyen' : 'faible';

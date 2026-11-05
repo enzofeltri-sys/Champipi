@@ -68,7 +68,7 @@ async function weatherFor(points: [number, number][]) {
 async function morningRun(cfg: any) {
   const [subs, spots, finds, shares, allowed, profiles, log] = await Promise.all([
     admin.from('champi_push_subscriptions').select('*'),
-    admin.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, trees, altitude'),
+    admin.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, trees, altitude, exposure'),
     admin.from('champi_finds').select('spot_id, found_on, species'),
     admin.from('champi_spot_shares').select('spot_id, user_id'),
     admin.from('champi_allowed_emails').select('email'),
@@ -94,7 +94,13 @@ async function morningRun(cfg: any) {
   const month = Number(day.slice(5, 7));
   const list = spots.data!;
   // Météo « doublée » : pluie mesurée Météo-France (relevée cette nuit) + Open-Meteo ; chacune secourt l'autre.
-  const om = await weatherFor(list.map((s: any) => [s.lat, s.lon])).catch(() => null);
+  // Grille du serveur (modèles Météo-France + sol), puis Open-Meteo directement pour les coins hors grille.
+  const { data: gridRows } = await admin.from('champi_meteo_grid').select('key, elevation, daily, updated_at');
+  const grid = new Map((gridRows ?? []).filter((r: any) => Date.now() - Date.parse(r.updated_at) < 13 * 3600 * 1000).map((r: any) => [r.key, { ...r.daily, elevation: r.elevation }]));
+  const fromGrid = list.map((s: any) => grid.get(`${Math.floor(s.lat * 10)}:${Math.floor(s.lon * 10)}`) ?? null);
+  const missing = list.filter((_: any, i: number) => !fromGrid[i]);
+  const direct = missing.length ? await weatherFor(missing.map((s: any) => [s.lat, s.lon])).catch(() => null) : [];
+  const om = fromGrid.map((d: any, i: number) => d ?? (direct ? direct[missing.indexOf(list[i])] : null));
   const since = new Date(Date.now() - 16 * 86400000).toISOString().slice(0, 10);
   const st = await admin.from('champi_rain_stations').select('id, name, lat, lon, alt');
   const rows: any[] = []; let rainOk = !st.error;
@@ -108,7 +114,7 @@ async function morningRun(cfg: any) {
   const verdict = new Map(list.filter((_: any, i: number) => daily[i]).map((s: any) => {
     const i = list.indexOf(s);
     const w = summarizeWeather(daily[i], day);
-    const a = assess(w, { month, species: spotSpecies(s, finds.data!), trees: s.trees ?? [], history: finds.data!.filter((f: any) => f.spot_id === s.id), alt: s.altitude ?? null });
+    const a = assess(w, { month, species: spotSpecies(s, finds.data!), trees: s.trees ?? [], history: finds.data!.filter((f: any) => f.spot_id === s.id), alt: s.altitude ?? null, exposure: s.exposure ?? null });
     return [s.id, { s, a }];
   }));
 
@@ -129,7 +135,7 @@ async function morningRun(cfg: any) {
     if (res.includes('ok')) await admin.from('champi_alert_log').insert(good.map((g: any) => ({ spot_id: g.s.id, user_id: uid, sent_on: day })));
     report.push({ uid, coins: good.length, envois: res });
   }
-  return { jour: day, abonnés: subs.data!.length, pluie_mesuree: idx ? idx.stations.length : 0, report };
+  return { jour: day, abonnés: subs.data!.length, pluie_mesuree: idx ? idx.stations.length : 0, grille: grid.size, report };
 }
 
 async function familyEmails() {

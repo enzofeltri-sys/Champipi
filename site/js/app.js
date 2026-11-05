@@ -7,7 +7,8 @@ import {
 } from './logic.js';
 import { createPhotoStore, thumbPath } from './photos.js';
 import { GUIDE, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown } from './advisor.js';
-import { dailyFor as openMeteoFor, forestAt, soilAt, historyFor } from './weather.js';
+import { dailyFor as openMeteoFor, forestAt, soilAt, historyFor, terrainAt } from './weather.js';
+import { ASPECT_TEXT } from './terrain.js';
 import { rainIndex, mergeRain, rainSource } from './rain.js';
 import { treesAt, soilKind, whatGrows, fix as cleanText } from './here.js';
 import { historyRange, findConditions, spotProfile, personalAdvice, profileSummary } from './learn.js';
@@ -413,9 +414,34 @@ async function loadRainIndex() {
   })().catch(() => rainIdx).finally(() => { rainIdxLoading = null; });
   return rainIdxLoading;
 }
+// Grille météo de la région, calculée sur le serveur toutes les 6 h (modèles Météo-France + sol) :
+// les téléphones n'interrogent plus Open-Meteo eux-mêmes (limite gratuite par adresse), sauf hors de la région.
+let gridIdx = null, gridAt = 0, gridLoading = null;
+async function loadGrid() {
+  if (gridIdx && Date.now() - gridAt < 30 * 60 * 1000) return gridIdx;
+  if (gridLoading) return gridLoading;
+  gridLoading = (async () => {
+    const { data, error } = await sb.from('champi_meteo_grid').select('key, elevation, daily, updated_at').range(0, 999);
+    if (error) throw error;
+    const fresh = data.filter((r) => Date.now() - Date.parse(r.updated_at) < 13 * 3600 * 1000);   // trop vieille : on ne s'y fie pas
+    gridIdx = new Map(fresh.map((r) => [r.key, { ...r.daily, elevation: r.elevation }])); gridAt = Date.now();
+    return gridIdx;
+  })().catch(() => gridIdx ?? new Map()).finally(() => { gridLoading = null; });
+  return gridLoading;
+}
+const gridKey = (lat, lon) => `${Math.floor(lat * 10)}:${Math.floor(lon * 10)}`;
 const rainInfo = new WeakMap();   // daily → { measured, near, rainOnly } (pour afficher la source)
 async function dailyFor(points) {
-  const [om, idx] = await Promise.all([openMeteoFor(points).catch((e) => ({ error: e })), loadRainIndex().catch(() => null)]);
+  const [grid, idx] = await Promise.all([loadGrid(), loadRainIndex().catch(() => null)]);
+  const fromGrid = points.map(([lat, lon]) => grid.get(gridKey(lat, lon)) ?? null);
+  const missing = points.map((p, i) => (fromGrid[i] ? null : i)).filter((i) => i != null);
+  let om = fromGrid;
+  if (missing.length) {   // hors de la grille (ou grille indisponible) : Open-Meteo directement
+    const direct = await openMeteoFor(missing.map((i) => points[i])).catch((e) => ({ error: e }));
+    om = fromGrid.slice();
+    if (!direct.error) missing.forEach((i, n) => { om[i] = direct[n]; });
+    else if (missing.length === points.length) om = { error: direct.error };
+  }
   const today = todayIso();
   const out = points.map(([lat, lon], i) => {
     const r = mergeRain(om.error ? null : om[i], lat, lon, idx, today);
@@ -781,13 +807,14 @@ async function analyzeHere(lat, lon) {
   $('#here-body').innerHTML = '<p class="muted">Analyse en cours… (forêt, sol, altitude, météo)</p>';
   $('#dlg-here').showModal();
   const [forest, soil, alt, daily] = await Promise.allSettled([
-    forestAt(lat, lon), soilAt(lat, lon), fetchAltitude(lat, lon), dailyFor([[lat, lon]]).then((d) => d[0]),
+    forestAt(lat, lon), soilAt(lat, lon), terrainAt(lat, lon).catch(() => fetchAltitude(lat, lon).then((alt) => ({ alt }))), dailyFor([[lat, lon]]).then((d) => d[0]),
   ]);
   if (!$('#dlg-here').open || herePoint.lat !== round6(lat) || herePoint.lon !== round6(lon)) return;
   const m = month();
   const tfv = forest.status === 'fulfilled' ? (forest.value?.tfv ? cleanText(forest.value.tfv) : null) : undefined;
   const sk = soil.status === 'fulfilled' ? soilKind(soil.value) : undefined;
-  const z = alt.status === 'fulfilled' ? alt.value : null;
+  const ter = alt.status === 'fulfilled' ? alt.value : null;
+  const z = ter?.alt ?? null, expo = ter?.aspect ?? null;
   const trees = treesAt(tfv);
   const w = daily.status === 'fulfilled' && daily.value ? summarizeWeather(daily.value, todayIso()) : null;
   const list = whatGrows({ trees, soil: sk?.kind ?? null, alt: z, month: m });
@@ -800,12 +827,13 @@ async function analyzeHere(lat, lon) {
       : !sk.name && !sk.text ? '<span class="muted">pas de donnée de sol pour cet endroit</span>'
       : `${sk.kind ? `<b>${SOIL_TEXT[sk.kind]}</b>` : '<span class="muted">calcaire ou siliceux : non déterminé</span>'}${sk.name ? ` · <span class="small muted">${esc(sk.name.toLowerCase())}</span>` : ''}
         ${sk.text ? `<details class="small"><summary>Description du terrain</summary>${esc(sk.text)}</details>` : ''}`}</div>
-    <div>⛰️ ${z != null ? `<b>${z} m</b>` : '<span class="muted">altitude inconnue</span>'} · 📅 ${esc(MONTHS[m - 1])}</div>
+    <div>⛰️ ${z != null ? `<b>${z} m</b>` : '<span class="muted">altitude inconnue</span>'}${expo ? ` · 🧭 ${expo === 'plat' ? 'terrain plat' : `versant <b>${esc(ASPECT_TEXT[expo])}</b>, pente ${ter.slope}°`}` : ''} · 📅 ${esc(MONTHS[m - 1])}</div>
+    ${w?.soilT3 != null ? `<div>🌡️ Sol : <b>${w.soilT3} °C</b> · humidité <b>${Math.round(w.soilM3 * 100)} %</b> <span class="small muted">(modèle, 0–7 cm)</span></div>` : ''}
     <div>🌧️ ${w ? `<b>${w.rain10} mm</b> sur 10 jours${w.bigRainAgo != null ? ` · grosse pluie il y a ${w.bigRainAgo} j` : ''}<br><span class="small muted">${esc(sourceOf(daily.value))}</span>` : '<span class="muted">météo indisponible</span>'}</div>
   </div>`;
 
   const items = list.map((r) => {
-    const a = (r.inSeason || r.late) && w ? assess(w, { month: m, species: [r.id], trees: mainTrees.length ? mainTrees : [...trees.keys()], alt: z }) : null;
+    const a = (r.inSeason || r.late) && w ? assess(w, { month: m, species: [r.id], trees: mainTrees.length ? mainTrees : [...trees.keys()], alt: z, exposure: expo }) : null;
     const lv = a?.level ? LEVELS[a.level] : null;
     return `<div class="here-sp">
       <div class="head"><b>${esc(r.label)}</b>
@@ -936,6 +964,7 @@ function openEdit() {
   $('#edit-photo').hidden = !d.photo;
   if (d.photo) $('#edit-photo-img').src = URL.createObjectURL(d.photo);
   fillAltitude(d);
+  fillExposure(d);
   fillForest(d);
   showError('#edit-error');
   $('#dlg-edit').showModal();
@@ -949,6 +978,15 @@ async function fetchAltitude(lat, lon) {
     const z = (await r.json()).elevations?.[0];
     return typeof z === 'number' && z > -500 && z < 5000 ? Math.round(z) : null;
   } catch { return null; }
+}
+async function fillExposure(d) {
+  const sel = $('#edit-exposure');
+  if (sel.value || sel.dataset.for === `${d.lat},${d.lon}`) return;
+  sel.dataset.for = `${d.lat},${d.lon}`;
+  try {
+    const t = await terrainAt(d.lat, d.lon);
+    if (!sel.value && t.aspect !== 'plat') sel.value = t.aspect;   // calculée avec l'altitude IGN ; modifiable
+  } catch { /* hors ligne : on laisse vide */ }
 }
 async function fillAltitude(d) {
   const input = $('#edit-altitude');
@@ -1434,7 +1472,7 @@ const shortDay = (iso) => String(Number(iso.slice(8, 10)));
 
 function spotContext(s, w = null) {
   const prof = profiles.get(s.id)?.profile;
-  return { month: month(), species: spotSpecies(s, state.finds), trees: s.trees ?? [], history: state.finds.filter((f) => f.spot_id === s.id), alt: s.altitude ?? null,
+  return { month: month(), species: spotSpecies(s, state.finds), trees: s.trees ?? [], history: state.finds.filter((f) => f.spot_id === s.id), alt: s.altitude ?? null, exposure: s.exposure ?? null,
     personal: w && prof ? personalAdvice(w, prof) : null };
 }
 
@@ -1487,7 +1525,7 @@ function meteoHtml(w, a, src = '') {
     <div class="rainbars" aria-label="Pluie jour par jour">${rows.map((r) => `<div class="d${r.date === today ? ' today' : ''}${r.date > today ? ' future' : ''}" title="${formatDate(r.date)} : ${r.rain} mm">
       <span class="mm">${r.rain >= 1 ? Math.round(r.rain) : ''}</span><span class="b" style="height:${Math.round(((r.rain || 0) / max) * 64)}px"></span><span>${r.date === today ? 'auj.' : shortDay(r.date)}</span></div>`).join('')}</div>
     <div class="temps">${rows.map((r) => `<span>${r.tmax != null ? Math.round(r.tmax) + '°' : ''}</span>`).join('')}</div>
-    <p class="small muted">Pluie sur 10 jours : <b>${w.rain10} mm</b> · températures sur 7 jours : ${w.tmin7 ?? '?'}–${w.tmax7 ?? '?'} °C · hachuré = prévision.<br>${esc(src || 'Pluie : Open-Meteo (modèle)')} · prévisions et données manquantes : modèles Météo-France via Open-Meteo.</p>`;
+    <p class="small muted">Pluie sur 10 jours : <b>${w.rain10} mm</b> · températures sur 7 jours : ${w.tmin7 ?? '?'}–${w.tmax7 ?? '?'} °C${w.soilT3 != null ? ` · <b>sol ${w.soilT3} °C, humidité ${Math.round(w.soilM3 * 100)} %</b> (modèle)` : ''} · hachuré = prévision.<br>${esc(src || 'Pluie : Open-Meteo (modèle)')} · prévisions et données manquantes : modèles Météo-France via Open-Meteo.</p>`;
 }
 
 async function renderMeteo(s) {

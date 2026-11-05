@@ -4,6 +4,9 @@
 //                               ou rafraîchit la liste des stations PACA si elle a plus de 7 jours.
 //   POST { action: 'hourly' } → chaque heure, API « Package Observations » : cumul du jour en cours (pluie
 //                               des heures passées, mini, maxi) pour toutes les stations des 6 départements.
+//   POST { action: 'grid' }   → toutes les 6 h : météo de toute la région (grille de 0,1°) depuis Open-Meteo :
+//                               modèles Météo-France (pluie, mini, maxi, prévisions) + sol (température et
+//                               humidité, modèle par défaut). Les téléphones lisent la grille dans la base.
 //   POST { action: 'probe' }  → diagnostic de la clé (jamais renvoyée).
 // La clé (secret METEOFRANCE_API_KEY) ne quitte jamais le serveur.
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
@@ -143,6 +146,67 @@ async function hourly() {
   return { stations: seen.size, nouvelles: missing.length, lignes: rows.length, erreurs: errors };
 }
 
+// ---------------------------------------------------------------------------
+// Grille météo de la région (0,1°), lue par les téléphones : un seul relevé Open-Meteo pour toute la famille.
+const PACA = [
+  [44.17, 4.65], [44.33, 4.80], [44.45, 5.00], [44.40, 5.42], [44.50, 5.65], [44.80, 5.60], [44.90, 5.95],
+  [45.12, 6.25], [44.98, 6.75], [44.70, 7.05], [44.35, 6.95], [44.10, 7.70], [43.78, 7.53], [43.55, 7.05],
+  [43.40, 6.75], [43.10, 6.40], [43.05, 6.00], [43.15, 5.55], [43.22, 5.30], [43.38, 4.85], [43.40, 4.55],
+  [43.70, 4.62], [43.95, 4.70],
+];
+function inPolygon([lat, lon]: number[], poly: number[][]) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [yi, xi] = poly[i], [yj, xj] = poly[j];
+    if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+export function gridCells() {
+  const out: { key: string; lat: number; lon: number }[] = [];
+  for (let i = 430; i < 452; i++) for (let j = 45; j < 78; j++) {
+    const c = [(i + 0.5) / 10, (j + 0.5) / 10];
+    const corners = [[i, j], [i + 1, j], [i, j + 1], [i + 1, j + 1]].map(([a, b]) => [a / 10, b / 10]);
+    if (inPolygon(c, PACA) || corners.some((k) => inPolygon(k, PACA))) out.push({ key: `${i}:${j}`, lat: +c[0].toFixed(2), lon: +c[1].toFixed(2) });
+  }
+  return out;
+}
+async function om(points: { lat: number; lon: number }[], vars: string, model: string | null) {
+  const q = `https://api.open-meteo.com/v1/forecast?latitude=${points.map((p) => p.lat).join(',')}&longitude=${points.map((p) => p.lon).join(',')}&daily=${vars}&past_days=14&forecast_days=3&timezone=Europe%2FParis${model ? `&models=${model}` : ''}`;
+  const r = await fetch(q);
+  if (!r.ok) throw new Error(`Open-Meteo ${r.status} ${(await r.text()).slice(0, 120)}`);
+  const j = await r.json();
+  return Array.isArray(j) ? j : [j];
+}
+// Open-Meteo limite aussi le nombre d'appels par minute : chaque passage traite au plus 150 cases (les plus
+// anciennes), en lots de 75 ; le planificateur fait 3 passages espacés de 2 minutes.
+async function grid() {
+  const cells = gridCells();
+  const { data: have } = await admin.from('champi_meteo_grid').select('key, updated_at');
+  const age = new Map((have ?? []).map((r: any) => [r.key, Date.parse(r.updated_at)]));
+  const todo = cells.filter((c) => !age.has(c.key) || Date.now() - age.get(c.key)! > 3 * 3600 * 1000)
+    .sort((a, b) => (age.get(a.key) ?? 0) - (age.get(b.key) ?? 0)).slice(0, 150);
+  let rows = 0; const errors: string[] = [];
+  for (let k = 0; k < todo.length; k += 75) {
+    const part = todo.slice(k, k + 75);
+    try {
+      let main;
+      try { main = await om(part, 'precipitation_sum,temperature_2m_max,temperature_2m_min', 'meteofrance_seamless'); }
+      catch { main = await om(part, 'precipitation_sum,temperature_2m_max,temperature_2m_min', null); }
+      let soil: any[] = [];
+      try { soil = await om(part, 'soil_temperature_0_to_7cm_mean,soil_moisture_0_to_7cm_mean', null); } catch (e) { errors.push('sol ' + String(e).slice(0, 80)); }
+      const up = part.map((c, i) => ({
+        key: c.key, lat: c.lat, lon: c.lon, elevation: main[i]?.elevation ?? null, updated_at: new Date().toISOString(),
+        daily: { ...main[i].daily, soil_temperature_0_to_7cm_mean: soil[i]?.daily?.soil_temperature_0_to_7cm_mean ?? null, soil_moisture_0_to_7cm_mean: soil[i]?.daily?.soil_moisture_0_to_7cm_mean ?? null },
+      }));
+      const { error } = await admin.from('champi_meteo_grid').upsert(up, { onConflict: 'key' });
+      if (error) throw error;
+      rows += up.length;
+    } catch (e) { errors.push(String(e).slice(0, 120)); }
+  }
+  return { cases: cells.length, a_faire: todo.length, enregistrees: rows, erreurs: errors };
+}
+
 // Diagnostic : API ouvertes par la clé (lues dans le jeton, jamais renvoyé) et réponse de chacune.
 async function probe() {
   const key = Deno.env.get('METEOFRANCE_API_KEY') ?? '';
@@ -182,6 +246,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     if (body.action === 'run') return json(await run());
     if (body.action === 'hourly') return json(await hourly());
+    if (body.action === 'grid') return json(await grid());
     if (body.action === 'probe') return json(await probe());
     return json({ error: 'action inconnue' }, 400);
   } catch (err: any) {

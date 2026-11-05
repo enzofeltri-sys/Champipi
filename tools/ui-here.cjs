@@ -24,6 +24,12 @@ const db = { profiles: [{ id: ME, display_name: 'Enzo', avatar_emoji: null, avat
     const days = []; for (let i = 1; i <= 14; i++) days.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10));
     const rain = days.map((day, i) => ({ station_id: 'MRS', day, rr: i === 3 ? 31 : 0 }));   // une station près de Marseille : 31 mm il y a 4 j
     if (t === 'champi_rain_daily' && Number(u.searchParams.get('offset') || 0) > 0) return send([]);
+    if (t === 'champi_meteo_grid') {   // grille du serveur : une case sur les Maures avec le sol (0–7 cm)
+      const time = []; for (let i = -14; i <= 2; i++) time.push(new Date(Date.now() + i * 86400000).toISOString().slice(0, 10));
+      return send([{ key: '433:63', elevation: 380, updated_at: new Date().toISOString(), daily: { time,
+        precipitation_sum: time.map((_, i) => (i === 6 ? 26 : 0)), temperature_2m_max: time.map(() => 17), temperature_2m_min: time.map(() => 8),
+        soil_temperature_0_to_7cm_mean: time.map(() => 14.5), soil_moisture_0_to_7cm_mean: time.map(() => 0.36) } }]);
+    }
     const body = { champi_allowed_emails: [{ email: 'x', label: 'Enzo' }], champi_rain_stations: [{ id: 'MRS', name: 'MARSEILLE-TEST', lat: 43.26, lon: 5.50 }], champi_rain_daily: rain }[t] ?? (u.pathname.startsWith('/functions/') ? { depts: {} } : []);
     send(body);
   });
