@@ -124,7 +124,7 @@ async function morningRun(cfg: any) {
     const top = good[0];
     const body = `${top.s.name} : ${top.a.perSpecies[0]?.label ?? ''} — ${top.a.reasons[0] ?? ''}`
       + (good.length > 1 ? ` (+ ${good.length - 1} autre${good.length > 2 ? 's' : ''} coin${good.length > 2 ? 's' : ''})` : '');
-    const payload = { title: '🍄 Conditions favorables', body, url: `${SITE}#spot=${top.s.id}`, tag: 'champi-pousse' };
+    const payload = { title: '🍄 Conditions favorables', body, url: `${SITE}#journal=a:${top.s.id}:${day}`, tag: 'champi-pousse' };   // ouvre le journal
     const res = await Promise.all(userSubs.map((sub) => send(cfg, sub, payload)));
     if (res.includes('ok')) await admin.from('champi_alert_log').insert(good.map((g: any) => ({ spot_id: g.s.id, user_id: uid, sent_on: day })));
     report.push({ uid, coins: good.length, envois: res });
@@ -176,7 +176,7 @@ async function announce(cfg: any, findId: string) {
   const who = `${author?.avatar_emoji ?? '🍄'} ${author?.display_name ?? 'Quelqu\'un'}`;
   const text = newsText(who, s.name, f.species ?? [], f.note);
   const targets = subs.data!.filter((sub: any) => sub.user_id !== f.user_id && sees(sub.user_id) && prof.get(sub.user_id)?.notify_news !== false);
-  const payload = { ...text, url: `${SITE}#spot=${s.id}`, tag: `champi-news-${f.id}` };
+  const payload = { ...text, url: `${SITE}#journal=f:${f.id}`, tag: `champi-news-${f.id}` };   // ouvre le journal sur cette trouvaille
   const res = await Promise.all(targets.map((sub: any) => send(cfg, sub, payload)));
   return { destinataires: new Set(targets.map((t: any) => t.user_id)).size, envois: res };
 }

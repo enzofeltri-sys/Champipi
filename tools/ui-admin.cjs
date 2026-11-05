@@ -58,7 +58,7 @@ async function open(browser, who) {
       if (m === 'POST') { if (!isFamily()) return send({ code: '42501', message: 'rls' }, 403); db.profiles.push({ id: who.id, ...JSON.parse(req.postData()) }); return send([], 201); }
     }
     if (['champi_spots', 'champi_finds', 'champi_photos'].includes(table)) return send(isFamily() ? [] : []);
-    if (/champi_rain_(stations|daily)/.test(table)) return send([]);   // pluie Météo-France : rien de simulé
+    if (/champi_rain_(stations|daily)|champi_alert_log/.test(table)) return send([]);   // pluie Météo-France : rien de simulé
     return send({ message: 'non simulé ' + m + ' ' + table }, 500);
   });
   await page.addInitScript(([ref, u]) => {

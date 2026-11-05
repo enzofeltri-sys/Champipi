@@ -14,6 +14,7 @@ import { historyRange, findConditions, spotProfile, personalAdvice, profileSumma
 import { massifAt, accessFor, inFireSeason, DEPT_PAGES, ACCESS_ICON } from './access.js';
 import { favorableColors, favorableColorsMany, favorableLabels, colorKeyMap } from './forests.js';
 import { habitatTable, gridStep, cellsFor, cellCodes, pixelCode, pxLat, pxLon, COLORS, ALPHA } from './moment-map.js';
+import { buildJournal, unreadCount, dayTitle } from './journal.js';
 import { avatarOf, avatarHtml, AVATAR_EMOJIS, AVATAR_COLORS } from './avatars.js';
 
 // ---------------------------------------------------------------------------
@@ -352,7 +353,7 @@ async function loadData() {
     await applyPending(); render(); updateOfflineBar();
     return;
   }
-  const [spots, finds, shares, people, pics] = await Promise.all([
+  const [spots, finds, shares, people, pics, alertLog] = await Promise.all([
     sb.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, note, trees, soil, exposure, access, altitude, forest_type, created_at, updated_at, author:champi_profiles!champi_spots_owner_fkey(display_name)'),
     sb.from('champi_finds').select('id, spot_id, user_id, found_on, species, note, quantity, condition, weather, created_at, author:champi_profiles!champi_finds_user_id_fkey(display_name)')
       .order('found_on', { ascending: false }).order('created_at', { ascending: false }),
@@ -360,6 +361,7 @@ async function loadData() {
     sb.from('champi_profiles').select('id, display_name, avatar_emoji, avatar_color').order('display_name'),
     sb.from('champi_photos').select('id, spot_id, find_id, user_id, path, created_at, author:champi_profiles!champi_photos_user_id_fkey(display_name)')
       .order('created_at', { ascending: true }),
+    sb.from('champi_alert_log').select('spot_id, sent_on').order('sent_on', { ascending: false }).limit(200),
   ]);
   const failed = [spots, finds, pics].find((r) => r.error);
   if (failed) {
@@ -372,6 +374,7 @@ async function loadData() {
     state.photos = pics.data;
     state.shares = shares.data ?? [];
     state.people = people.data ?? [];
+    state.alerts = alertLog.data ?? [];
     state.offlineSince = null;
     writeSnapshot();
   }
@@ -379,6 +382,8 @@ async function loadData() {
   render();
   updateOfflineBar();
   openSpotFromHash();
+  updateJournalBadge();
+  if ($('#dlg-journal').open) renderJournal();
   if (state.openSpotId && $('#dlg-spot').open) renderSpot(state.openSpotId);
 }
 
@@ -1191,16 +1196,16 @@ $('#spot-photo-input').addEventListener('change', async (e) => {
 
 // Visionneuse
 let viewing = null;
-$('#dlg-spot').addEventListener('click', async (e) => {
-  const b = e.target.closest('[data-photo]'); if (!b) return;
-  const p = state.photos.find((x) => x.id === b.dataset.photo); if (!p) return;
+$('#dlg-spot').addEventListener('click', (e) => { const b = e.target.closest('[data-photo]'); if (b) openPhoto(b.dataset.photo); });
+async function openPhoto(id) {
+  const p = state.photos.find((x) => x.id === id); if (!p) return;
   viewing = p;
   $('#photo-full').removeAttribute('src');
   $('#photo-meta').textContent = `par ${p.user_id === state.user.id ? 'moi' : p.author?.display_name ?? '?'} · ${formatDate(p.created_at)}`;
   $('#photo-delete').hidden = p.user_id !== state.user.id;
   $('#dlg-photo').showModal();
   try { $('#photo-full').src = (await photos.urls([p.path]))[p.path]; } catch (err) { toast(frError(err)); }
-});
+}
 $('#dlg-photo .js-close').addEventListener('click', () => $('#dlg-photo').close());
 $('#photo-delete').addEventListener('click', async () => {
   if (!viewing || !confirm('Supprimer cette photo ?')) return;
@@ -1609,7 +1614,7 @@ async function refreshAdminBadge() {
   const { data, error } = await sb.from('champi_access_requests').select('email');
   if (error) throw error;
   const count = data.length;
-  $('#menu-dot').hidden = !count;
+  adminPending = count; updateMenuDot();
   $('#admin-count').hidden = !count;
   $('#admin-count').textContent = count || '';
   return count;
@@ -1767,8 +1772,79 @@ $('#alerts-test').addEventListener('click', async () => {
   $('#alerts-msg').textContent = error ? `Échec : ${frError(error)}` : (data?.envois ?? []).includes('ok') ? '✔ Envoyée : la notification doit apparaître dans quelques secondes.' : `Réponse : ${JSON.stringify(data)}`;
 });
 
+// ---------------------------------------------------------------------------
+// Journal de la famille : trouvailles + alertes reçues ; les notifications y renvoient (#journal=<clé>)
+let adminPending = 0, journalKind = 'all';
+const JOURNAL_SEEN = 'champi-journal-vu';
+function journalItems(kind = 'all') { return buildJournal(state.finds.filter((f) => !f.pending), state.alerts ?? [], state.spots, { kind }); }
+function journalUnread() { return unreadCount(journalItems(), store.get(JOURNAL_SEEN), state.user?.id); }
+function updateMenuDot() { $('#menu-dot').hidden = !(adminPending || journalUnread()); }
+function updateJournalBadge() {
+  if (!store.get(JOURNAL_SEEN)) store.set(JOURNAL_SEEN, new Date().toISOString());   // première fois : tout est déjà « lu »
+  const n = journalUnread();
+  $('#journal-count').hidden = !n; $('#journal-count').textContent = n || '';
+  updateMenuDot();
+}
+let journalSeenAtOpen = '';
+function renderJournal(focus = null) {
+  const items = journalItems(journalKind);
+  const today = todayIso();
+  let html = '', lastDay = null;
+  for (const it of items.slice(0, 300)) {
+    if (it.day !== lastDay) { html += `<h3 class="j-day">${esc(dayTitle(it.day, today, formatDate))}</h3>`; lastDay = it.day; }
+    const fresh = journalSeenAtOpen && it.at > journalSeenAtOpen && !(it.type === 'find' && it.find.user_id === state.user?.id);
+    const cls = `j-item${it.type === 'alert' ? ' alert' : ''}${fresh ? ' fresh' : ''}${focus === it.key ? ' focus' : ''}`;
+    const tag = fresh ? ' <span class="badge season">nouveau</span>' : '';
+    if (it.type === 'find') {
+      const f = it.find;
+      const what = f.species?.length ? f.species.map((x) => speciesLabel(x).replace(/ \(.*\)$/, '')).join(', ') : 'rien de noté';
+      const pics = state.photos.filter((p) => p.find_id === f.id).slice(0, 4);
+      const extra = [f.quantity && labelOf(QUANTITIES, f.quantity), f.condition && labelOf(CONDITIONS, f.condition)].filter(Boolean).map(esc).join(' · ');
+      html += `<div class="${cls}" data-key="${it.key}" data-spot="${it.spot.id}">
+        <div class="j-who">${avatarHtml(personOf(f.user_id), 34)}</div>
+        <div class="j-body"><div>${f.user_id === state.user?.id ? '<b>Tu</b> as trouvé' : `<b>${esc(nameOf(f.user_id))}</b> a trouvé`} <b>${esc(what)}</b>${tag}</div>
+          <div class="small muted">📍 ${esc(it.spot.name)}${extra ? ' · ' + extra : ''}</div>
+          ${f.note ? `<div class="small j-note">${esc(f.note)}</div>` : ''}
+          ${pics.length ? `<div class="photos">${thumbs(pics)}</div>` : ''}</div></div>`;
+    } else {
+      html += `<div class="${cls}" data-key="${it.key}" data-spot="${it.spot.id}">
+        <div class="j-who"><span class="j-bell">🔔</span></div>
+        <div class="j-body"><div><b>Conditions favorables</b> à <b>${esc(it.spot.name)}</b>${tag}</div>
+          <div class="small muted">Alerte du matin envoyée sur ton téléphone</div></div></div>`;
+    }
+  }
+  $('#journal-list').innerHTML = html || `<p class="muted">${journalKind === 'alerts' ? 'Aucune alerte reçue pour l\'instant.' : 'Aucune trouvaille notée pour l\'instant.'}</p>`;
+  photos.hydrate($('#dlg-journal')).catch((err) => console.warn('photos', err));
+  if (focus) setTimeout(() => $(`#journal-list [data-key="${focus}"]`)?.scrollIntoView({ block: 'center' }), 60);
+}
+function openJournal(focus = null) {
+  $('#menu').hidden = true;
+  if (!$('#dlg-journal').open) journalSeenAtOpen = store.get(JOURNAL_SEEN) ?? '';
+  renderJournal(focus);
+  if (!$('#dlg-journal').open) $('#dlg-journal').showModal();
+  store.set(JOURNAL_SEEN, new Date().toISOString());   // lu ; les étiquettes « nouveau » restent jusqu'à la fermeture
+  updateJournalBadge();
+}
+$('#journal-btn').addEventListener('click', () => openJournal());
+$('#dlg-journal .js-close').addEventListener('click', () => $('#dlg-journal').close());
+for (const b of $$('#journal-seg button')) b.addEventListener('click', () => {
+  journalKind = b.dataset.kind;
+  for (const x of $$('#journal-seg button')) { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', String(on)); }
+  renderJournal();
+});
+$('#journal-list').addEventListener('click', (e) => {
+  const ph = e.target.closest('[data-photo]'); if (ph) { openPhoto(ph.dataset.photo); return; }
+  const it = e.target.closest('[data-spot]'); if (!it) return;
+  const s = state.spots.find((x) => x.id === it.dataset.spot); if (!s) return;
+  $('#dlg-journal').close();
+  map.setView([s.lat, s.lon], Math.max(map.getZoom(), 14));
+  openSpot(s.id);
+});
+
 // Lien direct vers un coin (notification) : …/#spot=<id>
 function openSpotFromHash() {
+  const j = location.hash.match(/^#journal(?:=([\w:-]+))?$/);
+  if (j) { history.replaceState(null, '', location.pathname + location.search); openJournal(j[1] ?? null); return; }
   const m = location.hash.match(/^#spot=([0-9a-f-]{36})$/i);
   if (!m || !state.spots.some((s) => s.id === m[1])) return;
   history.replaceState(null, '', location.pathname + location.search);

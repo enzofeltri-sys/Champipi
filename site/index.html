@@ -115,6 +115,7 @@
           <label class="check"><input type="checkbox" id="toggle-rain"> Pluie des 10 derniers jours (PACA)</label>
           <label class="check"><input type="checkbox" id="toggle-forest"> Tous les types de forêts (IGN)</label>
         </details>
+        <button id="journal-btn" class="btn" type="button">📰 Journal de la famille <span id="journal-count" class="badge season" hidden></span></button>
         <button id="list-btn" class="btn" type="button">📋 Mes coins (liste)</button>
         <button id="advisor-btn2" class="btn" type="button">🤖 Conseiller du jour</button>
         <button id="guide-btn" class="btn" type="button">📖 Guide des espèces</button>
@@ -182,6 +183,22 @@
       </div>
     </div>
   </main>
+
+  <dialog id="dlg-journal" class="sheet">
+    <div class="stack">
+      <div class="sheet-head">
+        <h2>📰 Journal de la famille</h2>
+        <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
+      </div>
+      <div class="seg" id="journal-seg" role="radiogroup" aria-label="Quoi">
+        <button type="button" data-kind="all" class="on" role="radio" aria-checked="true">Tout</button>
+        <button type="button" data-kind="finds" role="radio" aria-checked="false">🍄 Trouvailles</button>
+        <button type="button" data-kind="alerts" role="radio" aria-checked="false">🔔 Alertes</button>
+      </div>
+      <p class="small muted">Tout ce que la famille a trouvé dans les coins que tu vois, et les alertes « conditions favorables » que tu as reçues. Les notifications ouvrent ce journal ; touche une ligne pour voir le coin.</p>
+      <div id="journal-list" class="journal"></div>
+    </div>
+  </dialog>
 
   <dialog id="dlg-list" class="sheet">
     <div class="stack">
@@ -425,6 +442,11 @@
         <p>🟢 favorable · 🟡 moyen · 🔴 défavorable · ⚪ hors saison. Dès 3 trouvailles sur un coin, il apprend ses conditions (« Ton expérience »).</p>
         <p class="small muted">Ce sont des règles simples : une indication, jamais une certitude.</p>
         <p><b>Météo « doublée »</b> : la pluie et les températures viennent des <b>stations Météo-France</b> (réellement mesurées : chaque heure pour aujourd'hui, vérifiées chaque nuit pour les jours passés ; stations à moins de 25 km, températures corrigées de l'altitude) ; entre les stations et pour les prévisions : modèles AROME/ARPEGE de Météo-France, servis par Open-Meteo. Si l'une des deux sources ne répond pas, l'autre prend le relais. La fiche d'un coin indique la source utilisée.</p>
+      </details>
+
+      <details><summary>📰 Journal de la famille</summary>
+        <p>Menu ☰ → <b>📰 Journal de la famille</b> : toutes les trouvailles de la famille (qui, quoi, où, quand, photos) et les alertes que tu as reçues, du plus récent au plus ancien. Le chiffre vert dit combien de nouveautés depuis ta dernière visite.</p>
+        <p>Toucher une notification ouvre directement le journal sur la bonne ligne ; toucher une ligne ouvre le coin sur la carte.</p>
       </details>
 
       <details><summary>🔔 Alertes de pousse</summary>
