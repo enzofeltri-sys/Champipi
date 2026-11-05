@@ -62,7 +62,7 @@ async function open(browser, who) {
     return send({ message: 'non simulé ' + m + ' ' + table }, 500);
   });
   await page.addInitScript(([ref, u]) => {
-    localStorage.setItem('champi-tuto', '2'); localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 99999, user: { id: u.id, email: u.email } }));
+    localStorage.setItem('champi-tuto', '3'); localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 99999, user: { id: u.id, email: u.email } }));
   }, [REF, who]);
   await page.goto(SITE);
   return { page, errors };

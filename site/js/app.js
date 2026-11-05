@@ -9,7 +9,7 @@ import { createPhotoStore, thumbPath } from './photos.js';
 import { GUIDE, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown } from './advisor.js';
 import { dailyFor as openMeteoFor, forestAt, soilAt, historyFor, terrainAt } from './weather.js';
 import { ASPECT_TEXT } from './terrain.js';
-import { rainIndex, mergeRain, rainSource } from './rain.js';
+import { rainIndex, mergeRain, rainSource, distKm } from './rain.js';
 import { treesAt, soilKind, whatGrows, fix as cleanText } from './here.js';
 import { historyRange, findConditions, spotProfile, personalAdvice, profileSummary } from './learn.js';
 import { massifAt, accessFor, inFireSeason, DEPT_PAGES, ACCESS_ICON } from './access.js';
@@ -771,15 +771,35 @@ function exitAddMode() {
 $('#btn-add').addEventListener('click', enterAddMode);
 $('#add-cancel').addEventListener('click', exitAddMode);
 $('#add-locate').addEventListener('click', () => locate((lat, lon) => map.setView([lat, lon], Math.max(map.getZoom(), 17))));
+const NEAR_M = 150;
+let nearChoice = null;
+function newSpotHere(lat, lon, photo) {
+  startDraft(lat, lon);
+  if (photo) state.draft.photo = photo;
+  $('#adjust-bar').hidden = true;
+  openEdit();
+}
 $('#add-here').addEventListener('click', () => {
   const c = map.getCenter();
   const photo = addPhoto;
   exitAddMode();
-  startDraft(c.lat, c.lng);
-  if (photo) state.draft.photo = photo;
-  $('#adjust-bar').hidden = true;
-  openEdit();
+  // Un coin (à moi ou visible) à moins de 150 m : c'est sans doute le même endroit.
+  const near = state.spots.filter((s) => !s.pending).map((s) => ({ s, m: distKm(c.lat, c.lng, s.lat, s.lon) * 1000 }))
+    .filter((x) => x.m <= NEAR_M).sort((a, b) => a.m - b.m)[0];
+  if (!near) { newSpotHere(c.lat, c.lng, photo); return; }
+  nearChoice = { spot: near.s, lat: c.lat, lon: c.lng, photo };
+  $('#near-text').innerHTML = `Tu es à <b>${Math.max(5, Math.round(near.m / 5) * 5)} m</b> du coin <b>${esc(near.s.name)}</b>. Ajouter ta trouvaille à ce coin ?`;
+  $('#dlg-near').showModal();
 });
+$('#near-yes').addEventListener('click', () => {
+  const n = nearChoice; $('#dlg-near').close(); if (!n) return;
+  openSpot(n.spot.id);
+  $('#find-add').open = true;
+  if (n.photo) setFindFiles([n.photo]);
+  setTimeout(() => $('#find-add').scrollIntoView({ block: 'start' }), 80);
+});
+$('#near-no').addEventListener('click', () => { const n = nearChoice; $('#dlg-near').close(); if (n) newSpotHere(n.lat, n.lon, n.photo); });
+$('#near-cancel').addEventListener('click', () => $('#dlg-near').close());
 
 // ---------------------------------------------------------------------------
 // « 🌱 Qu'est-ce qui pousse ici ? » : forêt + sol + altitude + saison → champignons dont c'est le milieu
@@ -931,7 +951,9 @@ $('#edit-soil').innerHTML += options(SOILS);
 $('#edit-exposure').innerHTML += options(EXPOSURES);
 $('#find-quantity').innerHTML += options(QUANTITIES);
 $('#find-condition').innerHTML += options(CONDITIONS);
-for (const sel of ['#edit-species', '#find-species', '#edit-trees']) {
+$('#nf-quantity').innerHTML += options(QUANTITIES);
+$('#nf-condition').innerHTML += options(CONDITIONS);
+for (const sel of ['#nf-species', '#find-species', '#edit-trees']) {
   $(sel).addEventListener('click', (e) => {
     const c = e.target.closest('.chip'); if (!c) return;
     c.classList.toggle('on'); c.setAttribute('aria-pressed', String(c.classList.contains('on')));
@@ -951,7 +973,16 @@ function openEdit() {
     $('#edit-name').value = s?.name ?? '';
     $('#edit-note').value = s?.note ?? '';
     editVis = s?.visibility ?? (store.get('champi-last-vis') || 'private');
-    $('#edit-species').innerHTML = chipsHtml(s?.species ?? []);
+    // Nouveau coin : d'abord « ce que tu as trouvé » (la première trouvaille), puis le coin lui-même.
+    $('#nf').hidden = !!s;
+    if (!s) {
+      $('#nf-skip').checked = false; $('#nf-body').hidden = false;
+      $('#nf-species').innerHTML = chipsHtml([], true);
+      $('#nf-date').value = todayIso(); $('#nf-date').max = todayIso();
+      $('#nf-quantity').value = ''; $('#nf-condition').value = ''; $('#nf-note').value = '';
+      setNfFiles(d.photo ? [d.photo] : []);
+      if (d.photo) nfDateFromPhoto(d.photo);
+    }
     $('#edit-trees').innerHTML = treeChips(s?.trees ?? []);
     $('#edit-soil').value = s?.soil ?? '';
     $('#edit-exposure').value = s?.exposure ?? '';
@@ -965,15 +996,33 @@ function openEdit() {
   }
   syncVis();
   $('#edit-coords').textContent = formatCoords(d.lat, d.lon);
-  $('#edit-photo').hidden = !d.photo;
-  if (d.photo) $('#edit-photo-img').src = URL.createObjectURL(d.photo);
+  $('#edit-photo').hidden = true;   // la photo va avec la cueillette (rubrique du haut)
   fillAltitude(d);
   fillExposure(d);
   fillForest(d);
   showError('#edit-error');
   $('#dlg-edit').showModal();
-  if (!d.existing) setTimeout(() => $('#edit-name').focus(), 50);
 }
+
+// Photos de la cueillette dans le formulaire d'un nouveau coin
+let nfFiles = [];
+function setNfFiles(files) {
+  nfFiles = files;
+  $('#nf-previews').innerHTML = files.map((f, i) => `<span class="thumb"><img src="${URL.createObjectURL(f)}" alt=""><button type="button" class="x" data-drop="${i}" aria-label="Retirer">✕</button></span>`).join('');
+}
+async function nfDateFromPhoto(file) {
+  if ($('#nf-date').value !== todayIso()) return;
+  const d = exifDate(await file.arrayBuffer());
+  if (d && d < todayIso()) { $('#nf-date').value = d; toast(`Date reprise de la photo : ${formatDate(d)}`); }
+}
+$('#nf-photos').addEventListener('change', (e) => {
+  const added = [...e.target.files]; e.target.value = '';
+  const first = !nfFiles.length;
+  setNfFiles([...nfFiles, ...added].slice(0, 6));
+  if (first && added[0]) nfDateFromPhoto(added[0]);
+});
+$('#nf-previews').addEventListener('click', (e) => { const b = e.target.closest('[data-drop]'); if (b) setNfFiles(nfFiles.filter((_, i) => i !== Number(b.dataset.drop))); });
+$('#nf-skip').addEventListener('change', () => { $('#nf-body').hidden = $('#nf-skip').checked; });
 
 // Altitude automatique (service IGN, sans clé) tant que l'utilisateur ne l'a pas saisie lui-même.
 async function fetchAltitude(lat, lon) {
@@ -1046,7 +1095,6 @@ $('#edit-form').addEventListener('submit', async (e) => {
   const row = {
     name: $('#edit-name').value.trim(),
     visibility: editVis,
-    species: chipValues('#edit-species'),
     note: $('#edit-note').value.trim() || null,
     lat: d.lat, lon: d.lon,
     trees: chipValues('#edit-trees'),
@@ -1059,26 +1107,39 @@ $('#edit-form').addEventListener('submit', async (e) => {
   if (!row.name) { showError('#edit-error', 'Donne un nom au coin.'); return; }
   const btn = $('#edit-save'); busy(btn, true);
   if (!d.id) row.id = crypto.randomUUID();      // identifiant choisi ici : permet de créer le coin hors ligne
+  // Nouveau coin : sa première trouvaille, sauf « rien aujourd'hui »
+  const find = !d.id && !$('#nf-skip').checked ? {
+    id: crypto.randomUUID(), spot_id: row.id, found_on: $('#nf-date').value || todayIso(), species: chipValues('#nf-species'),
+    note: $('#nf-note').value.trim() || null, quantity: $('#nf-quantity').value || null, condition: $('#nf-condition').value || null, weather: null,
+  } : null;
+  const findPhotos = find ? [...nfFiles] : [];
   const q = d.id
     ? sb.from('champi_spots').update(row).eq('id', d.id).select('id').single()
     : sb.from('champi_spots').insert(row).select('id').single();
   const { data, error } = await q;
   busy(btn, false);
   if (error && !d.id && isNetworkError(error)) {
-    await queue.add({ kind: 'spot', row, photo: d.photo ?? null });
+    await queue.add({ kind: 'spot', row, photo: find ? null : nfFiles[0] ?? null });
+    if (find) await queue.add({ kind: 'find', row: find, files: findPhotos });
     closeEdit(true);
-    toast('📴 Pas de réseau : coin gardé sur le téléphone, envoi au retour du réseau.', 5000);
+    toast(`📴 Pas de réseau : ${find ? 'coin et trouvaille gardés' : 'coin gardé'} sur le téléphone, envoi au retour du réseau.`, 5000);
     await applyPending(); render(); updateOfflineBar();
     openSpot(row.id);
     return;
   }
   if (error) { showError('#edit-error', isNetworkError(error) ? 'Pas de réseau : la modification d\'un coin existant doit attendre le retour du réseau.' : `Enregistrement impossible : ${frError(error)}`); return; }
   store.set('champi-last-vis', row.visibility);
-  const pending = d.photo;
+  const spotPhoto = !d.id && !find ? nfFiles[0] ?? null : null;   // « rien aujourd'hui » : la photo va au coin
   closeEdit(true);
-  toast(d.id ? 'Coin modifié ✔' : 'Coin enregistré ✔');
-  if (pending) {
-    try { await photos.upload({ spotId: data.id, file: pending }); }
+  if (find) {
+    const r = await sb.from('champi_finds').insert(find).select('id').single();
+    if (r.error && isNetworkError(r.error)) await queue.add({ kind: 'find', row: find, files: findPhotos });
+    else if (r.error) toast(`Coin enregistré, mais trouvaille non notée : ${frError(r.error)}`, 6000);
+    else if (findPhotos.length) await uploadAll(data.id, r.data.id, findPhotos);
+  }
+  toast(d.id ? 'Coin modifié ✔' : find ? 'Coin et trouvaille enregistrés ✔' : 'Coin enregistré ✔');
+  if (spotPhoto) {
+    try { await photos.upload({ spotId: data.id, file: spotPhoto }); }
     catch (err) { toast(`Coin enregistré, mais photo non envoyée : ${frError(err)}`, 6000); }
   }
   await loadData();
@@ -1358,7 +1419,7 @@ $('#export-csv').addEventListener('click', () => {
 // Visite guidée : une bulle à côté de chaque bouton, qui pointe dessus (première ouverture, puis menu « Aide »)
 
 // Changer ce numéro remontre la visite à tout le monde à la prochaine ouverture.
-const TUTO_VERSION = '2';
+const TUTO_VERSION = '3';
 const COACH = [
   ['#species-bar', '🍄 Choisis un champignon', 'Touche une ou plusieurs pastilles : les forêts où il pousse se colorent (vert = bon moment, jaune = moyen, rouge = pas le moment). Le point de couleur sur la pastille dit pareil pour le secteur affiché.'],
   ['#menu-btn', '☰ Le menu', 'Tout le reste est ici : journal de la famille, liste de tes coins, conseiller, guide, cartes hors ligne, alertes, aide.'],
@@ -1371,7 +1432,7 @@ const COACH = [
   ['#rail-base', '🛰️ Photo aérienne', 'Passe en photo aérienne pour voir les clairières et les chemins, puis revient au plan.'],
   ['#rail-here', '🌱 Ici ?', 'Place le viseur sur un endroit (ou prends ta position) : la forêt, le sol, l\'altitude, l\'exposition, la pluie… et les champignons dont c\'est le milieu.'],
   ['#rail-locate', '📍 Moi', 'Centre la carte sur ta position (point bleu).'],
-  ['#btn-add', '＋ Noter un coin', 'Fais glisser la carte pour mettre le viseur sur ton coin (ou « Ma position » / « Photo »), puis « C\'est ici ». Ensuite, note chaque trouvaille dans son journal : c\'est ce qui rend l\'appli plus précise pour toute la famille.'],
+  ['#btn-add', '＋ J\'ai trouvé quelque chose', 'Le bouton de chaque cueillette : place le viseur (ou « Ma position » / « Photo »), puis note ce que tu as trouvé. Un coin = l\'endroit ; une trouvaille = ce que tu y as ramassé ce jour-là. Si un de tes coins est tout près, l\'appli te propose d\'y ajouter la trouvaille.'],
   [null, '⚠️ Sécurité', 'L\'appli n\'identifie aucun champignon. Fais contrôler <b>chaque récolte</b> par un pharmacien ou une association mycologique. Antipoison Marseille : <a class="tel" href="tel:+33491752525">04 91 75 25 25</a>.'],
 ];
 let coachI = 0;

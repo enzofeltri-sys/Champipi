@@ -53,7 +53,7 @@ async function open(b, who) {
     return send([]);
   });
   await page.addInitScript(([ref, u]) => {
-    localStorage.setItem('champi-tuto', '2');
+    localStorage.setItem('champi-tuto', '3');
     localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 9999999, user: { id: u.id, email: u.name + '@test.fr' } }));
   }, [REF, who]);
   await page.goto(SITE); await page.waitForSelector('#screen-app:not([hidden])');

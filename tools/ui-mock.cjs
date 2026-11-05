@@ -46,7 +46,7 @@ async function setup(page, data, { session = true } = {}) {
   if (session) {
     await page.addInitScript(([ref, me]) => {
       const now = Math.floor(Date.now() / 1000);
-      localStorage.setItem('champi-tuto', '2'); localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({
+      localStorage.setItem('champi-tuto', '3'); localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({
         access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: now + 360000,
         user: { id: me, email: 'enzo@test.fr', aud: 'authenticated', role: 'authenticated' },
       }));
@@ -95,8 +95,8 @@ async function setup(page, data, { session = true } = {}) {
   console.log('épingle déplaçable :', await page.locator('.leaflet-marker-draggable').count());
   await page.fill('#edit-name', 'Pinède test <b>gras</b>');
   await page.click('#edit-vis [data-vis=family]');
-  await page.click('#edit-species [data-sp=cepe]');
-  await page.click('#edit-species [data-sp=lactaire-sanguin]');
+  await page.click('#nf-species [data-sp=cepe]');
+  await page.click('#nf-species [data-sp=lactaire-sanguin]');
   await page.fill('#edit-note', 'Sous les pins d\'Alep.');
   await shot(page, '05-fiche');
   await page.click('#edit-save');

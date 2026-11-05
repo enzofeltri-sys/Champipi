@@ -22,6 +22,7 @@ async function pickSpecies(page, label) { await closeDialogs(page); await page.l
 async function addAtCenter(page) {
   await closeDialogs(page);
   await page.click('#btn-add'); await page.click('#add-here');
+  await page.waitForSelector('#dlg-edit[open], #dlg-near[open]'); if (await page.isVisible('#dlg-near')) await page.click('#near-no'); 
   await page.waitForSelector('#dlg-edit[open]');
 }
 module.exports = { closeDialogs, openList, openSpot, setScope, pickSpecies, addAtCenter };

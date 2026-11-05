@@ -30,7 +30,7 @@ const finds = [
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(obj && Array.isArray(body) ? body[0] ?? null : body) });
   });
   await page.addInitScript(([ref, me]) => {
-    localStorage.setItem('champi-tuto', '2');
+    localStorage.setItem('champi-tuto', '3');
     localStorage.setItem('champi-view', JSON.stringify({ lat: 43.3, lon: 5.62, zoom: 11 }));
     localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 9999999, user: { id: me, email: 'x@y.fr' } }));
   }, [REF, ME]);
@@ -77,6 +77,7 @@ const finds = [
   await page.screenshot({ path: `${OUT}/a4-viseur.png` });
   const center = await page.evaluate(() => { const r = document.querySelector('#map').getBoundingClientRect(); return [r.width / 2, r.height / 2]; });
   await page.click('#add-here');
+  await page.waitForSelector('#dlg-edit[open], #dlg-near[open]'); if (await page.isVisible('#dlg-near')) await page.click('#near-no'); 
   await page.waitForSelector('#dlg-edit[open]');
   console.log('fiche nouveau coin, position :', await page.textContent('#edit-coords'));
   await page.click('#edit-form [value=cancel] >> nth=1');

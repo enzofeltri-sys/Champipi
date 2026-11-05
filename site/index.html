@@ -148,8 +148,8 @@
       <div id="crosshair" class="crosshair" aria-hidden="true" hidden><span></span></div>
 
       <div id="add-bar" class="add-bar card" hidden>
-        <b>Où est ton coin ?</b>
-        <span class="small muted">Fais glisser la carte pour mettre le viseur dessus.</span>
+        <b>Où as-tu trouvé ?</b>
+        <span class="small muted">Fais glisser la carte pour mettre le viseur sur l'endroit, ou prends ta position.</span>
         <div class="bar-grid">
           <button id="add-locate" class="btn" type="button">📍 Ma position</button>
           <label class="btn">📷 Photo<input id="add-photo" type="file" accept="image/jpeg" hidden></label>
@@ -178,7 +178,7 @@
 
       <div id="bottom" class="bottom">
         <div id="species-banner" class="species-banner card" hidden></div>
-        <button id="btn-add" class="btn primary add-btn" type="button">＋ Noter un coin</button>
+        <button id="btn-add" class="btn primary add-btn" type="button">＋ J'ai trouvé quelque chose</button>
       </div>
     </div>
   </main>
@@ -228,17 +228,34 @@
         <h2 id="edit-title">Nouveau coin</h2>
         <button class="icon-btn" value="cancel" formnovalidate aria-label="Fermer">✕</button>
       </div>
-      <label for="edit-name">Nom</label>
+      <section id="nf" class="nf">
+        <h3>🧺 Ce que tu as trouvé</h3>
+        <label class="check"><input type="checkbox" id="nf-skip"> Rien aujourd'hui : je repère juste l'endroit</label>
+        <div id="nf-body" class="stack">
+          <span class="small">Espèces trouvées</span>
+          <div id="nf-species" class="chips"></div>
+          <div class="grid2">
+            <label>Date<input id="nf-date" type="date"></label>
+            <label>Quantité<select id="nf-quantity"><option value="">—</option></select></label>
+          </div>
+          <label>État<select id="nf-condition"><option value="">—</option></select></label>
+          <label class="btn small-btn">📷 Photos de la cueillette
+            <input id="nf-photos" type="file" accept="image/*" multiple hidden></label>
+          <div id="nf-previews" class="photos"></div>
+          <label for="nf-note">Note sur la cueillette</label>
+          <textarea id="nf-note" rows="2" maxlength="2000" placeholder="Où exactement, taille…"></textarea>
+        </div>
+        <h3>📍 Le coin</h3>
+      </section>
+      <label for="edit-name">Nom du coin</label>
       <input id="edit-name" required maxlength="80" placeholder="Ex. Pinède du vallon">
       <span class="small">Qui le voit ?</span>
       <div class="seg" id="edit-vis" role="radiogroup">
         <button type="button" data-vis="private" class="on vis-private">🔒 Moi seul</button>
         <button type="button" data-vis="family" class="vis-family">👪 Famille</button>
       </div>
-      <span class="small">Espèces</span>
-      <div id="edit-species" class="chips"></div>
-      <label for="edit-note">Notes</label>
-      <textarea id="edit-note" rows="3" maxlength="2000" placeholder="Repères, ce qui pousse, astuces…"></textarea>
+      <label for="edit-note">Notes sur le coin</label>
+      <textarea id="edit-note" rows="3" maxlength="2000" placeholder="Repères pour le retrouver, astuces…"></textarea>
       <details id="edit-more" class="more">
         <summary>Détails de l'endroit</summary>
         <div class="stack">
@@ -257,7 +274,7 @@
       </details>
       <div id="edit-photo" class="pending-photo" hidden>
         <img id="edit-photo-img" alt="">
-        <span class="small">Cette photo sera ajoutée au coin.</span>
+        <span class="small">Cette photo sera ajoutée à la cueillette.</span>
         <button id="edit-photo-drop" type="button" class="btn link">Retirer</button>
       </div>
       <p class="small muted">📌 <span id="edit-coords"></span>
@@ -269,6 +286,18 @@
         <button id="edit-save" class="btn primary" value="save">Enregistrer</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="dlg-near" class="sheet">
+    <div class="stack">
+      <h2>📍 C'est dans ce coin ?</h2>
+      <p id="near-text"></p>
+      <div class="bar-grid">
+        <button id="near-yes" class="btn primary wide" type="button">Oui, ajouter la trouvaille à ce coin</button>
+        <button id="near-no" class="btn" type="button">Non, nouveau coin</button>
+        <button id="near-cancel" class="btn" type="button">Annuler</button>
+      </div>
+    </div>
   </dialog>
 
   <!-- Détail d'un coin -->
@@ -283,10 +312,9 @@
       <div class="row">
         <a id="spot-route" class="btn primary" target="_blank" rel="noopener">🚗 Itinéraire</a>
       </div>
-      <h3>Journal</h3>
-      <ul id="find-list" class="find-list"></ul>
+      <h3>🧺 Les trouvailles ici</h3>
       <details id="find-add">
-        <summary class="btn">＋ Noter une trouvaille</summary>
+        <summary class="btn primary">＋ Nouvelle trouvaille ici</summary>
         <form id="find-form" class="stack">
           <label for="find-date">Date</label>
           <input id="find-date" type="date" required>
@@ -308,8 +336,9 @@
           <button class="btn primary" type="submit">Ajouter au journal</button>
         </form>
       </details>
+      <ul id="find-list" class="find-list"></ul>
       <details id="spot-more" class="more">
-        <summary>Météo, bilan et détails du coin</summary>
+        <summary>📍 Le coin : météo, bilan et détails</summary>
         <div class="stack">
           <p id="spot-access" class="access-line small" hidden></p>
           <section id="spot-meteo" class="meteo"></section>
@@ -388,6 +417,7 @@
           <li><b>🛰️ Photo</b> : passe en photo aérienne, et retour au plan.</li>
           <li><b>🌱 Ici ?</b> : ce qui peut pousser à un endroit (voir la rubrique suivante).</li>
           <li><b>📍 Moi</b> : centre la carte sur ta position (point bleu).</li>
+          <li><b>＋ J'ai trouvé quelque chose</b> (en bas) : note une cueillette, dans un coin existant ou nouveau.</li>
           <li><b>☰ Menu</b> : journal de la famille, liste des coins, conseiller, guide, hors ligne, alertes, aide, profil ; <b>🔄</b> (à côté de ton nom) actualise tout.</li>
         </ul>
       </details>
@@ -415,20 +445,23 @@
         <p class="small muted">Sols : carte INRAE au 1/250 000, précise à quelques kilomètres près. Quand la carte ne permet pas de trancher (ex. Alpilles), l'appli écrit « non déterminé » au lieu de deviner. Ça n'identifie aucun champignon.</p>
       </details>
 
-      <details><summary>➕ Noter un coin</summary>
+      <details open><summary>➕ Coin ou trouvaille ?</summary>
+        <p><b>📍 Un coin</b> = l'endroit (une épingle sur la carte). <b>🧺 Une trouvaille</b> = ce que tu y as ramassé un jour donné. Un coin a donc plusieurs trouvailles au fil des années : c'est ce qui permet à l'appli d'apprendre.</p>
         <ol>
-          <li>Touche <b>« ＋ Noter un coin »</b> : un viseur rouge apparaît au centre.</li>
-          <li>Fais glisser la carte pour mettre le viseur sur le coin, ou touche <b>📍 Ma position</b> si tu y es, ou <b>📷 Photo</b> pour choisir une photo prise sur place : l'appli lit sa position (si le téléphone l'a gardée) et la joint au coin.</li>
-          <li>Touche <b>« ✓ C'est ici »</b>, donne un nom, choisis <b>🔒 Moi seul</b> ou <b>👪 Famille</b>, coche les espèces, puis Enregistrer.</li>
+          <li>Touche <b>« ＋ J'ai trouvé quelque chose »</b> : un viseur rouge apparaît au centre.</li>
+          <li>Fais glisser la carte pour mettre le viseur sur l'endroit, ou touche <b>📍 Ma position</b> si tu y es, ou <b>📷 Photo</b> pour une photo prise sur place (l'appli lit sa position quand le téléphone l'a gardée).</li>
+          <li>Touche <b>« ✓ C'est ici »</b>. <b>Si un de tes coins est à moins de 150 m</b>, l'appli te demande si c'est le même : « Oui » ajoute la trouvaille à ce coin.</li>
+          <li>Sinon, un seul formulaire : en haut <b>ce que tu as trouvé</b> (espèces, date, quantité, état, photos), en bas <b>le coin</b> (nom, 🔒 Moi seul ou 👪 Famille). Enregistrer crée les deux d'un coup.</li>
         </ol>
-        <p>« Détails de l'endroit » : arbres, terrain, exposition, accès. L'altitude et le type de forêt (IGN) se remplissent tout seuls.</p>
+        <p>Pour repérer un endroit sans rien y avoir trouvé : coche <b>« Rien aujourd'hui : je repère juste l'endroit »</b>.</p>
+        <p>« Détails de l'endroit » : arbres, terrain, exposition, accès. L'altitude, l'exposition et le type de forêt (IGN) se remplissent tout seuls.</p>
       </details>
 
       <details><summary>📓 Le journal et les photos</summary>
-        <p>Touche un coin sur la carte : tu vois d'abord <b>ce que tu y as trouvé</b>, puis le journal.</p>
-        <p><b>« ＋ Noter une trouvaille »</b> : date, espèces, quantité, état, météo, note et photos. La date est reprise de la photo quand c'est possible.</p>
+        <p>Touche un coin sur la carte : tu vois d'abord <b>ce que tu y as trouvé</b>, puis <b>🧺 Les trouvailles ici</b>.</p>
+        <p><b>« ＋ Nouvelle trouvaille ici »</b> (en haut de la liste) : date, espèces, quantité, état, météo, note et photos. La date est reprise de la photo quand c'est possible.</p>
         <p>Les photos sont réduites et <b>la position GPS cachée dedans est effacée</b> avant l'envoi. Elles suivent la visibilité du coin.</p>
-        <p>« Météo, bilan et détails » : pluie des derniers jours, avis du conseiller, bilan du coin (meilleurs mois), accès au massif, modifier, partager.</p>
+        <p>« 📍 Le coin : météo, bilan et détails » : pluie des derniers jours, avis du conseiller, bilan du coin (meilleurs mois), accès au massif, modifier, partager.</p>
       </details>
 
       <details><summary>👪 Moi seul, Famille, partager</summary>

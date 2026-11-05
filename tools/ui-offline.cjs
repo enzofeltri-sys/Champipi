@@ -33,7 +33,7 @@ let offline = false;
     return send([]);
   });
   await page.addInitScript(([ref, me]) => {
-    localStorage.setItem('champi-tuto', '2');
+    localStorage.setItem('champi-tuto', '3');
     localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 9999999, user: { id: me, email: 'x@y.fr' } }));
     if (!localStorage.getItem('champi-view')) localStorage.setItem('champi-view', JSON.stringify({ lat: 43.32, lon: 5.765, zoom: 14 }));
   }, [REF, ME]);
@@ -88,7 +88,8 @@ let offline = false;
   await page.waitForFunction(() => document.querySelector('#offline-bar').hidden, null, { timeout: 20000 }).catch(() => {});
   await page.waitForTimeout(1500);
   console.log('RETOUR RÉSEAU · ordre des envois :', JSON.stringify(db.log));
-  console.log('bandeau :', await page.isVisible('#offline-bar') ? await page.textContent('#offline-bar') : '(caché)', '| en attente :', await page.locator('.pending-tag').count());
+  await page.waitForTimeout(3000);
+  console.log('bandeau :', await page.isVisible('#offline-bar') ? await page.textContent('#offline-bar') : '(caché)', '| en attente :', await page.locator('.pending-tag:visible').count(), await page.evaluate(() => [...document.querySelectorAll('.pending-tag')].map((e) => e.closest('li,div')?.textContent.trim().slice(0, 80))));
   console.log('ERREURS :', errors.length ? errors : 'aucune');
   await b.close();
 })();

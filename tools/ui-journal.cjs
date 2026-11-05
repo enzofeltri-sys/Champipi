@@ -35,7 +35,7 @@ const db = {
     send(body);
   });
   await page.addInitScript(([ref, me, seen]) => {
-    localStorage.setItem('champi-tuto', '2');
+    localStorage.setItem('champi-tuto', '3');
     if (!sessionStorage.getItem('init')) { localStorage.setItem('champi-journal-vu', seen); sessionStorage.setItem('init', '1'); }   // dernière visite : il y a 2 h
     localStorage.setItem('champi-view', JSON.stringify({ lat: 43.33, lon: 5.63, zoom: 12 }));
     localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 9999999, user: { id: me, email: 'x@y.fr' } }));

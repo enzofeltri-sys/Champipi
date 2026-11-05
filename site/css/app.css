@@ -502,3 +502,9 @@ body:has(#screen-app:not([hidden])) { overflow: hidden; height: 100dvh; }
 .pheno .pb { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; }
 .pheno .pb i { display: block; width: 100%; min-height: 2px; background: var(--primary); border-radius: 4px 4px 0 0; }
 .pheno .pb span { font-size: .7rem; color: var(--muted); margin-top: 2px; }
+
+/* Nouveau coin : la cueillette d'abord, le coin ensuite */
+.nf { display: flex; flex-direction: column; gap: 8px; }
+.nf h3 { margin: 6px 0 0; font-size: 1rem; }
+.nf #nf-body { padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+#dlg-near .bar-grid { margin-top: 6px; }

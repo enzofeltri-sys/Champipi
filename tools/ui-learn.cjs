@@ -29,7 +29,7 @@ const finds = ['2024-10-28', '2024-11-08', '2025-10-25', '2025-11-12'].map((d, i
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(obj && Array.isArray(body) ? body[0] ?? null : body) });
   });
   await page.addInitScript(([ref, me]) => {
-    localStorage.setItem('champi-tuto', '2');
+    localStorage.setItem('champi-tuto', '3');
     localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 9999999, user: { id: me, email: 'x@y.fr' } }));
   }, [REF, ME]);
   await page.goto(SITE); await page.waitForSelector('#screen-app:not([hidden])');

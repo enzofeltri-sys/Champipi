@@ -81,7 +81,7 @@ const ME = '11111111-1111-1111-1111-111111111111';
     return send({ message: 'non simulé ' + m + ' ' + path }, 500);
   });
   await page.addInitScript(([ref, me]) => {
-    localStorage.setItem('champi-tuto', '2'); localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 99999, user: { id: me, email: 'enzo@test.fr' } }));
+    localStorage.setItem('champi-tuto', '3'); localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 99999, user: { id: me, email: 'enzo@test.fr' } }));
     localStorage.setItem('champi-view', JSON.stringify({ lat: 43.53, lon: 5.585, zoom: 13 }));
   }, [REF, ME]);
 
@@ -91,9 +91,10 @@ const ME = '11111111-1111-1111-1111-111111111111';
   await page.click('#btn-add');
   await page.setInputFiles('#add-photo', PHOTO);
   await page.waitForTimeout(500); await page.click('#add-here');
+  await page.waitForSelector('#dlg-edit[open], #dlg-near[open]'); if (await page.isVisible('#dlg-near')) await page.click('#near-no'); 
   await page.waitForSelector('#dlg-edit[open]');
   console.log('coords lues dans la photo :', await page.textContent('#edit-coords'));
-  console.log('photo en attente visible :', await page.isVisible('#edit-photo'));
+  console.log('photo jointe à la cueillette :', await page.locator('#nf-previews img').count());
   await page.fill('#edit-name', 'Croix de Provence');
   await page.click('#edit-more summary');
   await page.waitForFunction(() => document.querySelector('#edit-altitude').value !== '', null, { timeout: 10000 }).catch(() => {});
@@ -108,7 +109,7 @@ const ME = '11111111-1111-1111-1111-111111111111';
   await page.waitForTimeout(500);
   const spot = data.spots[0];
   console.log('coin enregistré :', JSON.stringify({ trees: spot.trees, soil: spot.soil, exposure: spot.exposure, altitude: spot.altitude, access: spot.access }));
-  console.log('photo du coin envoyée :', data.photos.length, [...data.files.keys()]);
+  console.log('photo de la 1re trouvaille envoyée :', data.photos.length, [...data.files.keys()]);
 
   // 2. Trouvaille avec 2 photos
   await page.click('#find-add summary');
@@ -119,13 +120,13 @@ const ME = '11111111-1111-1111-1111-111111111111';
   console.log('aperçus :', await page.locator('#find-previews img').count());
   await page.screenshot({ path: `${OUT}/21-trouvaille-form.png` });
   await page.click('#find-form button[type=submit]');
-  await page.waitForFunction(() => document.querySelectorAll('#find-list .photos img').length === 2, null, { timeout: 15000 });
+  await page.waitForFunction(() => document.querySelectorAll('#find-list .photos img').length >= 2, null, { timeout: 15000 });
   await page.waitForTimeout(3000);
   console.log('fetch :', await page.evaluate(async () => { const i = document.querySelector('#dlg-spot img[data-path]'); const r = await fetch(i.src); return r.status + ' ' + r.headers.get('content-type') + ' ' + (await r.arrayBuffer()).byteLength + ' ' + i.src.slice(-80); }));
   console.log('imgs :', JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('#dlg-spot img[data-path]')].map((i) => [i.dataset.path.slice(-12), (i.src || '').slice(0, 90), i.naturalWidth]))));
   await page.screenshot({ path: `${OUT}/22-journal-photos.png` });
   console.log('lignes photos :', data.photos.length, 'dont trouvaille :', data.photos.filter((p) => p.find_id).length);
-  console.log('trouvaille :', JSON.stringify((({ quantity, condition, weather, species }) => ({ quantity, condition, weather, species }))(data.finds[0])));
+  console.log('trouvaille :', JSON.stringify((({ quantity, condition, weather, species }) => ({ quantity, condition, weather, species }))(data.finds.at(-1))));
 
   // Vérifie les fichiers envoyés : taille, dimensions, absence de GPS
   for (const [k, buf] of data.files) {
@@ -136,12 +137,13 @@ const ME = '11111111-1111-1111-1111-111111111111';
   console.log('photo originale :', (fs.statSync(PHOTO).size / 1024).toFixed(0), 'Ko, GPS=', JSON.stringify(exifGps(fs.readFileSync(PHOTO).buffer)));
 
   // 3. Visionneuse + suppression d'une photo
+  const nImg = await page.locator('#find-list .photos img').count();
   await page.locator('#find-list .photos .thumb').first().click();
   await page.waitForFunction(() => document.querySelector('#photo-full').naturalWidth > 0, null, { timeout: 10000 });
   await page.screenshot({ path: `${OUT}/23-visionneuse.png` });
   page.once('dialog', (d) => d.accept());
   await page.click('#photo-delete');
-  await page.waitForFunction(() => document.querySelectorAll('#find-list .photos img').length === 1, null, { timeout: 10000 });
+  await page.waitForFunction(() => (n) => document.querySelectorAll('#find-list .photos img').length === n - 1, nImg, { timeout: 10000 });
   console.log('après suppression : lignes', data.photos.length, 'fichiers', data.files.size, 'retirés', data.removed.length);
 
   // 4. Supprimer le coin → fichiers supprimés
