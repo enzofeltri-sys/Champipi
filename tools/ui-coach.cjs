@@ -24,7 +24,7 @@ const REF = 'vvegujltsjgwszeloyaz', ME = '11111111-1111-1111-1111-111111111111';
   await page.goto(SITE); await page.waitForSelector('#screen-app:not([hidden])');
   await page.waitForSelector('#coach:not([hidden])', { timeout: 5000 });
   const steps = [];
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 13; i++) {
     await page.waitForTimeout(350);
     const info = await page.evaluate(() => {
       const bub = document.querySelector('#coach-bubble').getBoundingClientRect(), hole = document.querySelector('#coach-hole');
@@ -37,7 +37,7 @@ const REF = 'vvegujltsjgwszeloyaz', ME = '11111111-1111-1111-1111-111111111111';
       return { titre: document.querySelector('#coach-text b').textContent, dans_ecran: inside, fleche_vers_bouton_px: gap, sens: a.className.replace('coach-arrow', '').trim() || '—' };
     });
     steps.push(info);
-    if ([0, 2, 6, 8, 9].includes(i)) await page.screenshot({ path: `${OUT}/c${i + 1}.png` });
+    if ([2, 3, 4].includes(i)) await page.screenshot({ path: `${OUT}/c${i + 1}.png` });
     await page.click('#coach-next');
   }
   console.log(steps.map((s, i) => `${i + 1}. ${s.titre} · bulle dans l'écran : ${s.dans_ecran} · flèche ${s.sens} à ${s.fleche_vers_bouton_px ?? '—'} px du bouton`).join('\n'));

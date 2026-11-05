@@ -491,3 +491,5 @@ button, .btn, .chip, .sp-chip, .rail-btn, summary { -webkit-user-select: none; u
 .fiche .bar-grid a.btn { text-decoration: none; }
 /* la visite guidée passe au-dessus du menu */
 .coach { z-index: 4000; }
+/* Menu : défile sur les petits écrans au lieu de dépasser */
+.menu { max-height: calc(100dvh - var(--top) - 64px); overflow-y: auto; overscroll-behavior: contain; }

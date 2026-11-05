@@ -1355,14 +1355,17 @@ $('#export-csv').addEventListener('click', () => {
 
 const COACH = [
   ['#species-bar', '🍄 Choisis un champignon', 'Touche une ou plusieurs pastilles : les forêts où il pousse se colorent (vert = bon moment, jaune = moyen, rouge = pas le moment). Le point de couleur sur la pastille dit pareil pour le secteur affiché.'],
-  ['#menu-btn', '☰ Le menu', 'Journal de la famille, liste de tes coins, conseiller, guide des espèces, cartes hors ligne, alertes, aide… et 🔄 pour actualiser.'],
+  ['#menu-btn', '☰ Le menu', 'Tout le reste est ici : journal de la famille, liste de tes coins, conseiller, guide, cartes hors ligne, alertes, aide.'],
+  ['.menu-top', '👤 Ton profil et 🔄', 'Touche ton nom pour choisir ton logo (il marque tes coins et tes trouvailles) et sauvegarder tes données. 🔄 recharge tout : coins, journal, météo.', 'menu'],
+  ['#journal-btn', '📰 Le journal de la famille', 'Toutes les trouvailles de la famille et les alertes reçues, du plus récent au plus ancien. Le chiffre vert = les nouveautés. Les notifications ouvrent ce journal.', 'menu'],
+  ['#alerts-btn', '🔔 Les alertes', 'Active-les sur ce téléphone : une notification le matin quand un coin devient favorable, et quand quelqu\'un de la famille note une trouvaille. Chaque sorte se coupe séparément.', 'menu'],
   ['#guide-btn', '📖 Le guide des espèces', 'Dans le menu : le calendrier de chaque espèce. Touche une espèce pour sa fiche complète : comment la reconnaître, où la chercher, ses sosies dangereux, et vos trouvailles.', 'menu'],
   ['#rail-spots', '⭐ Tes coins', 'Affiche ou masque les épingles. Touche une épingle pour voir ce que tu y as trouvé et y aller.'],
   ['#rail-rain', '🌧️ La pluie', 'La pluie tombée ces 10 derniers jours sur la région : plus c\'est bleu foncé, plus il a plu.'],
   ['#rail-base', '🛰️ Photo aérienne', 'Passe en photo aérienne pour voir les clairières et les chemins, puis revient au plan.'],
-  ['#rail-here', '🌱 Ici ?', 'Place le viseur sur un endroit (ou prends ta position) : l\'appli dit la forêt, le sol, l\'altitude, la pluie… et les champignons dont c\'est le milieu.'],
+  ['#rail-here', '🌱 Ici ?', 'Place le viseur sur un endroit (ou prends ta position) : la forêt, le sol, l\'altitude, l\'exposition, la pluie… et les champignons dont c\'est le milieu.'],
   ['#rail-locate', '📍 Moi', 'Centre la carte sur ta position (point bleu).'],
-  ['#btn-add', '＋ Noter un coin', 'Fais glisser la carte pour mettre le viseur sur ton coin (ou « Ma position » / « Photo »), puis « C\'est ici ».'],
+  ['#btn-add', '＋ Noter un coin', 'Fais glisser la carte pour mettre le viseur sur ton coin (ou « Ma position » / « Photo »), puis « C\'est ici ». Ensuite, note chaque trouvaille dans son journal : c\'est ce qui rend l\'appli plus précise pour toute la famille.'],
   [null, '⚠️ Sécurité', 'L\'appli n\'identifie aucun champignon. Fais contrôler <b>chaque récolte</b> par un pharmacien ou une association mycologique. Antipoison Marseille : <a class="tel" href="tel:+33491752525">04 91 75 25 25</a>.'],
 ];
 let coachI = 0;
@@ -1370,6 +1373,7 @@ function placeCoach() {
   const [sel, title, txt, needs] = COACH[coachI];
   $('#menu').hidden = needs !== 'menu';   // étape dans le menu : on l'ouvre le temps de l'expliquer
   const el = sel ? document.querySelector(sel) : null;
+  if (el && needs === 'menu') el.scrollIntoView({ block: 'nearest' });   // petit écran : le bouton du menu doit être visible
   const r = el && el.offsetParent !== null ? el.getBoundingClientRect() : null;
   const hole = $('#coach-hole'), bub = $('#coach-bubble'), arrow = $('#coach-arrow');
   $('#coach-text').innerHTML = `<b>${title}</b><p>${txt}</p>`;
