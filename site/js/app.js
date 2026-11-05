@@ -25,7 +25,11 @@ import { avatarOf, avatarHtml, AVATAR_EMOJIS, AVATAR_COLORS } from './avatars.js
 document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });       // Safari iOS
 document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false });
 document.addEventListener('touchmove', (e) => {
-  if (e.touches.length > 1 && !e.target.closest?.('#map')) e.preventDefault();
+  if (e.touches.length > 1 && !e.target.closest?.('#map')) { e.preventDefault(); return; }
+  // Sur l'écran de la carte, seul ce qui défile vraiment bouge (carte, menu, fenêtres, pastilles) :
+  // le reste ne doit jamais faire glisser la page (sinon la carte « saute » derrière le menu).
+  const t = e.target;
+  if (t.closest?.('#screen-app') && !t.closest('#map, dialog, .menu, .species-bar, #coach')) e.preventDefault();
 }, { passive: false });
 // Double-toucher : désactivé par « touch-action: manipulation » (CSS), sans avaler les touchers rapides.
 import { tilesFor, bestMaxZoom, PLAN_IGN, TILE_CACHE, TILE_LIMIT, isNetworkError, queue, mergePending, sendOrder } from './offline.js';
@@ -1698,7 +1702,19 @@ function renderGuide() {
   }).join('');
 }
 // Fiche détaillée d'une espèce (depuis le guide ou le bandeau 📖)
+// Calendrier observé en PACA (iNaturalist), chargé une fois.
+let pheno = null;
+fetch('data/phenology-paca.json').then((r) => (r.ok ? r.json() : null)).then((j) => { pheno = j; if ($('#dlg-fiche').open && ficheId) renderFiche(ficheId); }).catch(() => {});
+let ficheId = null;
+function phenoHtml(id) {
+  const p = pheno?.species?.[id]; if (!p) return '';
+  const max = Math.max(1, ...p.months);
+  return `<h3>🗓️ Quand on le trouve en PACA</h3>
+    <div class="pheno">${MONTHS.map((n, i) => `<div class="pb" title="${n} : ${p.months[i]} observation${p.months[i] > 1 ? 's' : ''}"><i style="height:${Math.round((p.months[i] / max) * 100)}%"></i><span>${n[0].toUpperCase()}</span></div>`).join('')}</div>
+    <p class="small muted">${p.total} observations vérifiées sur iNaturalist en Provence-Alpes-Côte d'Azur, toutes années confondues.${p.total < 20 ? ' Peu de données : le calendrier de l\'appli reste celui des connaissances générales.' : ' Le calendrier de l\'appli a été réglé sur ces observations.'}</p>`;
+}
 function renderFiche(id) {
+  ficheId = id;
   const s = SPECIES.find((x) => x.id === id), g = GUIDE[id] ?? {}, info = INFO[id];
   if (!s || !info) return;
   const m = month();
@@ -1718,6 +1734,7 @@ function renderFiche(id) {
     <div class="months">${cells}</div>
     <p class="small muted">Saison : ${esc(seasonText(id))}${lateText(id) ? ` · encore possible ${esc(lateText(id))}` : ''}${(s.peak ?? []).length ? ` · pic en ${esc(s.peak.map((x) => MONTHS[x - 1]).join(', '))}` : ''}</p>
     <p class="fiche-now">${momentLine(id)}</p>
+    ${phenoHtml(id)}
     <h3>🔎 Le reconnaître</h3>
     <dl class="fiche-look">${info.look.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
     <h3>🌲 Où le chercher</h3>

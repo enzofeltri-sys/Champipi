@@ -1,18 +1,20 @@
 // Logique pure du Carnet de champignons (sans DOM, testée avec node --test).
 
 // Calendrier des espèces : mois 1 = janvier … 12 = décembre.
+// Calendrier : saisons et pics réglés le 5 novembre 2026 sur les observations iNaturalist en PACA
+// (site/data/phenology-paca.json) quand il y en avait assez (plus de 20) ; sinon, connaissances générales.
 export const SPECIES = [
-  { id: 'lactaire-sanguin', label: 'Lactaire sanguin', months: [10, 11, 12, 1], peak: [11] },
-  { id: 'petit-gris', label: 'Petit-gris', months: [11, 12, 1] },
-  { id: 'cepe', label: 'Cèpe', months: [6, 7, 9, 10, 11], peak: [10], late: [12] },
-  { id: 'girolle', label: 'Girolle', months: [6, 9, 10, 11], late: [12] },
-  { id: 'pied-de-mouton', label: 'Pied-de-mouton', months: [10, 11, 12, 1], late: [2] },
+  { id: 'lactaire-sanguin', label: 'Lactaire sanguin', months: [9, 10, 11, 12, 1], peak: [10, 11] },
+  { id: 'petit-gris', label: 'Petit-gris', months: [10, 11, 12, 1], peak: [10, 11] },
+  { id: 'cepe', label: 'Cèpe', months: [6, 7, 8, 9, 10, 11], peak: [10], late: [12] },
+  { id: 'girolle', label: 'Girolle', months: [6, 8, 9, 10, 11, 12], peak: [10, 11] },
+  { id: 'pied-de-mouton', label: 'Pied-de-mouton', months: [10, 11, 12, 1], peak: [11], late: [2] },
   { id: 'trompette', label: 'Trompette-de-la-mort', months: [10, 11, 12], late: [1] },
-  { id: 'oronge', label: 'Oronge', months: [8, 9, 10, 11] },
-  { id: 'coulemelle', label: 'Coulemelle', months: [9, 10, 11] },
+  { id: 'oronge', label: 'Oronge', months: [8, 9, 10, 11], peak: [9, 10] },
+  { id: 'coulemelle', label: 'Coulemelle', months: [8, 9, 10, 11, 12], peak: [10] },
   { id: 'berigoule', label: 'Bérigoule (pleurote du panicaut)', months: [3, 4, 5, 10, 11, 12] },
-  { id: 'morille', label: 'Morille', months: [3, 4, 5] },
-  { id: 'saint-georges', label: 'Tricholome de la Saint-Georges', months: [4, 5] },
+  { id: 'morille', label: 'Morille', months: [3, 4, 5], peak: [4, 5] },
+  { id: 'saint-georges', label: 'Tricholome de la Saint-Georges', months: [4, 5, 6], peak: [5] },
   { id: 'chanterelle-grise', label: 'Chanterelle grise', months: [10, 11, 12], late: [1] },
   { id: 'autre', label: 'Autre', months: [] },
 ];

@@ -493,3 +493,12 @@ button, .btn, .chip, .sp-chip, .rail-btn, summary { -webkit-user-select: none; u
 .coach { z-index: 4000; }
 /* Menu : défile sur les petits écrans au lieu de dépasser */
 .menu { max-height: calc(100dvh - var(--top) - 64px); overflow-y: auto; overscroll-behavior: contain; }
+/* L'écran de la carte est fixe : rien ne fait glisser la page derrière le menu */
+#screen-app { position: fixed; inset: 0; overflow: hidden; }
+body:has(#screen-app:not([hidden])) { overflow: hidden; height: 100dvh; }
+.menu { touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+/* Calendrier observé (iNaturalist) dans la fiche d'une espèce */
+.pheno { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; height: 70px; align-items: end; }
+.pheno .pb { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; }
+.pheno .pb i { display: block; width: 100%; min-height: 2px; background: var(--primary); border-radius: 4px 4px 0 0; }
+.pheno .pb span { font-size: .7rem; color: var(--muted); margin-top: 2px; }

@@ -1,0 +1,251 @@
+{
+ "source": "iNaturalist (observations vérifiables en Provence-Alpes-Côte d'Azur, toutes années)",
+ "fetched": "2026-11-05",
+ "species": {
+  "lactaire-sanguin": {
+   "months": [
+    2,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    12,
+    30,
+    24,
+    15
+   ],
+   "total": 84,
+   "taxa": [
+    "Lactarius sanguifluus",
+    "Lactarius vinosus"
+   ]
+  },
+  "petit-gris": {
+   "months": [
+    0,
+    1,
+    0,
+    0,
+    0,
+    2,
+    0,
+    0,
+    5,
+    34,
+    25,
+    18
+   ],
+   "total": 85,
+   "taxa": [
+    "Tricholoma terreum"
+   ]
+  },
+  "cepe": {
+   "months": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    8,
+    7,
+    10,
+    4,
+    0
+   ],
+   "total": 30,
+   "taxa": [
+    "Boletus edulis",
+    "Boletus aereus",
+    "Boletus reticulatus",
+    "Boletus pinophilus"
+   ]
+  },
+  "girolle": {
+   "months": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    5,
+    2,
+    12,
+    10,
+    4
+   ],
+   "total": 34,
+   "taxa": [
+    "Cantharellus cibarius"
+   ]
+  },
+  "pied-de-mouton": {
+   "months": [
+    5,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    2,
+    2,
+    9,
+    14,
+    6
+   ],
+   "total": 38,
+   "taxa": [
+    "Hydnum repandum",
+    "Hydnum rufescens"
+   ]
+  },
+  "trompette": {
+   "months": [
+    2,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    5,
+    1,
+    1
+   ],
+   "total": 9,
+   "taxa": [
+    "Craterellus cornucopioides"
+   ]
+  },
+  "oronge": {
+   "months": [
+    0,
+    0,
+    0,
+    1,
+    0,
+    1,
+    0,
+    0,
+    10,
+    14,
+    3,
+    0
+   ],
+   "total": 29,
+   "taxa": [
+    "Amanita caesarea"
+   ]
+  },
+  "coulemelle": {
+   "months": [
+    4,
+    0,
+    1,
+    1,
+    5,
+    2,
+    2,
+    14,
+    44,
+    88,
+    40,
+    8
+   ],
+   "total": 209,
+   "taxa": [
+    "Macrolepiota procera"
+   ]
+  },
+  "berigoule": {
+   "months": [
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    2,
+    2,
+    1,
+    0
+   ],
+   "total": 6,
+   "taxa": [
+    "Pleurotus eryngii"
+   ]
+  },
+  "morille": {
+   "months": [
+    0,
+    0,
+    19,
+    22,
+    26,
+    3,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0
+   ],
+   "total": 71,
+   "taxa": [
+    "Morchella"
+   ]
+  },
+  "saint-georges": {
+   "months": [
+    0,
+    0,
+    0,
+    0,
+    6,
+    5,
+    0,
+    0,
+    1,
+    1,
+    0,
+    0
+   ],
+   "total": 13,
+   "taxa": [
+    "Calocybe gambosa"
+   ]
+  },
+  "chanterelle-grise": {
+   "months": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    2,
+    1,
+    6,
+    2,
+    0
+   ],
+   "total": 11,
+   "taxa": [
+    "Craterellus tubaeformis"
+   ]
+  }
+ }
+}
