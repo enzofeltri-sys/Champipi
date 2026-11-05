@@ -2,8 +2,9 @@ import { SUPABASE_URL, SUPABASE_KEY, START } from './config.js';
 import {
   SPECIES, speciesLabel, inSeason, seasonText, parseCoords, formatCoords, directionsUrl,
   sortSpots, filterSpots, spotSpecies, lastFinds, formatDate, todayIso, escapeHtml as esc,
-  round6, MASSIFS, FORBIDDEN,
+  round6, MASSIFS, FORBIDDEN, TREES, SOILS, EXPOSURES, QUANTITIES, CONDITIONS, labelOf, exifGps,
 } from './logic.js';
+import { createPhotoStore, thumbPath } from './photos.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -20,9 +21,11 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { flowType: 'implicit', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
 });
 
+const photos = createPhotoStore(sb);
+
 const state = {
   user: null, profile: null,
-  spots: [], finds: [],
+  spots: [], finds: [], photos: [],
   scope: store.get('champi-scope') || 'all',
   species: '',
   draft: null,          // { lat, lon, id?: string } pendant la création / modification
@@ -256,15 +259,19 @@ function pinIcon(kind, seasonal = false, draft = false) {
 // Données
 
 async function loadData() {
-  const [spots, finds] = await Promise.all([
-    sb.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, note, created_at, updated_at, author:champi_profiles(display_name)'),
-    sb.from('champi_finds').select('id, spot_id, user_id, found_on, species, note, created_at, author:champi_profiles(display_name)')
+  const [spots, finds, pics] = await Promise.all([
+    sb.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, note, trees, soil, exposure, access, altitude, created_at, updated_at, author:champi_profiles(display_name)'),
+    sb.from('champi_finds').select('id, spot_id, user_id, found_on, species, note, quantity, condition, weather, created_at, author:champi_profiles(display_name)')
       .order('found_on', { ascending: false }).order('created_at', { ascending: false }),
+    sb.from('champi_photos').select('id, spot_id, find_id, user_id, path, created_at, author:champi_profiles(display_name)')
+      .order('created_at', { ascending: true }),
   ]);
   if (spots.error) throw spots.error;
   if (finds.error) throw finds.error;
+  if (pics.error) throw pics.error;
   state.spots = spots.data;
   state.finds = finds.data;
+  state.photos = pics.data;
   render();
   if (state.openSpotId && $('#dlg-spot').open) renderSpot(state.openSpotId);
 }
@@ -393,7 +400,16 @@ const chipsHtml = (selected, withSeason = true) => SPECIES.map((s) => {
   return `<button type="button" class="chip${on ? ' on' : ''}" data-sp="${s.id}" aria-pressed="${on}" title="${esc(seasonText(s.id))}">${esc(s.label)}${inNow ? ' <span class="in">●</span>' : ''}</button>`;
 }).join('');
 function chipValues(sel) { return $$(`${sel} .chip.on`).map((c) => c.dataset.sp); }
-for (const sel of ['#edit-species', '#find-species']) {
+const treeChips = (selected) => TREES.map((t) => {
+  const on = selected.includes(t.id);
+  return `<button type="button" class="chip${on ? ' on' : ''}" data-sp="${t.id}" aria-pressed="${on}">${esc(t.label)}</button>`;
+}).join('');
+const options = (list) => list.map((x) => (typeof x === 'string' ? `<option value="${x}">${x}</option>` : `<option value="${x.id}">${esc(x.label)}</option>`)).join('');
+$('#edit-soil').innerHTML += options(SOILS);
+$('#edit-exposure').innerHTML += options(EXPOSURES);
+$('#find-quantity').innerHTML += options(QUANTITIES);
+$('#find-condition').innerHTML += options(CONDITIONS);
+for (const sel of ['#edit-species', '#find-species', '#edit-trees']) {
   $(sel).addEventListener('click', (e) => {
     const c = e.target.closest('.chip'); if (!c) return;
     c.classList.toggle('on'); c.setAttribute('aria-pressed', String(c.classList.contains('on')));
@@ -414,15 +430,47 @@ function openEdit() {
     $('#edit-note').value = s?.note ?? '';
     editVis = s?.visibility ?? (store.get('champi-last-vis') || 'private');
     $('#edit-species').innerHTML = chipsHtml(s?.species ?? []);
+    $('#edit-trees').innerHTML = treeChips(s?.trees ?? []);
+    $('#edit-soil').value = s?.soil ?? '';
+    $('#edit-exposure').value = s?.exposure ?? '';
+    $('#edit-access').value = s?.access ?? '';
+    $('#edit-altitude').value = s?.altitude ?? '';
+    $('#edit-altitude').dataset.auto = s?.altitude != null ? 'no' : 'yes';
+    $('#edit-alt-src').textContent = '';
+    $('#edit-more').open = !!(s && (s.trees?.length || s.soil || s.exposure || s.access || s.altitude != null));
     $('#edit-delete').hidden = !s;
     editFormFilled = true;
   }
   syncVis();
   $('#edit-coords').textContent = formatCoords(d.lat, d.lon);
+  $('#edit-photo').hidden = !d.photo;
+  if (d.photo) $('#edit-photo-img').src = URL.createObjectURL(d.photo);
+  fillAltitude(d);
   showError('#edit-error');
   $('#dlg-edit').showModal();
   if (!d.existing) setTimeout(() => $('#edit-name').focus(), 50);
 }
+
+// Altitude automatique (service IGN, sans clé) tant que l'utilisateur ne l'a pas saisie lui-même.
+async function fetchAltitude(lat, lon) {
+  try {
+    const r = await fetch(`https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?lon=${lon}&lat=${lat}&resource=ign_rge_alti_wld&zonly=true`);
+    const z = (await r.json()).elevations?.[0];
+    return typeof z === 'number' && z > -500 && z < 5000 ? Math.round(z) : null;
+  } catch { return null; }
+}
+async function fillAltitude(d) {
+  const input = $('#edit-altitude');
+  const key = `${d.lat},${d.lon}`;
+  if (input.dataset.auto !== 'yes' || input.dataset.for === key) return;
+  input.dataset.for = key;
+  const z = await fetchAltitude(d.lat, d.lon);
+  if (z != null && input.dataset.auto === 'yes' && state.draft === d) {
+    input.value = z; $('#edit-alt-src').textContent = '(IGN, automatique)';
+  }
+}
+$('#edit-altitude').addEventListener('input', () => { $('#edit-altitude').dataset.auto = 'no'; $('#edit-alt-src').textContent = ''; });
+$('#edit-photo-drop').addEventListener('click', () => { if (state.draft) state.draft.photo = null; $('#edit-photo').hidden = true; });
 
 function closeEdit(discard) {
   $('#dlg-edit').close();
@@ -442,6 +490,11 @@ $('#edit-form').addEventListener('submit', async (e) => {
     species: chipValues('#edit-species'),
     note: $('#edit-note').value.trim() || null,
     lat: d.lat, lon: d.lon,
+    trees: chipValues('#edit-trees'),
+    soil: $('#edit-soil').value || null,
+    exposure: $('#edit-exposure').value || null,
+    access: $('#edit-access').value.trim() || null,
+    altitude: $('#edit-altitude').value === '' ? null : Math.round(Number($('#edit-altitude').value)),
   };
   if (!row.name) { showError('#edit-error', 'Donne un nom au coin.'); return; }
   const btn = $('#edit-save'); busy(btn, true);
@@ -452,15 +505,22 @@ $('#edit-form').addEventListener('submit', async (e) => {
   busy(btn, false);
   if (error) { showError('#edit-error', `Enregistrement impossible : ${frError(error)}`); return; }
   store.set('champi-last-vis', row.visibility);
+  const pending = d.photo;
   closeEdit(true);
   toast(d.id ? 'Coin modifié ✔' : 'Coin enregistré ✔');
+  if (pending) {
+    try { await photos.upload({ spotId: data.id, file: pending }); }
+    catch (err) { toast(`Coin enregistré, mais photo non envoyée : ${frError(err)}`, 6000); }
+  }
   await loadData();
   openSpot(data.id);
 });
 
 $('#edit-delete').addEventListener('click', async () => {
   const d = state.draft; if (!d?.id) return;
-  if (!confirm(`Supprimer « ${d.existing.name} » et tout son journal ?`)) return;
+  if (!confirm(`Supprimer « ${d.existing.name} », tout son journal et ses photos ?`)) return;
+  try { await photos.removeFiles(state.photos.filter((p) => p.spot_id === d.id)); }
+  catch (err) { showError('#edit-error', `Photos non supprimées : ${frError(err)}`); return; }
   const { error } = await sb.from('champi_spots').delete().eq('id', d.id);
   if (error) { showError('#edit-error', frError(error)); return; }
   closeEdit(true);
@@ -496,6 +556,17 @@ $('#coords-form').addEventListener('submit', (e) => {
   if (!p) { e.preventDefault(); showError('#coords-error', 'Format non reconnu. Exemple : 43.5297, 5.4474'); return; }
   setTimeout(() => { map.setView([p.lat, p.lon], 16); startDraft(p.lat, p.lon); }, 0);
 });
+$('#coords-photo').addEventListener('change', async (e) => {
+  const file = e.target.files[0]; e.target.value = '';
+  if (!file) return;
+  const p = exifGps(await file.arrayBuffer());
+  if (!p) { showError('#coords-error', 'Pas de position dans cette photo : le téléphone l\'a sans doute retirée. Place l\'épingle à la main.'); return; }
+  $('#dlg-coords').close();
+  map.setView([p.lat, p.lon], 16);
+  startDraft(p.lat, p.lon);
+  state.draft.photo = file;
+  toast('Position lue dans la photo 📷');
+});
 
 // ---------------------------------------------------------------------------
 // Détail d'un coin et journal
@@ -524,7 +595,18 @@ function renderSpot(id) {
     : '<span class="muted small">Aucune espèce notée</span>';
   $('#spot-note').textContent = s.note || '';
   $('#spot-note').hidden = !s.note;
+  const det = [
+    ['Arbres', (s.trees ?? []).map((t) => labelOf(TREES, t)).join(', ')],
+    ['Terrain', s.soil ? labelOf(SOILS, s.soil) : ''],
+    ['Exposition', s.exposure ?? ''],
+    ['Altitude', s.altitude != null ? `${s.altitude} m` : ''],
+    ['Accès', s.access ?? ''],
+  ].filter(([, v]) => v);
+  $('#spot-details').innerHTML = det.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('');
+  $('#spot-details').hidden = !det.length;
   $('#spot-coords').textContent = `📌 ${formatCoords(s.lat, s.lon)}`;
+  $('#spot-photos').innerHTML = thumbs(state.photos.filter((p) => p.spot_id === id && !p.find_id));
+  $('#spot-photo-add').hidden = !mine;
   $('#spot-route').href = directionsUrl(s.lat, s.lon);
   $('#spot-edit').hidden = !mine;
 
@@ -533,16 +615,78 @@ function renderSpot(id) {
       <div class="head"><span>${formatDate(f.found_on)}</span>
         ${f.user_id === me ? `<button class="del" type="button" data-find="${f.id}">Supprimer</button>` : ''}</div>
       <div class="small muted">par ${esc(f.user_id === me ? 'moi' : f.author?.display_name ?? '?')}${f.species?.length ? ' · ' + esc(f.species.map(speciesLabel).join(', ')) : ''}</div>
+      ${findDetails(f)}
       ${f.note ? `<div class="note">${esc(f.note)}</div>` : ''}
+      <div class="photos">${thumbs(state.photos.filter((p) => p.find_id === f.id))}</div>
     </li>`).join('') : '<li class="muted small">Pas encore de trouvaille notée.</li>';
+  photos.hydrate($('#dlg-spot')).catch((err) => console.warn('photos', err));
 
   $('#find-add').open = false;
   $('#find-date').value = todayIso();
   $('#find-date').max = todayIso();
   $('#find-note').value = '';
   $('#find-species').innerHTML = chipsHtml([], true);
+  $('#find-quantity').value = ''; $('#find-condition').value = ''; $('#find-weather').value = '';
+  setFindFiles([]);
   showError('#find-error');
 }
+
+function thumbs(list) {
+  return list.map((p) => `<button type="button" class="thumb" data-photo="${p.id}" aria-label="Voir la photo"><img data-path="${esc(thumbPath(p.path))}" alt=""></button>`).join('');
+}
+function findDetails(f) {
+  const bits = [f.quantity && labelOf(QUANTITIES, f.quantity), f.condition && labelOf(CONDITIONS, f.condition), f.weather && `météo : ${f.weather}`].filter(Boolean);
+  return bits.length ? `<div class="small">${esc(bits.join(' · '))}</div>` : '';
+}
+
+// Photos à joindre à une trouvaille (aperçus locaux avant envoi)
+let findFiles = [];
+function setFindFiles(files) {
+  findFiles = files;
+  $('#find-previews').innerHTML = files.map((f, i) => `<span class="thumb"><img src="${URL.createObjectURL(f)}" alt=""><button type="button" class="x" data-drop="${i}" aria-label="Retirer">✕</button></span>`).join('');
+}
+$('#find-photos').addEventListener('change', (e) => { setFindFiles([...findFiles, ...e.target.files].slice(0, 6)); e.target.value = ''; });
+$('#find-previews').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-drop]'); if (!b) return;
+  setFindFiles(findFiles.filter((_, i) => i !== Number(b.dataset.drop)));
+});
+
+async function uploadAll(spotId, findId, files) {
+  let failed = 0;
+  for (let i = 0; i < files.length; i++) {
+    toast(`Envoi des photos ${i + 1}/${files.length}…`, 60000);
+    try { await photos.upload({ spotId, findId, file: files[i] }); } catch (err) { failed++; console.warn(err); }
+  }
+  $('#toast').hidden = true;
+  if (failed) toast(`${failed} photo(s) non envoyée(s). Réessaie avec un meilleur réseau.`, 6000);
+}
+
+$('#spot-photo-input').addEventListener('change', async (e) => {
+  const files = [...e.target.files].slice(0, 6); e.target.value = '';
+  if (!files.length || !state.openSpotId) return;
+  await uploadAll(state.openSpotId, null, files);
+  await loadData();
+});
+
+// Visionneuse
+let viewing = null;
+$('#dlg-spot').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-photo]'); if (!b) return;
+  const p = state.photos.find((x) => x.id === b.dataset.photo); if (!p) return;
+  viewing = p;
+  $('#photo-full').removeAttribute('src');
+  $('#photo-meta').textContent = `par ${p.user_id === state.user.id ? 'moi' : p.author?.display_name ?? '?'} · ${formatDate(p.created_at)}`;
+  $('#photo-delete').hidden = p.user_id !== state.user.id;
+  $('#dlg-photo').showModal();
+  try { $('#photo-full').src = (await photos.urls([p.path]))[p.path]; } catch (err) { toast(frError(err)); }
+});
+$('#dlg-photo .js-close').addEventListener('click', () => $('#dlg-photo').close());
+$('#photo-delete').addEventListener('click', async () => {
+  if (!viewing || !confirm('Supprimer cette photo ?')) return;
+  try { await photos.remove(viewing); } catch (err) { toast(frError(err)); return; }
+  $('#dlg-photo').close();
+  await loadData();
+});
 
 $('#dlg-spot').addEventListener('close', () => { state.openSpotId = null; });
 $('#dlg-spot .js-close').addEventListener('click', () => $('#dlg-spot').close());
@@ -563,18 +707,25 @@ $('#find-form').addEventListener('submit', async (e) => {
     found_on: $('#find-date').value,
     species: chipValues('#find-species'),
     note: $('#find-note').value.trim() || null,
+    quantity: $('#find-quantity').value || null,
+    condition: $('#find-condition').value || null,
+    weather: $('#find-weather').value.trim() || null,
   };
   const btn = e.submitter; busy(btn, true);
-  const { error } = await sb.from('champi_finds').insert(row);
+  const { data, error } = await sb.from('champi_finds').insert(row).select('id').single();
+  if (error) { busy(btn, false); showError('#find-error', `Ajout impossible : ${frError(error)}`); return; }
+  const files = findFiles;
+  if (files.length) await uploadAll(row.spot_id, data.id, files);
   busy(btn, false);
-  if (error) { showError('#find-error', `Ajout impossible : ${frError(error)}`); return; }
   toast('Trouvaille notée ✔');
   await loadData();
 });
 
 $('#find-list').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-find]'); if (!b) return;
-  if (!confirm('Supprimer cette trouvaille ?')) return;
+  if (!confirm('Supprimer cette trouvaille et ses photos ?')) return;
+  try { await photos.removeFiles(state.photos.filter((p) => p.find_id === b.dataset.find)); }
+  catch (err) { toast(frError(err)); return; }
   const { error } = await sb.from('champi_finds').delete().eq('id', b.dataset.find);
   if (error) { toast(frError(error)); return; }
   await loadData();

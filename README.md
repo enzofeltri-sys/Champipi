@@ -41,11 +41,20 @@ Les migrations sont dans `supabase/migrations/`. Règles (RLS) :
 - trouvailles : lecture et ajout si le coin m'est visible ; suppression de mes propres trouvailles ;
 - une personne connectée hors de la liste ne voit rien et a un message clair.
 
+## Photos
+
+- Stockées dans le bucket privé Supabase `champi-photos` (chemin `<id du coin>/<uuid>.jpg` + miniature `_t.jpg`).
+  Une photo suit les règles de son coin : invisible si le coin ne t'est pas visible.
+- Réduites sur le téléphone avant l'envoi (1600 px, ~250 Ko ; miniature 400 px). La réduction **efface la position GPS** de la photo.
+- « Depuis la position d'une photo » lit cette position *avant* réduction pour placer l'épingle (souvent absente sur iPhone).
+- Offre gratuite Supabase : 1 Go de fichiers pour tout le projet « Garmin » (≈ 4 000 photos).
+
 ## Tester en local
 
 ```sh
 cd site && python3 -m http.server 5173   # puis http://localhost:5173
 node tools/ui-mock.cjs http://localhost:5173/ shots   # parcours Chromium avec une fausse base
+node tools/ui-photos.cjs http://localhost:5173/ shots <photo.jpg avec GPS>   # parcours photos et détails
 ```
 
 ## Sécurité

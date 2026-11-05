@@ -102,3 +102,22 @@ test('divers', () => {
   assert.equal(escapeHtml('<img src=x onerror="a">'), '&lt;img src=x onerror=&quot;a&quot;&gt;');
   assert.equal(formatDate('2026-11-05'), '5 novembre 2026');
 });
+
+import { readFileSync } from 'node:fs';
+import { exifGps, fitSize } from '../site/js/logic.js';
+const buf = (f) => { const b = readFileSync(new URL(f, import.meta.url)); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength); };
+
+test('GPS d\'une photo JPEG', () => {
+  const p = exifGps(buf('./gps.jpg'));
+  assert.ok(Math.abs(p.lat - 43.529722) < 1e-5 && Math.abs(p.lon - 5.4475) < 1e-5, JSON.stringify(p));
+  const q = exifGps(buf('./gps-sw.jpg'));
+  assert.ok(q.lat < 0 && q.lon < 0);
+  assert.equal(exifGps(buf('./nogps.jpg')), null);
+  assert.equal(exifGps(new ArrayBuffer(10)), null);
+});
+
+test('réduction des photos', () => {
+  assert.deepEqual(fitSize(4032, 3024, 1600), { w: 1600, h: 1200 });
+  assert.deepEqual(fitSize(3024, 4032, 400), { w: 300, h: 400 });
+  assert.deepEqual(fitSize(800, 600, 1600), { w: 800, h: 600 });
+});

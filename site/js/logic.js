@@ -194,3 +194,71 @@ export const MASSIFS = [
 export const FORBIDDEN = [
   { name: 'Forêt relique de la Sainte-Baume — cueillette interdite', lat: 43.315, lon: 5.76, r: 1200 },
 ];
+
+// ---------------------------------------------------------------------------
+// Détails.
+export const TREES = [
+  { id: 'pin-alep', label: "Pin d'Alep" }, { id: 'pin-sylvestre', label: 'Pin sylvestre' },
+  { id: 'pin-maritime', label: 'Pin maritime' }, { id: 'chene-vert', label: 'Chêne vert' },
+  { id: 'chene-blanc', label: 'Chêne blanc' }, { id: 'chene-liege', label: 'Chêne-liège' },
+  { id: 'hetre', label: 'Hêtre' }, { id: 'chataignier', label: 'Châtaignier' },
+  { id: 'cedre', label: 'Cèdre' }, { id: 'meleze', label: 'Mélèze' },
+  { id: 'prairie', label: 'Prairie / pelouse' },
+];
+export const SOILS = [{ id: 'calcaire', label: 'Calcaire' }, { id: 'siliceux', label: 'Siliceux' }, { id: 'mixte', label: 'Mixte' }];
+export const EXPOSURES = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+export const QUANTITIES = [{ id: 'quelques', label: 'Quelques-uns' }, { id: 'panier', label: 'Un panier' }, { id: 'abondant', label: 'Abondant' }];
+export const CONDITIONS = [{ id: 'jeunes', label: 'Jeunes' }, { id: 'a-point', label: 'À point' }, { id: 'vieux', label: 'Vieux / véreux' }];
+export const labelOf = (list, id) => list.find((x) => x.id === id)?.label ?? id;
+
+// ---------------------------------------------------------------------------
+// Position GPS dans les métadonnées EXIF d'un JPEG (ArrayBuffer) → { lat, lon } ou null.
+export function exifGps(buffer) {
+  try {
+    const v = new DataView(buffer);
+    if (v.getUint16(0) !== 0xffd8) return null;
+    let off = 2;
+    while (off + 4 < v.byteLength) {
+      const marker = v.getUint16(off);
+      const size = v.getUint16(off + 2);
+      if (marker === 0xffe1 && v.getUint32(off + 4) === 0x45786966) return readTiffGps(v, off + 10);
+      if ((marker & 0xff00) !== 0xff00 || marker === 0xffda) return null;
+      off += 2 + size;
+    }
+  } catch { /* fichier tronqué ou bizarre */ }
+  return null;
+}
+
+function readTiffGps(v, t) {
+  const le = v.getUint16(t) === 0x4949;
+  const u16 = (o) => v.getUint16(t + o, le);
+  const u32 = (o) => v.getUint32(t + o, le);
+  const ifd = (o) => {
+    const n = u16(o); const out = {};
+    for (let i = 0; i < n; i++) {
+      const e = o + 2 + i * 12;
+      out[u16(e)] = { type: u16(e + 2), count: u32(e + 4), at: e + 8 };
+    }
+    return out;
+  };
+  const ifd0 = ifd(u32(4));
+  if (!ifd0[0x8825]) return null;
+  const gps = ifd(u32(ifd0[0x8825].at));
+  const ref = (tag) => (gps[tag] ? String.fromCharCode(v.getUint8(t + gps[tag].at)) : '');
+  const rat3 = (tag) => {
+    const g = gps[tag]; if (!g || g.type !== 5 || g.count < 3) return null;
+    const p = u32(g.at); const r = (i) => u32(p + i * 8) / (u32(p + i * 8 + 4) || 1);
+    return r(0) + r(1) / 60 + r(2) / 3600;
+  };
+  let lat = rat3(2), lon = rat3(4);
+  if (lat == null || lon == null || (lat === 0 && lon === 0)) return null;
+  if (ref(1) === 'S') lat = -lat;
+  if (ref(3) === 'W') lon = -lon;
+  return check(lat, lon);
+}
+
+/** Dimensions réduites en gardant les proportions (côté le plus long ≤ max). */
+export function fitSize(w, h, max) {
+  const k = Math.min(1, max / Math.max(w, h));
+  return { w: Math.round(w * k), h: Math.round(h * k) };
+}

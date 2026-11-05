@@ -163,7 +163,27 @@
       <span class="small">Espèces</span>
       <div id="edit-species" class="chips"></div>
       <label for="edit-note">Notes</label>
-      <textarea id="edit-note" rows="3" maxlength="2000" placeholder="Accès, repères, sous quels arbres…"></textarea>
+      <textarea id="edit-note" rows="3" maxlength="2000" placeholder="Repères, ce qui pousse, astuces…"></textarea>
+      <details id="edit-more" class="more">
+        <summary>Détails de l'endroit</summary>
+        <div class="stack">
+          <span class="small">Arbres / milieu</span>
+          <div id="edit-trees" class="chips"></div>
+          <div class="grid2">
+            <label>Terrain<select id="edit-soil"><option value="">—</option></select></label>
+            <label>Exposition<select id="edit-exposure"><option value="">—</option></select></label>
+          </div>
+          <label for="edit-altitude">Altitude (m) <span class="muted small" id="edit-alt-src"></span></label>
+          <input id="edit-altitude" type="number" inputmode="numeric" min="-500" max="5000" step="1">
+          <label for="edit-access">Accès et stationnement</label>
+          <textarea id="edit-access" rows="2" maxlength="1000" placeholder="Piste, parking, barrière…"></textarea>
+        </div>
+      </details>
+      <div id="edit-photo" class="pending-photo" hidden>
+        <img id="edit-photo-img" alt="">
+        <span class="small">Cette photo sera ajoutée au coin.</span>
+        <button id="edit-photo-drop" type="button" class="btn link">Retirer</button>
+      </div>
       <p class="small muted">📌 <span id="edit-coords"></span>
         <button id="edit-move" type="button" class="btn link">Ajuster l'épingle</button></p>
       <p id="edit-error" class="error" role="alert" hidden></p>
@@ -185,7 +205,11 @@
       <div id="spot-badges" class="badges"></div>
       <div id="spot-species" class="chips readonly"></div>
       <p id="spot-note" class="note"></p>
+      <dl id="spot-details" class="details"></dl>
       <p class="small muted" id="spot-coords"></p>
+      <div id="spot-photos" class="photos"></div>
+      <label id="spot-photo-add" class="btn small-btn">📷 Ajouter une photo du coin
+        <input id="spot-photo-input" type="file" accept="image/*" multiple hidden></label>
       <div class="row">
         <a id="spot-route" class="btn primary" target="_blank" rel="noopener">🧭 Itinéraire</a>
         <button id="spot-edit" class="btn" type="button">Modifier</button>
@@ -200,8 +224,17 @@
           <input id="find-date" type="date" required>
           <span class="small">Espèces trouvées</span>
           <div id="find-species" class="chips"></div>
+          <div class="grid2">
+            <label>Quantité<select id="find-quantity"><option value="">—</option></select></label>
+            <label>État<select id="find-condition"><option value="">—</option></select></label>
+          </div>
+          <label for="find-weather">Météo des jours d'avant</label>
+          <input id="find-weather" maxlength="300" placeholder="Ex. orage il y a 8 jours, doux">
           <label for="find-note">Note</label>
-          <textarea id="find-note" rows="2" maxlength="2000" placeholder="Quantité, état…"></textarea>
+          <textarea id="find-note" rows="2" maxlength="2000" placeholder="Où exactement, taille…"></textarea>
+          <label class="btn small-btn">📷 Ajouter des photos
+            <input id="find-photos" type="file" accept="image/*" multiple hidden></label>
+          <div id="find-previews" class="photos"></div>
           <p class="safety small">⚠️ Fais contrôler la récolte par un pharmacien ou une association mycologique. Antipoison : <a class="tel" href="tel:+33491752525">04 91 75 25 25</a></p>
           <p id="find-error" class="error" role="alert" hidden></p>
           <button class="btn primary" type="submit">Ajouter au journal</button>
@@ -220,12 +253,24 @@
       <label for="coords-input">Coordonnées GPS ou lien de carte</label>
       <input id="coords-input" autocomplete="off" placeholder="43.5297, 5.4474">
       <p class="small muted">Acceptés : 43.5297, 5.4474 · 43°31'47"N 5°26'51"E · N 43° 31.78' E 5° 26.85' · lien Google Maps</p>
+      <label class="btn">📷 Depuis la position d'une photo
+        <input id="coords-photo" type="file" accept="image/jpeg" hidden></label>
+      <p class="small muted">Marche si le téléphone a gardé la position dans la photo (souvent retirée par l'iPhone).</p>
       <p id="coords-error" class="error" role="alert" hidden></p>
       <div class="row end">
         <button class="btn" value="cancel" formnovalidate>Annuler</button>
         <button class="btn primary" value="ok">Placer l'épingle</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="dlg-photo" class="viewer">
+    <img id="photo-full" alt="">
+    <div class="row viewer-bar">
+      <span id="photo-meta" class="small"></span>
+      <button id="photo-delete" class="btn danger" type="button" hidden>Supprimer</button>
+      <button class="btn js-close" type="button">Fermer</button>
+    </div>
   </dialog>
 
   <div id="toast" class="toast" role="status" hidden></div>
