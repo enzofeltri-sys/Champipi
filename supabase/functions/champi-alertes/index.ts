@@ -3,11 +3,12 @@
 //   GET                         → { publicKey }   (clé VAPID publique ; générée au premier appel)
 //   POST { action: 'test' }     → notification de test au demandeur (session requise)
 //   POST { action: 'run' }      → tournée du matin (en-tête x-champi-token requis)
+//   POST { action: 'news', find_id } → nouvelle trouvaille annoncée à la famille (déclencheur SQL, jeton requis)
 //   POST { action: 'selftest', sub } → envoi chiffré vers une adresse de test (en-tête x-champi-token requis)
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import webpush from 'npm:web-push@3.6.7';
 // Règles du conseiller : copie générée depuis l'appli (node tools/build-alertes.mjs).
-import { summarizeWeather, assess, spotSpecies } from './rules.js';
+import { summarizeWeather, assess, spotSpecies, SPECIES } from './rules.js';
 
 const SITE = 'https://enzofeltri-sys.github.io/Champipi/';
 const ORIGINS = ['https://enzofeltri-sys.github.io', 'http://localhost:5173'];
@@ -67,7 +68,7 @@ async function morningRun(cfg: any) {
     admin.from('champi_finds').select('spot_id, found_on, species'),
     admin.from('champi_spot_shares').select('spot_id, user_id'),
     admin.from('champi_allowed_emails').select('email'),
-    admin.from('champi_profiles').select('id'),
+    admin.from('champi_profiles').select('id, notify_pousse'),
     admin.from('champi_alert_log').select('spot_id, user_id, sent_on').gte('sent_on', new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)),
   ]);
   for (const r of [subs, spots, finds, shares, allowed, profiles, log]) if (r.error) throw r.error;
@@ -97,7 +98,8 @@ async function morningRun(cfg: any) {
 
   const recent = new Set(log.data!.map((l: any) => `${l.spot_id}|${l.user_id}`));
   const byUser = new Map<string, any[]>();
-  for (const sub of subs.data!) byUser.set(sub.user_id, [...(byUser.get(sub.user_id) ?? []), sub]);
+  const muted = new Set(profiles.data!.filter((p: any) => p.notify_pousse === false).map((p: any) => p.id));
+  for (const sub of subs.data!) if (!muted.has(sub.user_id)) byUser.set(sub.user_id, [...(byUser.get(sub.user_id) ?? []), sub]);
   const report: any[] = [];
   for (const [uid, userSubs] of byUser) {
     const good = list.filter((s: any) => visible(uid, s) && verdict.get(s.id)!.a.level === 'bon' && !recent.has(`${s.id}|${uid}`))
@@ -114,6 +116,55 @@ async function morningRun(cfg: any) {
   return { jour: day, abonnés: subs.data!.length, report };
 }
 
+async function familyEmails() {
+  const [allowed, users] = [await admin.from('champi_allowed_emails').select('email'), new Map<string, string>()];
+  if (allowed.error) throw allowed.error;
+  for (let page = 1; page < 20; page++) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) throw error;
+    for (const u of data.users) users.set(u.id, (u.email ?? '').toLowerCase());
+    if (data.users.length < 200) break;
+  }
+  const family = new Set(allowed.data!.map((a: any) => a.email));
+  return (uid: string) => family.has(users.get(uid) ?? '');
+}
+
+const label = (id: string) => SPECIES.find((s: any) => s.id === id)?.label ?? id;
+export function newsText(who: string, spotName: string, species: string[], note: string | null) {
+  const what = species.length ? species.map(label).join(', ').toLowerCase() : null;
+  return {
+    title: `${who} ${what ? `a trouvé : ${what}` : 'est allé·e aux champignons'}`,
+    body: `${spotName}${note ? ` — ${note.length > 90 ? note.slice(0, 89) + '…' : note}` : ''}`,
+  };
+}
+
+// Nouvelle trouvaille : prévenir ceux qui voient le coin (sauf l'auteur), s'ils n'ont pas coupé ces nouvelles.
+async function announce(cfg: any, findId: string) {
+  const { data: f, error } = await admin.from('champi_finds').select('id, spot_id, user_id, found_on, species, note').eq('id', findId).single();
+  if (error) throw error;
+  // Trouvaille ancienne (saisie après coup, photo de l'an dernier…) : pas d'annonce.
+  if (Date.parse(f.found_on) < Date.parse(today()) - 3 * 86400000) return { annonce: 'trouvaille ancienne' };
+  const { data: s, error: e2 } = await admin.from('champi_spots').select('id, owner, visibility, name').eq('id', f.spot_id).single();
+  if (e2) throw e2;
+  const [shares, profiles, subs] = await Promise.all([
+    admin.from('champi_spot_shares').select('user_id').eq('spot_id', s.id),
+    admin.from('champi_profiles').select('id, display_name, avatar_emoji, notify_news'),
+    admin.from('champi_push_subscriptions').select('*'),
+  ]);
+  for (const r of [shares, profiles, subs]) if (r.error) throw r.error;
+  const isFamily = await familyEmails();
+  const shared = new Set(shares.data!.map((h: any) => h.user_id));
+  const sees = (uid: string) => uid === s.owner || (isFamily(uid) && (s.visibility === 'family' || shared.has(uid)));
+  const prof = new Map(profiles.data!.map((p: any) => [p.id, p]));
+  const author = prof.get(f.user_id);
+  const who = `${author?.avatar_emoji ?? '🍄'} ${author?.display_name ?? 'Quelqu\'un'}`;
+  const text = newsText(who, s.name, f.species ?? [], f.note);
+  const targets = subs.data!.filter((sub: any) => sub.user_id !== f.user_id && sees(sub.user_id) && prof.get(sub.user_id)?.notify_news !== false);
+  const payload = { ...text, url: `${SITE}#spot=${s.id}`, tag: `champi-news-${f.id}` };
+  const res = await Promise.all(targets.map((sub: any) => send(cfg, sub, payload)));
+  return { destinataires: new Set(targets.map((t: any) => t.user_id)).size, envois: res };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(req) });
   try {
@@ -123,6 +174,10 @@ Deno.serve(async (req) => {
     if (body.action === 'run') {
       if (req.headers.get('x-champi-token') !== cfg.cron_token) return json(req, { error: 'jeton invalide' }, 401);
       return json(req, await morningRun(cfg));
+    }
+    if (body.action === 'news') {
+      if (req.headers.get('x-champi-token') !== cfg.cron_token) return json(req, { error: 'jeton invalide' }, 401);
+      return json(req, await announce(cfg, String(body.find_id ?? '')));
     }
     if (body.action === 'selftest') {   // vérifie le chiffrement Web Push vers une adresse de test (jeton requis)
       if (req.headers.get('x-champi-token') !== cfg.cron_token) return json(req, { error: 'jeton invalide' }, 401);
