@@ -82,6 +82,7 @@ export function summarizeWeather(daily, today) {
     future,
     rain10: sum(last10),
     rain3: sum(past.slice(-3)),
+    rain14: sum(past.slice(-14)),
     rainNext: sum(future),
     bigRainAgo, bigRainMm, lastRainAgo,
     tmin7: avg(last7, 'tmin'),
@@ -111,7 +112,7 @@ export function nextSeason(id, month) {
  * @param w résumé météo (summarizeWeather) ou null
  * @param ctx { month, species: ids, trees: ids, history: [{ found_on, species[] }] }
  */
-export function assess(w, { month, species = [], trees = [], history = [] }) {
+export function assess(w, { month, species = [], trees = [], history = [], personal = null }) {
   const known = species.filter((id) => SPECIES.some((s) => s.id === id && s.months.length));
   const inSeason = known.filter((id) => SPECIES.find((s) => s.id === id).months.includes(month));
   if (!known.length) return { level: null, score: 0, reasons: ['Aucune espèce du calendrier notée à ce coin.'], perSpecies: [] };
@@ -151,6 +152,11 @@ export function assess(w, { month, species = [], trees = [], history = [] }) {
     return { id, label: sp.label, score, reasons };
   }).sort((a, b) => b.score - a.score);
 
+  if (personal?.bonus || personal?.reasons?.length) {
+    for (const p of perSpecies) p.score += personal.bonus;
+    perSpecies.sort((a, b) => b.score - a.score);
+    for (const r of personal.reasons) common.push(`Ton expérience : ${r}`);
+  }
   const best = perSpecies[0].score;
   // Sans pluie notable (< 10 mm et aucune grosse pluie sur 14 jours), rien ne pousse : avis plafonné.
   const dry = w && w.rain10 < 10 && w.bigRainAgo == null;

@@ -58,6 +58,14 @@ Les migrations sont dans `supabase/migrations/`. Règles (RLS) :
 - **📖 Guide des espèces** : saison, milieux, sol, altitude et sosies dangereux (connaissances générales, à confirmer
   auprès d'une association mycologique).
 
+## Apprentissage sur tes trouvailles
+
+- Fiche d'un coin → « 📊 Bilan du coin » : trouvailles par mois et par année, meilleur mois, espèces.
+- Dès 3 trouvailles, l'appli récupère la météo réelle des jours qui les ont précédées (archive Open-Meteo, mémorisée)
+  et en tire les seuils du coin : pluie minimale sur 14 jours et délai habituel après une grosse pluie.
+  L'avis du coin et le conseiller ajoutent alors des lignes « Ton expérience : … » (`site/js/learn.js`, `tests/learn.test.mjs`).
+- Avec peu de trouvailles, les seuils restent grossiers : ils s'affinent saison après saison.
+
 ## Partager un coin avec une personne
 
 - Sur la fiche d'un coin « Moi seul » : « 🤝 Partager… » → cocher des membres de la famille.
@@ -102,6 +110,7 @@ node tools/ui-field.cjs http://localhost:5173/ shots tests/date.jpg   # tutoriel
 node tools/ui-access.cjs http://localhost:5173/ shots     # accès aux massifs (hors saison et été simulé)
 node tools/ui-offline.cjs http://localhost:5173/ shots tests/gps.jpg  # hors ligne (vraies tuiles IGN)
 node tools/ui-share.cjs http://localhost:5173/ shots      # partage d'un coin (3 personnes)
+node tools/ui-learn.cjs http://localhost:5173/ shots      # bilan et apprentissage (vraie archive ; FAKE_ARCHIVE=1 pour simuler)
 ```
 
 ## Sécurité

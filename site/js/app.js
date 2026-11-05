@@ -7,7 +7,8 @@ import {
 } from './logic.js';
 import { createPhotoStore, thumbPath } from './photos.js';
 import { GUIDE, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown } from './advisor.js';
-import { dailyFor, forestAt } from './weather.js';
+import { dailyFor, forestAt, historyFor } from './weather.js';
+import { historyRange, findConditions, spotProfile, personalAdvice, profileSummary } from './learn.js';
 import { massifAt, accessFor, inFireSeason, DEPT_PAGES, ACCESS_ICON } from './access.js';
 import { tilesFor, bestMaxZoom, PLAN_IGN, TILE_CACHE, TILE_LIMIT, isNetworkError, queue, mergePending, sendOrder } from './offline.js';
 
@@ -734,6 +735,7 @@ function renderSpot(id) {
   $('#spot-photo-add').hidden = !mine || !!s.pending;
   renderMeteo(s);
   renderAccess(s);
+  renderBilan(s);
   $('#spot-route').href = directionsUrl(s.lat, s.lon);
   $('#spot-edit').hidden = !mine || !!s.pending;
   $('#spot-share').hidden = !mine || !!s.pending || s.visibility !== 'private';
@@ -1021,8 +1023,47 @@ $('#help-btn').addEventListener('click', openTuto);
 const LEVEL_ORDER = { bon: 0, moyen: 1, faible: 2, 'hors-saison': 3 };
 const shortDay = (iso) => String(Number(iso.slice(8, 10)));
 
-function spotContext(s) {
-  return { month: month(), species: spotSpecies(s, state.finds), trees: s.trees ?? [], history: state.finds.filter((f) => f.spot_id === s.id) };
+function spotContext(s, w = null) {
+  const prof = profiles.get(s.id)?.profile;
+  return { month: month(), species: spotSpecies(s, state.finds), trees: s.trees ?? [], history: state.finds.filter((f) => f.spot_id === s.id),
+    personal: w && prof ? personalAdvice(w, prof) : null };
+}
+
+// Profil appris de chaque coin (mémorisé tant que ses trouvailles ne changent pas).
+const profiles = new Map(), profilesInFlight = new Map();
+function spotProfileFor(s) {
+  const finds = state.finds.filter((f) => f.spot_id === s.id && !f.pending);
+  const key = finds.map((f) => f.id + f.found_on).sort().join('|');
+  const hit = profiles.get(s.id);
+  if (hit?.key === key) return Promise.resolve(hit.profile);
+  const fk = s.id + key;
+  if (!profilesInFlight.has(fk)) profilesInFlight.set(fk, computeProfile(s, finds, key).finally(() => profilesInFlight.delete(fk)));
+  return profilesInFlight.get(fk);
+}
+async function computeProfile(s, finds, key) {
+  let conditions = [];
+  // Météo apprise sur les 12 trouvailles les plus récentes (une seule requête d'archive, de taille raisonnable).
+  const recent = [...finds].sort((a, b) => (a.found_on < b.found_on ? 1 : -1)).slice(0, 12);
+  const r = historyRange(recent);
+  if (r) {
+    try { conditions = findConditions(recent, await historyFor(s.lat, s.lon, r.start, r.end)); } catch { /* sans réseau : bilan sans météo */ }
+  }
+  const profile = spotProfile(finds, conditions);
+  profiles.set(s.id, { key, profile });
+  return profile;
+}
+async function renderBilan(s) {
+  const box = $('#spot-bilan');
+  const has = state.finds.some((f) => f.spot_id === s.id && !f.pending);
+  if (!has) { box.innerHTML = ''; return; }
+  box.innerHTML = '<h3>📊 Bilan du coin</h3><p class="small muted">Calcul…</p>';
+  const p = await spotProfileFor(s);
+  if (state.openSpotId !== s.id) return;
+  const max = Math.max(...p.months);
+  box.innerHTML = `<h3>📊 Bilan du coin</h3>
+    <div class="months counts">${MONTHS.map((n, i) => `<span class="${p.months[i] ? (p.months[i] === max ? 'peak' : 'on') : ''}" title="${n}">${n[0].toUpperCase()}<b>${p.months[i] || ''}</b></span>`).join('')}</div>
+    <p class="small">${esc(profileSummary(p))}</p>
+    ${p.topSpecies.length ? `<p class="small muted">Espèces : ${esc(p.topSpecies.slice(0, 4).map((x) => `${x.label} (${x.k})`).join(', '))}</p>` : ''}`;
 }
 
 function meteoHtml(w, a) {
@@ -1047,7 +1088,9 @@ async function renderMeteo(s) {
     const [daily] = await dailyFor([[s.lat, s.lon]]);
     if (state.openSpotId !== s.id) return;
     const w = summarizeWeather(daily, todayIso());
-    box.innerHTML = meteoHtml(w, assess(w, spotContext(s)));
+    await spotProfileFor(s).catch(() => null);
+    if (state.openSpotId !== s.id) return;
+    box.innerHTML = meteoHtml(w, assess(w, spotContext(s, w)));
   } catch (err) {
     if (state.openSpotId === s.id) box.innerHTML = `<h3>Météo et conditions</h3><p class="small muted">Météo indisponible (${esc(frError(err))}).</p>`;
   }
@@ -1156,7 +1199,7 @@ async function openAdvisor() {
     html += `<h3>Accès aux massifs</h3><p class="small">${inFireSeason(m)
       ? (closedN ? `⛔ ${closedN === 1 ? '1 de tes coins est' : `${closedN} de tes coins sont`} dans un massif fermé aujourd'hui (risque incendie).` : 'Aucun de tes coins n\'est dans un massif fermé aujourd\'hui.')
       : 'Hors période réglementée (juin–septembre) : pas de fermeture publiée.'}</p>`;
-    const ranked = spots.map((s, i) => ({ s, a: assess(ws[grid.length + i], spotContext(s)), x: acc[i] }))
+    const ranked = spots.map((s, i) => ({ s, a: assess(ws[grid.length + i], spotContext(s, ws[grid.length + i])), x: acc[i] }))
       .filter((x) => x.a.level)
       .sort((x, y) => ((x.x?.state === 'closed') - (y.x?.state === 'closed')) || (LEVEL_ORDER[x.a.level] - LEVEL_ORDER[y.a.level]) || (y.a.score - x.a.score));
     html += `<h3>Tes coins</h3>` + (ranked.length ? `<ul class="rank">${ranked.slice(0, 15).map(({ s, a, x }) => `<li><button type="button" data-spot="${s.id}">

@@ -282,3 +282,7 @@ dialog.viewer img { width: 100%; height: calc(100dvh - 64px); object-fit: contai
 .badge.shared { background: var(--shared); color: #fff; }
 .share-person { display: flex; gap: 10px; align-items: center; padding: 8px 10px; background: var(--surface-2); border-radius: 10px; font-weight: 500; }
 .share-person input { width: 22px; height: 22px; }
+
+.bilan:empty { display: none; }
+.months.counts span { font-size: 10px; padding: 2px 0 3px; line-height: 1.2; }
+.months.counts span b { display: block; font-size: 11px; color: var(--text); }

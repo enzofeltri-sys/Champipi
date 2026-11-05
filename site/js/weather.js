@@ -82,3 +82,18 @@ export async function forestAt(lat, lon) {
   forestCache.set(k, v);
   return v;
 }
+
+// ---------------------------------------------------------------------------
+// Historique (archive Open-Meteo) pour un coin : météo réelle avant chaque trouvaille.
+// Le passé ne change plus : mémorisé sans limite (sauf les 7 derniers jours, mémorisés 1 h).
+export async function historyFor(lat, lon, start, end) {
+  const k = `champi-hist:${lat.toFixed(2)},${lon.toFixed(2)}:${start}:${end}`;
+  const recent = Date.parse(end) > Date.now() - 7 * 86400000;
+  try {
+    const c = JSON.parse(localStorage.getItem(k) || 'null');
+    if (c && (!recent || c.t > Date.now() - TTL)) return c.v;
+  } catch { /* stockage indisponible */ }
+  const j = await fetchJson(`https://archive-api.open-meteo.com/v1/archive?latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}&start_date=${start}&end_date=${end}&daily=${DAILY}&timezone=Europe%2FParis`);
+  try { localStorage.setItem(k, JSON.stringify({ t: Date.now(), v: j.daily })); } catch { /* plein */ }
+  return j.daily;
+}
