@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Carnet de champignons</title>
+  <meta name="description" content="Nos coins à champignons en Provence">
+  <meta name="theme-color" content="#2f5d3a" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#15201a" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Champipi">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="css/app.css">
+  <script>
+    // Thème choisi avant le premier affichage (évite un flash).
+    try { const t = localStorage.getItem('champi-theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
+  </script>
+</head>
+<body>
+  <!-- Chargement -->
+  <section id="screen-loading" class="screen center">
+    <div class="logo-big" aria-hidden="true">🍄</div>
+    <p class="muted">Chargement…</p>
+  </section>
+
+  <!-- Connexion -->
+  <section id="screen-login" class="screen center" hidden>
+    <div class="card narrow">
+      <div class="logo-big" aria-hidden="true">🍄</div>
+      <h1>Carnet de champignons</h1>
+      <p class="muted">Nos coins en Provence. Pas de mot de passe : tu reçois un lien de connexion par e-mail.</p>
+      <form id="login-form" class="stack">
+        <label for="login-email">Ton adresse e-mail</label>
+        <input id="login-email" type="email" autocomplete="email" inputmode="email" required placeholder="prenom@exemple.fr">
+        <button class="btn primary" type="submit">Recevoir le lien</button>
+      </form>
+      <div id="login-sent" class="stack" hidden>
+        <p class="ok">📬 E-mail envoyé à <b id="login-sent-to"></b>. Ouvre-le sur ce téléphone et touche le lien.</p>
+        <p class="muted small">Rien reçu après une minute ? Regarde dans les indésirables.</p>
+        <form id="code-form" class="stack">
+          <label for="login-code">Ou saisis le code à 6 chiffres de l'e-mail</label>
+          <input id="login-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" maxlength="8" placeholder="123456">
+          <button class="btn" type="submit">Valider le code</button>
+        </form>
+        <button id="login-again" class="btn link" type="button">Changer d'adresse</button>
+      </div>
+      <p id="login-error" class="error" role="alert" hidden></p>
+    </div>
+  </section>
+
+  <!-- Hors liste -->
+  <section id="screen-denied" class="screen center" hidden>
+    <div class="card narrow">
+      <div class="logo-big" aria-hidden="true">🔒</div>
+      <h1>Pas encore dans la famille</h1>
+      <p>Tu es bien connecté avec <b id="denied-email"></b>, mais cette adresse n'est pas dans la liste des personnes autorisées.</p>
+      <p>Demande à Enzo de t'ajouter, puis rouvre l'appli. Tu ne vois aucun coin tant que ce n'est pas fait.</p>
+      <div class="row">
+        <button id="denied-retry" class="btn primary" type="button">Réessayer</button>
+        <button class="btn js-logout" type="button">Se déconnecter</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Prénom -->
+  <section id="screen-name" class="screen center" hidden>
+    <div class="card narrow">
+      <div class="logo-big" aria-hidden="true">👋</div>
+      <h1>Bienvenue !</h1>
+      <form id="name-form" class="stack">
+        <label for="name-input">Ton prénom, affiché à la famille</label>
+        <input id="name-input" required maxlength="40" autocomplete="given-name" placeholder="Prénom">
+        <button class="btn primary" type="submit">C'est parti</button>
+      </form>
+      <p id="name-error" class="error" role="alert" hidden></p>
+    </div>
+  </section>
+
+  <!-- Application -->
+  <main id="screen-app" hidden>
+    <div id="map-wrap">
+      <div id="map" aria-label="Carte des coins"></div>
+
+      <header class="topbar">
+        <div class="seg" role="radiogroup" aria-label="Quels coins afficher">
+          <button type="button" data-scope="all" class="on" role="radio" aria-checked="true">Tout</button>
+          <button type="button" data-scope="mine" role="radio" aria-checked="false">Mes coins</button>
+          <button type="button" data-scope="family" role="radio" aria-checked="false">Famille</button>
+        </div>
+        <select id="filter-species" aria-label="Filtrer par espèce"><option value="">Espèces</option></select>
+        <button id="menu-btn" class="icon-btn" type="button" aria-label="Menu" aria-haspopup="true">☰</button>
+      </header>
+
+      <div id="menu" class="menu card" hidden>
+        <p class="small muted">Connecté : <b id="me-name"></b></p>
+        <div class="field">
+          <span class="small">Fond de carte</span>
+          <div class="seg small-seg" id="base-seg">
+            <button type="button" data-base="plan">Plan IGN</button>
+            <button type="button" data-base="ortho">Photos</button>
+            <button type="button" data-base="otm">Topo</button>
+          </div>
+        </div>
+        <label class="check"><input type="checkbox" id="toggle-massifs"> Massifs (cercles indicatifs)</label>
+        <div class="field">
+          <span class="small">Thème</span>
+          <div class="seg small-seg" id="theme-seg">
+            <button type="button" data-theme="">Auto</button>
+            <button type="button" data-theme="light">Clair</button>
+            <button type="button" data-theme="dark">Sombre</button>
+          </div>
+        </div>
+        <button class="btn js-logout" type="button">Se déconnecter</button>
+      </div>
+
+      <div id="adjust-bar" class="adjust-bar card" hidden>
+        <span class="small">Fais glisser l'épingle (ou touche la carte) pour l'ajuster</span>
+        <div class="row">
+          <button id="adjust-cancel" class="btn" type="button">Annuler</button>
+          <button id="adjust-done" class="btn primary" type="button">Continuer</button>
+        </div>
+      </div>
+
+      <div class="fab-row">
+        <button id="btn-here" class="btn fab" type="button">📍 Je suis ici</button>
+        <button id="btn-coords" class="btn fab" type="button">⌖ Coordonnées</button>
+      </div>
+      <div id="hint" class="hint">Touche la carte pour marquer un coin</div>
+
+      <button id="peek" class="peek" type="button" aria-controls="list">
+        <span id="peek-count">0 coin</span> <span aria-hidden="true">▾ liste</span>
+      </button>
+    </div>
+
+    <section id="list" class="list" aria-label="Liste des coins">
+      <div class="safety" role="note">
+        ⚠️ Fais contrôler <b>chaque récolte</b> par un pharmacien ou une association mycologique avant de la manger.
+        Centre antipoison de Marseille : <a class="tel" href="tel:+33491752525">04 91 75 25 25</a>
+      </div>
+      <h2>Coins <span class="muted small">— par dernière trouvaille</span></h2>
+      <ul id="spot-list" class="spot-list"></ul>
+      <p id="list-empty" class="muted" hidden>Aucun coin pour ces filtres. Touche la carte pour en ajouter un.</p>
+    </section>
+  </main>
+
+  <!-- Fiche (création / modification) -->
+  <dialog id="dlg-edit" class="sheet">
+    <form id="edit-form" method="dialog" class="stack">
+      <div class="sheet-head">
+        <h2 id="edit-title">Nouveau coin</h2>
+        <button class="icon-btn" value="cancel" formnovalidate aria-label="Fermer">✕</button>
+      </div>
+      <label for="edit-name">Nom</label>
+      <input id="edit-name" required maxlength="80" placeholder="Ex. Pinède du vallon">
+      <span class="small">Qui le voit ?</span>
+      <div class="seg" id="edit-vis" role="radiogroup">
+        <button type="button" data-vis="private" class="on vis-private">🔒 Moi seul</button>
+        <button type="button" data-vis="family" class="vis-family">👪 Famille</button>
+      </div>
+      <span class="small">Espèces</span>
+      <div id="edit-species" class="chips"></div>
+      <label for="edit-note">Notes</label>
+      <textarea id="edit-note" rows="3" maxlength="2000" placeholder="Accès, repères, sous quels arbres…"></textarea>
+      <p class="small muted">📌 <span id="edit-coords"></span>
+        <button id="edit-move" type="button" class="btn link">Ajuster l'épingle</button></p>
+      <p id="edit-error" class="error" role="alert" hidden></p>
+      <div class="row end">
+        <button id="edit-delete" type="button" class="btn danger" hidden>Supprimer</button>
+        <button class="btn" value="cancel" formnovalidate>Annuler</button>
+        <button id="edit-save" class="btn primary" value="save">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Détail d'un coin -->
+  <dialog id="dlg-spot" class="sheet">
+    <div class="stack">
+      <div class="sheet-head">
+        <h2 id="spot-name"></h2>
+        <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
+      </div>
+      <div id="spot-badges" class="badges"></div>
+      <div id="spot-species" class="chips readonly"></div>
+      <p id="spot-note" class="note"></p>
+      <p class="small muted" id="spot-coords"></p>
+      <div class="row">
+        <a id="spot-route" class="btn primary" target="_blank" rel="noopener">🧭 Itinéraire</a>
+        <button id="spot-edit" class="btn" type="button">Modifier</button>
+      </div>
+
+      <h3>Journal des trouvailles</h3>
+      <ul id="find-list" class="find-list"></ul>
+      <details id="find-add">
+        <summary class="btn">＋ Noter une trouvaille</summary>
+        <form id="find-form" class="stack">
+          <label for="find-date">Date</label>
+          <input id="find-date" type="date" required>
+          <span class="small">Espèces trouvées</span>
+          <div id="find-species" class="chips"></div>
+          <label for="find-note">Note</label>
+          <textarea id="find-note" rows="2" maxlength="2000" placeholder="Quantité, état…"></textarea>
+          <p class="safety small">⚠️ Fais contrôler la récolte par un pharmacien ou une association mycologique. Antipoison : <a class="tel" href="tel:+33491752525">04 91 75 25 25</a></p>
+          <p id="find-error" class="error" role="alert" hidden></p>
+          <button class="btn primary" type="submit">Ajouter au journal</button>
+        </form>
+      </details>
+    </div>
+  </dialog>
+
+  <!-- Coller des coordonnées -->
+  <dialog id="dlg-coords" class="sheet">
+    <form id="coords-form" method="dialog" class="stack">
+      <div class="sheet-head">
+        <h2>Coller des coordonnées</h2>
+        <button class="icon-btn" value="cancel" formnovalidate aria-label="Fermer">✕</button>
+      </div>
+      <label for="coords-input">Coordonnées GPS ou lien de carte</label>
+      <input id="coords-input" autocomplete="off" placeholder="43.5297, 5.4474">
+      <p class="small muted">Acceptés : 43.5297, 5.4474 · 43°31'47"N 5°26'51"E · N 43° 31.78' E 5° 26.85' · lien Google Maps</p>
+      <p id="coords-error" class="error" role="alert" hidden></p>
+      <div class="row end">
+        <button class="btn" value="cancel" formnovalidate>Annuler</button>
+        <button class="btn primary" value="ok">Placer l'épingle</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="vendor/supabase.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
