@@ -1,6 +1,7 @@
 // Parcours admin dans Chromium : une personne hors liste demande l'accès, l'admin accepte.
 // Fausse API Supabase en mémoire qui applique les mêmes règles que la RLS pour ces tables.
 const { chromium, devices } = require('playwright');
+const fakeMeteo = require('./fake-meteo.cjs');
 const [, , SITE, OUT] = process.argv;
 const REF = 'vvegujltsjgwszeloyaz';
 const ADMIN = { id: 'a0000000-0000-0000-0000-000000000000', email: 'enzofeltri@gmail.com' };
@@ -15,6 +16,7 @@ const db = {
 async function open(browser, who) {
   const ctx = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
   const page = await ctx.newPage();
+  await fakeMeteo(page);
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
@@ -58,7 +60,7 @@ async function open(browser, who) {
     return send({ message: 'non simulé ' + m + ' ' + table }, 500);
   });
   await page.addInitScript(([ref, u]) => {
-    localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 99999, user: { id: u.id, email: u.email } }));
+    localStorage.setItem('champi-tuto', '1'); localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 99999, user: { id: u.id, email: u.email } }));
   }, [REF, who]);
   await page.goto(SITE);
   return { page, errors };

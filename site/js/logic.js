@@ -262,3 +262,95 @@ export function fitSize(w, h, max) {
   const k = Math.min(1, max / Math.max(w, h));
   return { w: Math.round(w * k), h: Math.round(h * k) };
 }
+
+// ---------------------------------------------------------------------------
+// Boussole : distance (m) et cap (degrés, 0 = nord) entre deux points.
+const rad = (d) => (d * Math.PI) / 180;
+export function distanceM(a, b) {
+  const R = 6371000;
+  const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+export function bearingDeg(a, b) {
+  const y = Math.sin(rad(b.lon - a.lon)) * Math.cos(rad(b.lat));
+  const x = Math.cos(rad(a.lat)) * Math.sin(rad(b.lat)) - Math.sin(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.cos(rad(b.lon - a.lon));
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+const DIRS = ['nord', 'nord-est', 'est', 'sud-est', 'sud', 'sud-ouest', 'ouest', 'nord-ouest'];
+export const cardinal = (deg) => DIRS[Math.round(deg / 45) % 8];
+export function formatDistance(m) {
+  if (m < 1000) return `${Math.round(m / 5) * 5} m`;
+  return `${(m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', ',')} km`;
+}
+
+// ---------------------------------------------------------------------------
+// Date de prise de vue (EXIF DateTimeOriginal) d'un JPEG → 'AAAA-MM-JJ' ou null.
+export function exifDate(buffer) {
+  try {
+    const v = new DataView(buffer);
+    if (v.getUint16(0) !== 0xffd8) return null;
+    let off = 2;
+    while (off + 4 < v.byteLength) {
+      const marker = v.getUint16(off), size = v.getUint16(off + 2);
+      if (marker === 0xffe1 && v.getUint32(off + 4) === 0x45786966) {
+        const t = off + 10, le = v.getUint16(t) === 0x4949;
+        const u16 = (o) => v.getUint16(t + o, le), u32 = (o) => v.getUint32(t + o, le);
+        const find = (ifdOff, tag) => {
+          const n = u16(ifdOff);
+          for (let i = 0; i < n; i++) { const e = ifdOff + 2 + i * 12; if (u16(e) === tag) return { count: u32(e + 4), at: e + 8 }; }
+          return null;
+        };
+        const ascii = (entry) => {
+          const p = entry.count > 4 ? u32(entry.at) : entry.at;
+          let s = ''; for (let i = 0; i < entry.count - 1; i++) s += String.fromCharCode(v.getUint8(t + p + i));
+          return s;
+        };
+        const ifd0 = u32(4);
+        const exifPtr = find(ifd0, 0x8769);
+        const dt = (exifPtr && (find(u32(exifPtr.at), 0x9003) || find(u32(exifPtr.at), 0x9004))) || find(ifd0, 0x0132);
+        if (!dt) return null;
+        const m = ascii(dt).match(/^(\d{4}):(\d{2}):(\d{2})/);
+        return m && m[1] !== '0000' ? `${m[1]}-${m[2]}-${m[3]}` : null;
+      }
+      if ((marker & 0xff00) !== 0xff00 || marker === 0xffda) return null;
+      off += 2 + size;
+    }
+  } catch { /* fichier inattendu */ }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Recherche (nom, notes, accès, espèces, auteur), sans accents ni majuscules.
+export const fold = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+export function searchSpots(spots, finds, q) {
+  const terms = fold(q).split(/\s+/).filter(Boolean);
+  if (!terms.length) return spots;
+  return spots.filter((s) => {
+    const hay = fold([s.name, s.note, s.access, s.author?.display_name, s.forest_type,
+      ...(s.species ?? []).map(speciesLabel),
+      ...finds.filter((f) => f.spot_id === s.id).flatMap((f) => [f.note, f.weather, ...(f.species ?? []).map(speciesLabel)])].join(' '));
+    return terms.every((t) => hay.includes(t));
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Exports.
+const xml = (s) => String(s ?? '').replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]));
+export function toGpx(spots) {
+  const wpts = spots.map((s) => `  <wpt lat="${s.lat}" lon="${s.lon}">
+    <name>${xml(s.name)}</name>
+    <desc>${xml([(s.species ?? []).map(speciesLabel).join(', '), s.note].filter(Boolean).join(' — '))}</desc>
+    <sym>Flag, Green</sym>
+  </wpt>`).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Carnet de champignons" xmlns="http://www.topografix.com/GPX/1/1">
+${wpts}
+</gpx>
+`;
+}
+const csvCell = (v) => { const s = String(v ?? ''); return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+export function toCsv(rows, columns) {
+  // Point-virgule + BOM : s'ouvre directement dans Excel en français.
+  return '﻿' + [columns.map((c) => csvCell(c[0])).join(';'), ...rows.map((r) => columns.map((c) => csvCell(c[1](r))).join(';'))].join('\r\n') + '\r\n';
+}

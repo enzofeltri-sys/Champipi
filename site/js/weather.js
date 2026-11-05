@@ -9,14 +9,28 @@ function cacheGet(k) {
   const hit = mem.get(k);
   if (hit && hit.t > Date.now() - TTL) return hit.v;
   try {
-    const s = JSON.parse(sessionStorage.getItem('champi-meteo:' + k) || 'null');
+    const s = JSON.parse(localStorage.getItem('champi-meteo:' + k) || 'null');
     if (s && s.t > Date.now() - TTL) { mem.set(k, s); return s.v; }
   } catch { /* stockage indisponible */ }
   return null;
 }
+// Nettoyage des mémos périmés (une fois par chargement de page).
+let purged = false;
+function purge() {
+  purged = true;
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (!k?.startsWith('champi-meteo:')) continue;
+      const e = JSON.parse(localStorage.getItem(k) || 'null');
+      if (!e || e.t < Date.now() - TTL) localStorage.removeItem(k);
+    }
+  } catch { /* stockage indisponible */ }
+}
 function cacheSet(k, v) {
+  if (!purged) purge();
   const e = { t: Date.now(), v }; mem.set(k, e);
-  try { sessionStorage.setItem('champi-meteo:' + k, JSON.stringify(e)); } catch { /* plein ou privé */ }
+  try { localStorage.setItem('champi-meteo:' + k, JSON.stringify(e)); } catch { /* plein ou privé */ }
 }
 
 async function fetchJson(url, tries = 2) {

@@ -249,3 +249,17 @@ dialog.viewer img { width: 100%; height: calc(100dvh - 64px); object-fit: contai
 .forest-line { background: var(--surface-2); border-radius: 8px; padding: 6px 8px; }
 .rain-legend { background: var(--surface); color: var(--text); padding: 6px 8px; border-radius: 10px; box-shadow: var(--shadow); font-size: .75rem; line-height: 1.5; }
 .rain-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+
+/* Boussole */
+.center-text { text-align: center; }
+.center-text .sheet-head { text-align: left; }
+.compass { width: min(46vw, 34dvh, 200px); aspect-ratio: 1; margin: 8px auto; border-radius: 50%; border: 3px solid var(--border);
+  display: grid; place-items: center; background: var(--surface-2); position: relative; }
+.compass::before { content: 'N'; position: absolute; top: 6px; left: 50%; transform: translateX(-50%); font-weight: 700; color: var(--danger); font-size: .8rem; }
+.compass.relative::before { content: ''; }
+.compass svg { width: 70%; height: 70%; color: var(--primary); transition: transform .25s ease-out; }
+.compass.here svg { color: var(--season); }
+.compass-dist { font-size: 1.9rem; font-weight: 800; line-height: 1.1; }
+.compass-sheet .stack { gap: 4px; }
+#search { margin: 6px 0 4px; }
+.tuto-emoji { font-size: 2.6rem; text-align: center; }

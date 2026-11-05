@@ -1,6 +1,7 @@
 // Parcours photos + détails dans Chromium, avec faux Supabase (base + stockage) en mémoire.
 // Usage : node tools/ui-photos.cjs <url du site> <dossier captures> <photo jpeg avec GPS>
 const { chromium, devices } = require('playwright');
+const fakeMeteo = require('./fake-meteo.cjs');
 const fs = require('fs');
 const [, , SITE, OUT, PHOTO] = process.argv;
 const REF = 'vvegujltsjgwszeloyaz';
@@ -13,6 +14,7 @@ const ME = '11111111-1111-1111-1111-111111111111';
   const b = await chromium.launch();
   const ctx = await b.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
   const page = await ctx.newPage();
+  await fakeMeteo(page);
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
@@ -76,7 +78,7 @@ const ME = '11111111-1111-1111-1111-111111111111';
     return send({ message: 'non simulé ' + m + ' ' + path }, 500);
   });
   await page.addInitScript(([ref, me]) => {
-    localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 99999, user: { id: me, email: 'enzo@test.fr' } }));
+    localStorage.setItem('champi-tuto', '1'); localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 99999, user: { id: me, email: 'enzo@test.fr' } }));
     localStorage.setItem('champi-view', JSON.stringify({ lat: 43.53, lon: 5.585, zoom: 13 }));
   }, [REF, ME]);
 

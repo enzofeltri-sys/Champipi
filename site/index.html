@@ -119,6 +119,11 @@
         <label class="check"><input type="checkbox" id="toggle-forest"> Forêts IGN (types de peuplement)</label>
         <button id="advisor-btn2" class="btn" type="button">🤖 Conseiller du jour</button>
         <button id="guide-btn" class="btn" type="button">📖 Guide des espèces</button>
+        <div class="row">
+          <button id="export-gpx" class="btn small-btn" type="button">⬇️ Coins (GPX)</button>
+          <button id="export-csv" class="btn small-btn" type="button">⬇️ Journal (CSV)</button>
+        </div>
+        <button id="help-btn" class="btn small-btn" type="button">❓ Aide</button>
         <div class="field">
           <span class="small">Thème</span>
           <div class="seg small-seg" id="theme-seg">
@@ -159,6 +164,7 @@
         <button id="guide-btn2" class="btn" type="button">📖 Guide des espèces</button>
       </div>
       <h2>Coins <span class="muted small">— par dernière trouvaille</span></h2>
+      <input id="search" type="search" placeholder="🔎 Rechercher un coin, une note, une espèce…" autocomplete="off" aria-label="Rechercher">
       <ul id="spot-list" class="spot-list"></ul>
       <p id="list-empty" class="muted" hidden>Aucun coin pour ces filtres. Touche la carte pour en ajouter un.</p>
     </section>
@@ -231,7 +237,8 @@
       <label id="spot-photo-add" class="btn small-btn">📷 Ajouter une photo du coin
         <input id="spot-photo-input" type="file" accept="image/*" multiple hidden></label>
       <div class="row">
-        <a id="spot-route" class="btn primary" target="_blank" rel="noopener">🧭 Itinéraire</a>
+        <a id="spot-route" class="btn primary" target="_blank" rel="noopener">🚗 Itinéraire</a>
+        <button id="spot-compass" class="btn primary" type="button">🧭 Retrouver</button>
         <button id="spot-edit" class="btn" type="button">Modifier</button>
       </div>
 
@@ -282,6 +289,34 @@
         <button class="btn primary" value="ok">Placer l'épingle</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="dlg-compass" class="sheet compass-sheet">
+    <div class="stack center-text">
+      <div class="sheet-head">
+        <h2 id="compass-name">Retrouver</h2>
+        <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
+      </div>
+      <div class="compass" aria-live="polite">
+        <svg id="compass-arrow" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 6 L70 70 L50 58 L30 70 Z" fill="currentColor"/></svg>
+      </div>
+      <div id="compass-dist" class="compass-dist">…</div>
+      <div id="compass-dir" class="muted"></div>
+      <div id="compass-acc" class="small muted"></div>
+      <button id="compass-enable" class="btn" type="button" hidden>Activer la boussole du téléphone</button>
+      <p class="small muted">Tiens le téléphone à plat. Près des voitures, rochers ferreux ou lignes électriques, la boussole peut dévier.</p>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-tuto" class="sheet">
+    <div class="stack">
+      <div id="tuto-body"></div>
+      <div class="row end">
+        <span id="tuto-step" class="small muted" style="margin-right:auto"></span>
+        <button id="tuto-skip" class="btn" type="button">Passer</button>
+        <button id="tuto-next" class="btn primary" type="button">Suivant</button>
+      </div>
+    </div>
   </dialog>
 
   <dialog id="dlg-advisor" class="sheet">

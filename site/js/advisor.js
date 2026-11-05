@@ -197,7 +197,7 @@ export function inPolygon([lat, lon], poly) {
   }
   return inside;
 }
-export function pacaGrid(step = 0.2) {
+export function pacaGrid(step = 0.25) {
   const pts = [];
   for (let lat = 43.0; lat <= 45.2; lat += step) {
     for (let lon = 4.5; lon <= 7.8; lon += step) {

@@ -1,6 +1,7 @@
 // Parcours de l'interface dans Chromium avec une fausse API Supabase en mémoire.
 // Usage : node tools/ui-mock.cjs <url du site> <dossier des captures>
 const { chromium, devices } = require('playwright');
+const fakeMeteo = require('./fake-meteo.cjs');
 const [, , SITE, OUT] = process.argv;
 const REF = 'vvegujltsjgwszeloyaz';
 const ME = '11111111-1111-1111-1111-111111111111';
@@ -43,7 +44,7 @@ async function setup(page, data, { session = true } = {}) {
   if (session) {
     await page.addInitScript(([ref, me]) => {
       const now = Math.floor(Date.now() / 1000);
-      localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({
+      localStorage.setItem('champi-tuto', '1'); localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({
         access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: now + 360000,
         user: { id: me, email: 'enzo@test.fr', aud: 'authenticated', role: 'authenticated' },
       }));
@@ -57,6 +58,7 @@ async function setup(page, data, { session = true } = {}) {
   const mk = async (opts = {}) => {
     const ctx = await browser.newContext({ ...devices['iPhone 13'], locale: 'fr-FR', geolocation: { latitude: 43.5297, longitude: 5.4474, accuracy: 12 }, permissions: ['geolocation'], ...opts });
     const page = await ctx.newPage();
+  await fakeMeteo(page);
     page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
     page.on('console', (msg) => { if (msg.type() === 'error') errors.push('console: ' + msg.text()); });
     return page;

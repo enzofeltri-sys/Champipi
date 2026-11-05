@@ -121,3 +121,46 @@ test('réduction des photos', () => {
   assert.deepEqual(fitSize(3024, 4032, 400), { w: 300, h: 400 });
   assert.deepEqual(fitSize(800, 600, 1600), { w: 800, h: 600 });
 });
+
+import { distanceM, bearingDeg, cardinal, formatDistance, exifDate, searchSpots, toGpx, toCsv, fold } from '../site/js/logic.js';
+
+test('boussole : distance et cap', () => {
+  const aix = { lat: 43.5297, lon: 5.4474 }, marseille = { lat: 43.2965, lon: 5.3698 };
+  const d = distanceM(aix, marseille);
+  assert.ok(d > 26000 && d < 27000, String(d));       // ~26,6 km
+  const b = bearingDeg(aix, marseille);
+  assert.ok(b > 190 && b < 200, String(b));           // plein sud, un peu ouest
+  assert.equal(cardinal(b), 'sud');
+  assert.equal(cardinal(44), 'nord-est');
+  assert.equal(cardinal(350), 'nord');
+  assert.equal(bearingDeg({ lat: 43, lon: 5 }, { lat: 43, lon: 5.01 }).toFixed(0), '90');
+  assert.equal(formatDistance(233), '235 m');
+  assert.equal(formatDistance(2450), '2,5 km');
+  assert.equal(formatDistance(26600), '27 km');
+});
+
+test('date EXIF de la photo', () => {
+  assert.equal(exifDate(buf('./date.jpg')), '2025-11-12');
+  assert.equal(exifDate(buf('./nogps.jpg')), null);
+  assert.equal(exifDate(new ArrayBuffer(4)), null);
+});
+
+test('recherche sans accents, sur nom, notes, espèces et journal', () => {
+  const sp = [{ id: 'a', name: 'Pinède du Vallon', note: 'après la barrière', species: ['cepe'] }, { id: 'b', name: 'Clairière', note: null, species: [] }];
+  const fi = [{ spot_id: 'b', note: 'Énorme récolte', species: ['morille'] }];
+  assert.deepEqual(searchSpots(sp, fi, 'pinede').map((s) => s.id), ['a']);
+  assert.deepEqual(searchSpots(sp, fi, 'CÈPE barriere').map((s) => s.id), ['a']);
+  assert.deepEqual(searchSpots(sp, fi, 'enorme').map((s) => s.id), ['b']);
+  assert.deepEqual(searchSpots(sp, fi, 'morille').map((s) => s.id), ['b']);
+  assert.equal(searchSpots(sp, fi, '  ').length, 2);
+  assert.equal(fold('Éé À'), 'ee a');
+});
+
+test('exports GPX et CSV', () => {
+  const g = toGpx([{ name: 'Coin <1> & "2"', lat: 43.5, lon: 5.4, species: ['cepe'], note: 'Sous les chênes' }]);
+  assert.match(g, /<wpt lat="43.5" lon="5.4">/);
+  assert.match(g, /<name>Coin &lt;1&gt; &amp; &quot;2&quot;<\/name>/);
+  assert.match(g, /<desc>Cèpe — Sous les chênes<\/desc>/);
+  const c = toCsv([{ a: 'x;y', b: 'dit "oui"' }], [['A', (r) => r.a], ['B', (r) => r.b]]);
+  assert.equal(c, '﻿A;B\r\n"x;y";"dit ""oui"""\r\n');
+});

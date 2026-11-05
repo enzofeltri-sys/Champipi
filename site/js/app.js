@@ -3,6 +3,7 @@ import {
   SPECIES, speciesLabel, inSeason, seasonText, parseCoords, formatCoords, directionsUrl,
   sortSpots, filterSpots, spotSpecies, lastFinds, formatDate, todayIso, escapeHtml as esc, MONTHS,
   round6, MASSIFS, FORBIDDEN, TREES, SOILS, EXPOSURES, QUANTITIES, CONDITIONS, labelOf, exifGps,
+  distanceM, bearingDeg, cardinal, formatDistance, exifDate, searchSpots, toGpx, toCsv,
 } from './logic.js';
 import { createPhotoStore, thumbPath } from './photos.js';
 import { GUIDE, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown } from './advisor.js';
@@ -31,6 +32,7 @@ const state = {
   isAdmin: false, request: null,
   scope: store.get('champi-scope') || 'all',
   species: '',
+  query: '',
   draft: null,          // { lat, lon, id?: string } pendant la création / modification
   openSpotId: null,
 };
@@ -81,6 +83,7 @@ async function doRoute(session) {
   $('#admin-btn').hidden = !state.isAdmin;
   await loadData();
   if (state.isAdmin) refreshAdminBadge().catch(fatal);
+  if (!store.get('champi-tuto')) setTimeout(openTuto, 400);
 }
 
 function showDenied() {
@@ -328,7 +331,7 @@ const month = () => new Date().getMonth() + 1;
 
 function render() {
   const me = state.user?.id;
-  const visible = filterSpots(state.spots, state.finds, { scope: state.scope, species: state.species, me });
+  const visible = searchSpots(filterSpots(state.spots, state.finds, { scope: state.scope, species: state.species, me }), state.finds, state.query);
   const sorted = sortSpots(visible, state.finds);
   const last = lastFinds(state.finds);
 
@@ -402,6 +405,7 @@ function syncTheme() {
 for (const b of $$('#theme-seg button')) b.addEventListener('click', () => { store.set('champi-theme', b.dataset.theme || null); syncTheme(); });
 syncTheme();
 
+$('#search').addEventListener('input', (e) => { state.query = e.target.value; render(); });
 $('#peek').addEventListener('click', () => $('#list').scrollIntoView({ behavior: 'smooth' }));
 
 // ---------------------------------------------------------------------------
@@ -723,7 +727,16 @@ function setFindFiles(files) {
   findFiles = files;
   $('#find-previews').innerHTML = files.map((f, i) => `<span class="thumb"><img src="${URL.createObjectURL(f)}" alt=""><button type="button" class="x" data-drop="${i}" aria-label="Retirer">✕</button></span>`).join('');
 }
-$('#find-photos').addEventListener('change', (e) => { setFindFiles([...findFiles, ...e.target.files].slice(0, 6)); e.target.value = ''; });
+$('#find-photos').addEventListener('change', async (e) => {
+  const added = [...e.target.files]; e.target.value = '';
+  const first = !findFiles.length;
+  setFindFiles([...findFiles, ...added].slice(0, 6));
+  // Date de prise de vue de la photo → date de la trouvaille (si l'utilisateur ne l'a pas changée).
+  if (first && added[0] && $('#find-date').value === todayIso()) {
+    const d = exifDate(await added[0].arrayBuffer());
+    if (d && d <= todayIso() && d !== todayIso()) { $('#find-date').value = d; toast(`Date reprise de la photo : ${formatDate(d)}`); }
+  }
+});
 $('#find-previews').addEventListener('click', (e) => {
   const b = e.target.closest('[data-drop]'); if (!b) return;
   setFindFiles(findFiles.filter((_, i) => i !== Number(b.dataset.drop)));
@@ -767,6 +780,9 @@ $('#photo-delete').addEventListener('click', async () => {
 });
 
 $('#dlg-spot').addEventListener('close', () => { state.openSpotId = null; });
+$('#spot-compass').addEventListener('click', () => {
+  const s = state.spots.find((x) => x.id === state.openSpotId); if (s) openCompass(s);
+});
 $('#dlg-spot .js-close').addEventListener('click', () => $('#dlg-spot').close());
 $('#dlg-spot').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $('#spot-edit').addEventListener('click', () => {
@@ -818,6 +834,127 @@ sb.auth.onAuthStateChange((event, session) => {
     setTimeout(() => route(session), 0);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Boussole « Retrouver mon coin »
+
+const compass = { target: null, pos: null, heading: null, watch: null, wake: null };
+function compassRender() {
+  const c = compass; if (!c.target) return;
+  const box = $('.compass');
+  if (!c.pos) { $('#compass-dist').textContent = '…'; $('#compass-dir').textContent = 'Recherche de ta position…'; return; }
+  const d = distanceM(c.pos, c.target);
+  const b = bearingDeg(c.pos, c.target);
+  const here = d <= Math.max(15, c.pos.acc || 0);
+  box.classList.toggle('here', here);
+  box.classList.toggle('relative', c.heading != null);
+  // Avec boussole : la flèche montre la direction à suivre. Sans : elle est orientée nord en haut.
+  const rot = c.heading != null ? b - c.heading : b;
+  $('#compass-arrow').style.transform = `rotate(${rot}deg)`;
+  $('#compass-dist').textContent = here ? 'Tu y es ! 🍄' : formatDistance(d);
+  $('#compass-dir').textContent = here ? '' : `vers le ${cardinal(b)} (${Math.round(b)}°)${c.heading == null ? ' · nord en haut' : ''}`;
+  $('#compass-acc').textContent = c.pos.acc ? `Précision GPS : ± ${Math.round(c.pos.acc)} m` : '';
+}
+function onOrientation(e) {
+  let h = null;
+  if (typeof e.webkitCompassHeading === 'number') h = e.webkitCompassHeading;               // iPhone
+  else if (e.absolute && typeof e.alpha === 'number') h = 360 - e.alpha;                    // Android
+  if (h != null) {
+    const angle = screen.orientation?.angle ?? 0;
+    compass.heading = (h + angle + 360) % 360;
+    $('#compass-enable').hidden = true;
+    compassRender();
+  }
+}
+async function enableOrientation() {
+  try {
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const r = await DeviceOrientationEvent.requestPermission();
+      if (r !== 'granted') { toast('Boussole refusée : la flèche restera orientée nord en haut.'); return; }
+    }
+    window.addEventListener('deviceorientationabsolute', onOrientation);
+    window.addEventListener('deviceorientation', onOrientation);
+  } catch { /* pas de capteur */ }
+}
+async function openCompass(s) {
+  compass.target = { lat: s.lat, lon: s.lon }; compass.pos = null; compass.heading = null;
+  $('#compass-name').textContent = `🧭 ${s.name}`;
+  $('#compass-enable').hidden = !(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function');
+  if ($('#compass-enable').hidden) enableOrientation();
+  $('#dlg-compass').showModal();
+  $('#dlg-compass').scrollTop = 0;
+  $('#dlg-compass .js-close').focus();
+  compassRender();
+  if (!navigator.geolocation) { $('#compass-dir').textContent = 'Géolocalisation indisponible.'; return; }
+  compass.watch = navigator.geolocation.watchPosition((p) => {
+    compass.pos = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy };
+    compassRender();
+  }, (err) => { $('#compass-dir').textContent = err.code === 1 ? 'Autorise la localisation pour ce site.' : 'Position introuvable pour l\'instant…'; },
+  { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
+  try { compass.wake = await navigator.wakeLock?.request('screen'); } catch { /* écran : pas grave */ }
+}
+function closeCompass() {
+  if (compass.watch != null) navigator.geolocation.clearWatch(compass.watch);
+  window.removeEventListener('deviceorientationabsolute', onOrientation);
+  window.removeEventListener('deviceorientation', onOrientation);
+  compass.wake?.release?.().catch(() => {});
+  Object.assign(compass, { target: null, watch: null, wake: null });
+}
+$('#compass-enable').addEventListener('click', enableOrientation);
+$('#dlg-compass .js-close').addEventListener('click', () => $('#dlg-compass').close());
+$('#dlg-compass').addEventListener('close', closeCompass);
+
+// ---------------------------------------------------------------------------
+// Exports (GPX pour OsmAnd / Garmin, CSV pour tableur)
+
+function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+$('#export-gpx').addEventListener('click', () => {
+  $('#menu').hidden = true;
+  download(`coins-champignons-${todayIso()}.gpx`, toGpx(state.spots), 'application/gpx+xml');
+  toast(`${state.spots.length} coin(s) exporté(s)`);
+});
+$('#export-csv').addEventListener('click', () => {
+  $('#menu').hidden = true;
+  const byId = new Map(state.spots.map((s) => [s.id, s]));
+  const rows = state.finds.map((f) => ({ f, s: byId.get(f.spot_id) }));
+  download(`journal-champignons-${todayIso()}.csv`, toCsv(rows, [
+    ['Date', (r) => r.f.found_on], ['Coin', (r) => r.s?.name], ['Latitude', (r) => r.s?.lat], ['Longitude', (r) => r.s?.lon],
+    ['Espèces', (r) => (r.f.species ?? []).map(speciesLabel).join(', ')], ['Quantité', (r) => r.f.quantity && labelOf(QUANTITIES, r.f.quantity)],
+    ['État', (r) => r.f.condition && labelOf(CONDITIONS, r.f.condition)], ['Météo', (r) => r.f.weather], ['Note', (r) => r.f.note],
+    ['Par', (r) => r.f.author?.display_name],
+  ]), 'text/csv;charset=utf-8');
+  toast(`${rows.length} trouvaille(s) exportée(s)`);
+});
+
+// ---------------------------------------------------------------------------
+// Petit tutoriel (première ouverture, puis menu « Aide »)
+
+const TUTO = [
+  ['🗺️', 'Marquer un coin', 'Touche la carte, ou « Je suis ici » sur place, ou « Coordonnées ». Fais glisser l\'épingle pour l\'ajuster, puis donne un nom.'],
+  ['👪', 'Moi seul ou Famille', '<b style="color:var(--private)">Violet</b> : visible par toi seul. <b style="color:var(--family)">Orange</b> : partagé avec la famille. Tu choisis pour chaque coin.'],
+  ['📷', 'Le journal', 'Touche un coin puis « Noter une trouvaille » : date, espèces, quantité, photos. Tes trouvailles rendent le conseiller plus juste.'],
+  ['🧭', 'Sur le terrain', '« Retrouver » affiche une flèche et la distance jusqu\'au coin. « Itinéraire » ouvre Google Maps pour la route.'],
+  ['🤖', 'Le conseiller', 'Il croise la pluie des 10 derniers jours, la saison et le milieu pour dire où ça peut pousser. Ce n\'est jamais une identification.'],
+  ['⚠️', 'Sécurité', 'Fais contrôler <b>chaque récolte</b> par un pharmacien ou une association mycologique. Antipoison Marseille : <a class="tel" href="tel:+33491752525">04 91 75 25 25</a>.'],
+];
+let tutoI = 0;
+function showTuto(i) {
+  tutoI = i;
+  const [e, t, txt] = TUTO[i];
+  $('#tuto-body').innerHTML = `<div class="tuto-emoji">${e}</div><h2>${t}</h2><p>${txt}</p>`;
+  $('#tuto-step').textContent = `${i + 1} / ${TUTO.length}`;
+  $('#tuto-next').textContent = i === TUTO.length - 1 ? 'C\'est parti' : 'Suivant';
+}
+function openTuto() { $('#menu').hidden = true; showTuto(0); $('#dlg-tuto').showModal(); }
+function endTuto() { store.set('champi-tuto', '1'); $('#dlg-tuto').close(); }
+$('#tuto-next').addEventListener('click', () => (tutoI < TUTO.length - 1 ? showTuto(tutoI + 1) : endTuto()));
+$('#tuto-skip').addEventListener('click', endTuto);
+$('#help-btn').addEventListener('click', openTuto);
 
 // ---------------------------------------------------------------------------
 // Météo, conseiller, guide
