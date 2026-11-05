@@ -88,12 +88,39 @@ async function run() {
   return { relevés: res, restant: count };
 }
 
+// Diagnostic : API ouvertes par la clé (lues dans le jeton, jamais renvoyé) et réponse de chacune.
+async function probe() {
+  const key = Deno.env.get('METEOFRANCE_API_KEY') ?? '';
+  const out: Record<string, unknown> = {
+    forme: { longueur: key.length, morceaux: key.split('.').length, debut_jwt: key.startsWith('eyJ'), espaces: /\s/.test(key), guillemets: /["']/.test(key), bearer: /^bearer/i.test(key) },
+  };
+  try {
+    const p = JSON.parse(atob(key.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    out.expire = p.exp ? new Date(p.exp * 1000).toISOString() : null;
+    out.api = (p.subscribedAPIs ?? []).map((a: any) => `${a.name} → ${a.context}`);
+  } catch { out.api = 'clé illisible'; }
+  const P = 'https://public-api.meteofrance.fr/public';
+  const tests: Record<string, string> = {
+    climatologie: `${P}/DPClim/v1/liste-stations/quotidienne?id-departement=13&parametre=precipitation`,
+    paquet_obs: `${P}/DPPaquetObs/v1/paquet/horaire?id-departement=13&format=json`,
+    observation: `${P}/DPObs/v1/liste-stations`,
+    vigilance: `${P}/DPVigilance/v1/cartevigilance/encours`,
+    radar: `${P}/DPRadar/v1/mosaiques/METROPOLE/observations/LAME_D_EAU/produit?maille=1000`,
+  };
+  for (const [k, u] of Object.entries(tests)) {
+    try { const r = await fetch(u, { headers: { apikey: key, accept: '*/*' } }); const t = await r.text(); out[k] = `${r.status} ${t.slice(0, 220).replaceAll(key, '***')}`; }
+    catch (e) { out[k] = 'erreur ' + String(e).slice(0, 80); }
+  }
+  return out;
+}
+
 Deno.serve(async (req) => {
   try {
     const { data: cfg } = await admin.from('champi_push_config').select('cron_token').eq('id', true).single();
     if (req.headers.get('x-champi-token') !== cfg?.cron_token) return json({ error: 'jeton invalide' }, 401);
     const body = await req.json().catch(() => ({}));
     if (body.action === 'run') return json(await run());
+    if (body.action === 'probe') return json(await probe());
     return json({ error: 'action inconnue' }, 400);
   } catch (err: any) {
     return json({ error: String(err?.message ?? err) }, 500);
