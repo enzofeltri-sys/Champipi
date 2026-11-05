@@ -1,4 +1,4 @@
-// Parcours terrain : tutoriel, boussole (GPS simulé qui se déplace), recherche, exports, date EXIF.
+// Parcours terrain : tutoriel, recherche, exports, date EXIF.
 const { chromium, devices } = require('playwright');
 const { closeDialogs, openList, openSpot, setScope, pickSpecies, addAtCenter } = require('./ui-helpers.cjs');
 const fakeMeteo = require('./fake-meteo.cjs');
@@ -36,30 +36,6 @@ const finds = [{ id: 'f1', spot_id: 's2', user_id: ME, found_on: '2026-10-01', s
   const titles = [];
   for (let i = 0; i < 6; i++) { titles.push(await page.textContent('#tuto-body h2')); if (i === 1) await page.screenshot({ path: `${OUT}/60-tuto.png` }); await page.click('#tuto-next'); }
   console.log('tutoriel :', titles.join(' → '), '| fermé :', !(await page.isVisible('#dlg-tuto')), '| mémorisé :', await page.evaluate(() => localStorage.getItem('champi-tuto')));
-
-  // 2. Boussole : à ~500 m au nord du coin, puis on se rapproche
-  await openSpot(page, 'Pinède', { more: false });
-  await page.click('#spot-compass');
-  await page.waitForFunction(() => /m$/.test(document.querySelector('#compass-dist').textContent));
-  console.log('boussole :', await page.textContent('#compass-dist'), '|', await page.textContent('#compass-dir'), '|', await page.textContent('#compass-acc'));
-  await page.waitForTimeout(500);
-  console.log('dialogue :', JSON.stringify(await page.evaluate(() => { const d = document.querySelector('#dlg-compass'); const r = d.getBoundingClientRect(); return { top: r.top, h: r.height, sh: d.scrollHeight, st: d.scrollTop, vh: innerHeight, sy: scrollY }; })));
-  await page.locator('#dlg-compass').screenshot({ path: `${OUT}/61-boussole.png` });
-  await ctx.setGeolocation({ latitude: 43.30005, longitude: 5.50003, accuracy: 6 });
-  await page.waitForFunction(() => document.querySelector('#compass-dist').textContent.includes('Tu y es'), null, { timeout: 10000 });
-  console.log('arrivée :', await page.textContent('#compass-dist'));
-  // boussole du téléphone simulée : cap 90° (est) → la flèche vers le sud doit tourner de 180 - 90 = 90°
-  await ctx.setGeolocation({ latitude: 43.3045, longitude: 5.5000, accuracy: 8 });
-  await page.waitForFunction(() => /m$/.test(document.querySelector('#compass-dist').textContent));
-  const btnVisible = await page.isVisible('#compass-enable');
-  console.log('bouton « Activer la boussole » visible :', btnVisible, '| requestPermission :', await page.evaluate(() => typeof DeviceOrientationEvent.requestPermission));
-  if (btnVisible) { await page.click('#compass-enable'); await page.waitForTimeout(300); }
-  await page.evaluate(() => { const e = new Event('deviceorientationabsolute'); Object.assign(e, { absolute: true, alpha: 270 }); window.dispatchEvent(e); });
-  await page.waitForTimeout(300);
-  console.log('debug :', await page.evaluate(() => [document.querySelector('.compass').className, document.querySelector('#compass-dir').textContent]));
-  console.log('flèche avec boussole (cap est) :', await page.evaluate(() => document.querySelector('#compass-arrow').style.transform));
-  await page.click('#dlg-compass .js-close');
-  await page.click('#dlg-spot .js-close');
 
   // 3. Recherche
   await openList(page);

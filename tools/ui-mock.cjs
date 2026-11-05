@@ -62,6 +62,7 @@ async function setup(page, data, { session = true } = {}) {
     const page = await ctx.newPage();
   await fakeMeteo(page);
     page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+    page.on('response', (r) => { if (r.status() >= 400) console.log('HTTP', r.status(), r.url().slice(0, 110)); });
     page.on('console', (msg) => { if (msg.type() === 'error') errors.push('console: ' + msg.text()); });
     return page;
   };

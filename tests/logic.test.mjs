@@ -122,22 +122,7 @@ test('réduction des photos', () => {
   assert.deepEqual(fitSize(800, 600, 1600), { w: 800, h: 600 });
 });
 
-import { distanceM, bearingDeg, cardinal, formatDistance, exifDate, searchSpots, toGpx, toCsv, fold } from '../site/js/logic.js';
-
-test('boussole : distance et cap', () => {
-  const aix = { lat: 43.5297, lon: 5.4474 }, marseille = { lat: 43.2965, lon: 5.3698 };
-  const d = distanceM(aix, marseille);
-  assert.ok(d > 26000 && d < 27000, String(d));       // ~26,6 km
-  const b = bearingDeg(aix, marseille);
-  assert.ok(b > 190 && b < 200, String(b));           // plein sud, un peu ouest
-  assert.equal(cardinal(b), 'sud');
-  assert.equal(cardinal(44), 'nord-est');
-  assert.equal(cardinal(350), 'nord');
-  assert.equal(bearingDeg({ lat: 43, lon: 5 }, { lat: 43, lon: 5.01 }).toFixed(0), '90');
-  assert.equal(formatDistance(233), '235 m');
-  assert.equal(formatDistance(2450), '2,5 km');
-  assert.equal(formatDistance(26600), '27 km');
-});
+import { exifDate, searchSpots, toGpx, toCsv, fold } from '../site/js/logic.js';
 
 test('date EXIF de la photo', () => {
   assert.equal(exifDate(buf('./date.jpg')), '2025-11-12');

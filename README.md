@@ -52,7 +52,7 @@ Les migrations sont dans `supabase/migrations/`. Règles (RLS) :
   (`site/js/forests.js`) a été relevée sur toute la région et vérifiée auprès de l'IGN.
 - À droite : ⭐ coins (affichés par défaut), 🌧️ pluie des 10 derniers jours, 🛰️ photo aérienne, 📍 ma position.
 - En bas : « ＋ Noter un coin » (viseur au centre, « Ma position » ou « Coordonnées », puis « C'est ici »).
-- Toucher un coin : ce qui y a été trouvé, itinéraire, boussole, journal ; le reste dans « Météo, bilan et détails ».
+- Toucher un coin : ce qui y a été trouvé, itinéraire, journal ; le reste dans « Météo, bilan et détails ».
 - Menu ☰ : liste des coins (Tous / À moi / Famille, recherche), conseiller, guide, hors ligne, alertes, famille, aide.
 
 ## Conseiller, météo et forêts
@@ -99,7 +99,7 @@ Les migrations sont dans `supabase/migrations/`. Règles (RLS) :
 
 - Menu ☰ → « 📥 Cartes hors ligne » : enregistre le Plan IGN de la zone affichée (≤ 1 500 tuiles, zooms jusqu'à 16),
   dans le cache `champi-tuiles-v1` du service worker (`site/sw.js`). Les zones se suppriment depuis le même écran.
-- Sans réseau : l'appli s'ouvre sur la dernière copie des données (bandeau « 📴 Hors ligne »), la boussole et le journal
+- Sans réseau : l'appli s'ouvre sur la dernière copie des données (bandeau « 📴 Hors ligne ») et le journal
   marchent ; les nouveaux coins et trouvailles (avec photos) attendent dans IndexedDB et partent au retour du réseau
   (`site/js/offline.js`). La modification/suppression d'un coin existant demande le réseau.
 - Plan IGN sous Licence Ouverte Etalab ; OpenTopoMap n'est pas enregistré (sa politique l'interdit).
@@ -129,7 +129,7 @@ node tools/ui-mock.cjs http://localhost:5173/ shots   # parcours Chromium avec u
 node tools/ui-photos.cjs http://localhost:5173/ shots <photo.jpg avec GPS>   # parcours photos et détails
 node tools/ui-admin.cjs http://localhost:5173/ shots      # demande d'accès + admin
 node tools/ui-advisor.cjs http://localhost:5173/ shots    # conseiller (vraies API Open-Meteo et IGN)
-node tools/ui-field.cjs http://localhost:5173/ shots tests/date.jpg   # tutoriel, boussole, recherche, exports
+node tools/ui-field.cjs http://localhost:5173/ shots tests/date.jpg   # tutoriel, recherche, exports
 node tools/ui-access.cjs http://localhost:5173/ shots     # accès aux massifs (hors saison et été simulé)
 node tools/ui-offline.cjs http://localhost:5173/ shots tests/gps.jpg  # hors ligne (vraies tuiles IGN)
 node tools/ui-share.cjs http://localhost:5173/ shots      # partage d'un coin (3 personnes)

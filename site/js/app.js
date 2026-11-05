@@ -3,7 +3,7 @@ import {
   SPECIES, speciesLabel, inSeason, seasonText, parseCoords, formatCoords, directionsUrl,
   sortSpots, filterSpots, spotSpecies, lastFinds, formatDate, todayIso, escapeHtml as esc, MONTHS,
   round6, MASSIFS, FORBIDDEN, TREES, SOILS, EXPOSURES, QUANTITIES, CONDITIONS, labelOf, exifGps,
-  distanceM, bearingDeg, cardinal, formatDistance, exifDate, searchSpots, toGpx, toCsv,
+  exifDate, searchSpots, toGpx, toCsv,
 } from './logic.js';
 import { createPhotoStore, thumbPath } from './photos.js';
 import { GUIDE, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown } from './advisor.js';
@@ -976,9 +976,6 @@ $('#photo-delete').addEventListener('click', async () => {
 });
 
 $('#dlg-spot').addEventListener('close', () => { state.openSpotId = null; });
-$('#spot-compass').addEventListener('click', () => {
-  const s = state.spots.find((x) => x.id === state.openSpotId); if (s) openCompass(s);
-});
 $('#dlg-spot .js-close').addEventListener('click', () => $('#dlg-spot').close());
 $('#dlg-spot').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $('#spot-edit').addEventListener('click', () => {
@@ -1043,75 +1040,6 @@ sb.auth.onAuthStateChange((event, session) => {
 });
 
 // ---------------------------------------------------------------------------
-// Boussole « Retrouver mon coin »
-
-const compass = { target: null, pos: null, heading: null, watch: null, wake: null };
-function compassRender() {
-  const c = compass; if (!c.target) return;
-  const box = $('.compass');
-  if (!c.pos) { $('#compass-dist').textContent = '…'; $('#compass-dir').textContent = 'Recherche de ta position…'; return; }
-  const d = distanceM(c.pos, c.target);
-  const b = bearingDeg(c.pos, c.target);
-  const here = d <= Math.max(15, c.pos.acc || 0);
-  box.classList.toggle('here', here);
-  box.classList.toggle('relative', c.heading != null);
-  // Avec boussole : la flèche montre la direction à suivre. Sans : elle est orientée nord en haut.
-  const rot = c.heading != null ? b - c.heading : b;
-  $('#compass-arrow').style.transform = `rotate(${rot}deg)`;
-  $('#compass-dist').textContent = here ? 'Tu y es ! 🍄' : formatDistance(d);
-  $('#compass-dir').textContent = here ? '' : `vers le ${cardinal(b)} (${Math.round(b)}°)${c.heading == null ? ' · nord en haut' : ''}`;
-  $('#compass-acc').textContent = c.pos.acc ? `Précision GPS : ± ${Math.round(c.pos.acc)} m` : '';
-}
-function onOrientation(e) {
-  let h = null;
-  if (typeof e.webkitCompassHeading === 'number') h = e.webkitCompassHeading;               // iPhone
-  else if (e.absolute && typeof e.alpha === 'number') h = 360 - e.alpha;                    // Android
-  if (h != null) {
-    const angle = screen.orientation?.angle ?? 0;
-    compass.heading = (h + angle + 360) % 360;
-    $('#compass-enable').hidden = true;
-    compassRender();
-  }
-}
-async function enableOrientation() {
-  try {
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-      const r = await DeviceOrientationEvent.requestPermission();
-      if (r !== 'granted') { toast('Boussole refusée : la flèche restera orientée nord en haut.'); return; }
-    }
-    window.addEventListener('deviceorientationabsolute', onOrientation);
-    window.addEventListener('deviceorientation', onOrientation);
-  } catch { /* pas de capteur */ }
-}
-async function openCompass(s) {
-  compass.target = { lat: s.lat, lon: s.lon }; compass.pos = null; compass.heading = null;
-  $('#compass-name').textContent = `🧭 ${s.name}`;
-  $('#compass-enable').hidden = !(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function');
-  if ($('#compass-enable').hidden) enableOrientation();
-  $('#dlg-compass').showModal();
-  $('#dlg-compass').scrollTop = 0;
-  $('#dlg-compass .js-close').focus();
-  compassRender();
-  if (!navigator.geolocation) { $('#compass-dir').textContent = 'Géolocalisation indisponible.'; return; }
-  compass.watch = navigator.geolocation.watchPosition((p) => {
-    compass.pos = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy };
-    compassRender();
-  }, (err) => { $('#compass-dir').textContent = err.code === 1 ? 'Autorise la localisation pour ce site.' : 'Position introuvable pour l\'instant…'; },
-  { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
-  try { compass.wake = await navigator.wakeLock?.request('screen'); } catch { /* écran : pas grave */ }
-}
-function closeCompass() {
-  if (compass.watch != null) navigator.geolocation.clearWatch(compass.watch);
-  window.removeEventListener('deviceorientationabsolute', onOrientation);
-  window.removeEventListener('deviceorientation', onOrientation);
-  compass.wake?.release?.().catch(() => {});
-  Object.assign(compass, { target: null, watch: null, wake: null });
-}
-$('#compass-enable').addEventListener('click', enableOrientation);
-$('#dlg-compass .js-close').addEventListener('click', () => $('#dlg-compass').close());
-$('#dlg-compass').addEventListener('close', closeCompass);
-
-// ---------------------------------------------------------------------------
 // Exports (GPX pour OsmAnd / Garmin, CSV pour tableur)
 
 function download(name, text, type) {
@@ -1145,7 +1073,7 @@ const TUTO = [
   ['🍄', 'Choisis un champignon', 'Touche une pastille en haut (Cèpe, Girolle…) : la carte colore en vert les forêts où il pousse, et ne garde que tes coins où tu l\'as déjà trouvé. Le point vert = en saison.'],
   ['⭐', 'Tes coins', 'Les épingles sont tes coins (violet : à toi seul, orange : famille). Touche-en une pour voir ce que tu y as trouvé. Le bouton ⭐ à droite les masque ou les affiche.'],
   ['＋', 'Noter un coin', 'Touche « ＋ Noter un coin », fais glisser la carte pour mettre le viseur dessus (ou « Ma position »), puis « C\'est ici ».'],
-  ['🧭', 'Sur le terrain', 'Dans un coin : « Retrouver » affiche une flèche et la distance, « Itinéraire » ouvre Google Maps. Les boutons ronds : 🌧️ pluie des 10 derniers jours, 🛰️ photo aérienne, 📍 ta position.'],
+  ['📍', 'Sur le terrain', 'Dans un coin : « Itinéraire » ouvre Google Maps. Les boutons ronds : 🌧️ pluie des 10 derniers jours, 🛰️ photo aérienne, 📍 ta position.'],
   ['☰', 'Le reste', 'Dans le menu : liste de tes coins, conseiller du jour, guide des espèces, cartes hors ligne, alertes de pousse.'],
   ['⚠️', 'Sécurité', 'Fais contrôler <b>chaque récolte</b> par un pharmacien ou une association mycologique. Antipoison Marseille : <a class="tel" href="tel:+33491752525">04 91 75 25 25</a>.'],
 ];

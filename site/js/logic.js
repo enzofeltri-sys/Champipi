@@ -264,27 +264,6 @@ export function fitSize(w, h, max) {
 }
 
 // ---------------------------------------------------------------------------
-// Boussole : distance (m) et cap (degrés, 0 = nord) entre deux points.
-const rad = (d) => (d * Math.PI) / 180;
-export function distanceM(a, b) {
-  const R = 6371000;
-  const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-export function bearingDeg(a, b) {
-  const y = Math.sin(rad(b.lon - a.lon)) * Math.cos(rad(b.lat));
-  const x = Math.cos(rad(a.lat)) * Math.sin(rad(b.lat)) - Math.sin(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.cos(rad(b.lon - a.lon));
-  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
-}
-const DIRS = ['nord', 'nord-est', 'est', 'sud-est', 'sud', 'sud-ouest', 'ouest', 'nord-ouest'];
-export const cardinal = (deg) => DIRS[Math.round(deg / 45) % 8];
-export function formatDistance(m) {
-  if (m < 1000) return `${Math.round(m / 5) * 5} m`;
-  return `${(m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', ',')} km`;
-}
-
-// ---------------------------------------------------------------------------
 // Date de prise de vue (EXIF DateTimeOriginal) d'un JPEG → 'AAAA-MM-JJ' ou null.
 export function exifDate(buffer) {
   try {

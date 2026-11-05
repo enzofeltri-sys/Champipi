@@ -257,7 +257,6 @@
       <section id="spot-found" class="found"></section>
       <div class="row">
         <a id="spot-route" class="btn primary" target="_blank" rel="noopener">🚗 Itinéraire</a>
-        <button id="spot-compass" class="btn primary" type="button">🧭 Retrouver</button>
       </div>
       <h3>Journal</h3>
       <ul id="find-list" class="find-list"></ul>
@@ -328,23 +327,6 @@
     </form>
   </dialog>
 
-  <dialog id="dlg-compass" class="sheet compass-sheet">
-    <div class="stack center-text">
-      <div class="sheet-head">
-        <h2 id="compass-name">Retrouver</h2>
-        <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
-      </div>
-      <div class="compass" aria-live="polite">
-        <svg id="compass-arrow" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 6 L70 70 L50 58 L30 70 Z" fill="currentColor"/></svg>
-      </div>
-      <div id="compass-dist" class="compass-dist">…</div>
-      <div id="compass-dir" class="muted"></div>
-      <div id="compass-acc" class="small muted"></div>
-      <button id="compass-enable" class="btn" type="button" hidden>Activer la boussole du téléphone</button>
-      <p class="small muted">Tiens le téléphone à plat. Près des voitures, rochers ferreux ou lignes électriques, la boussole peut dévier.</p>
-    </div>
-  </dialog>
-
   <dialog id="dlg-tuto" class="sheet">
     <div class="stack">
       <div id="tuto-body"></div>
@@ -399,7 +381,7 @@
         <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
       </div>
       <p class="small">Avant de partir, enregistre la carte (Plan IGN) du massif où tu vas : cadre la zone sur la carte, puis touche le bouton.
-        En forêt, sans réseau, la carte, tes coins, la boussole et le journal fonctionnent ; les trouvailles et photos notées partent au retour du réseau.</p>
+        En forêt, sans réseau, la carte, tes coins et le journal fonctionnent ; les trouvailles et photos notées partent au retour du réseau.</p>
       <button id="offline-dl" class="btn primary" type="button">Enregistrer la zone affichée</button>
       <div id="offline-progress" class="progress" hidden><span></span></div>
       <p id="offline-msg" class="small muted"></p>
