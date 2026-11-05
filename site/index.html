@@ -150,11 +150,9 @@
       <div id="add-bar" class="add-bar card" hidden>
         <b>Où est ton coin ?</b>
         <span class="small muted">Fais glisser la carte pour mettre le viseur dessus.</span>
-        <div class="row">
+        <div class="bar-grid">
           <button id="add-locate" class="btn" type="button">📍 Ma position</button>
           <label class="btn">📷 Photo<input id="add-photo" type="file" accept="image/jpeg" hidden></label>
-        </div>
-        <div class="row end">
           <button id="add-cancel" class="btn" type="button">Annuler</button>
           <button id="add-here" class="btn primary" type="button">✓ C'est ici</button>
         </div>
@@ -163,16 +161,16 @@
       <div id="here-bar" class="add-bar card" hidden>
         <b>🌱 Qu'est-ce qui pousse ici ?</b>
         <span class="small muted">Place le viseur sur l'endroit à analyser (fais glisser la carte), ou prends ta position.</span>
-        <div class="row end">
-          <button id="here-cancel" class="btn" type="button">Annuler</button>
+        <div class="bar-grid">
           <button id="here-locate" class="btn" type="button">📍 Ma position</button>
-          <button id="here-go" class="btn primary" type="button">Analyser ici</button>
+          <button id="here-cancel" class="btn" type="button">Annuler</button>
+          <button id="here-go" class="btn primary wide" type="button">🌱 Analyser ici</button>
         </div>
       </div>
 
       <div id="adjust-bar" class="adjust-bar card" hidden>
         <span class="small">Fais glisser l'épingle (ou touche la carte) pour l'ajuster</span>
-        <div class="row">
+        <div class="bar-grid">
           <button id="adjust-cancel" class="btn" type="button">Annuler</button>
           <button id="adjust-done" class="btn primary" type="button">Continuer</button>
         </div>

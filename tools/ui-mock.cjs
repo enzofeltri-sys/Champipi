@@ -137,7 +137,7 @@ async function setup(page, data, { session = true } = {}) {
 
   // 8. Bouton « 📷 Photo » à la place de « Coordonnées »
   await page.click('#btn-add');
-  console.log('barre d\'ajout :', (await page.textContent('#add-bar .row')).replace(/\s+/g, ' ').trim());
+  console.log('barre d\'ajout :', (await page.textContent('#add-bar .bar-grid')).replace(/\s+/g, ' ').trim());
   await page.click('#add-cancel');
 
   // 9. Menu, massifs, thème sombre, fond photo

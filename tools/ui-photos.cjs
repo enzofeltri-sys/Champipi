@@ -77,6 +77,7 @@ const ME = '11111111-1111-1111-1111-111111111111';
         return send([], 204);
       }
     }
+    if (/champi_rain_(stations|daily)/.test(path)) return send([]);   // pluie Météo-France : rien de simulé
     return send({ message: 'non simulé ' + m + ' ' + path }, 500);
   });
   await page.addInitScript(([ref, me]) => {

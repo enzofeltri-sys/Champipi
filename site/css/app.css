@@ -409,3 +409,31 @@ button, .btn, .chip, .sp-chip, .rail-btn, summary { -webkit-user-select: none; u
   .rail-btn { width: 48px; height: 46px; border-radius: 14px; font-size: 1.1rem; }
   .rail-btn span { font-size: .58rem; margin-top: 2px; }
 }
+
+/* ===== Alignement : une seule marge (12 px) et des hauteurs communes partout sur la carte ===== */
+:root { --gutter: 12px; --top: calc(44px + env(safe-area-inset-top)); --under-top: calc(100px + env(safe-area-inset-top)); --bottom-gap: calc(22px + env(safe-area-inset-bottom)); }
+.topbar { top: var(--top); left: var(--gutter); right: var(--gutter); gap: 8px; align-items: center; }
+.species-bar { padding: 0 30px 0 0; align-items: center; }
+.sp-chip { min-height: 44px; height: 44px; display: inline-flex; align-items: center; }
+.topbar .icon-btn { width: 44px; height: 44px; margin-left: 0; }
+.rail { top: var(--under-top); right: var(--gutter); }
+.menu { top: calc(var(--top) + 52px); right: var(--gutter); }
+.offline-bar { top: var(--under-top); left: var(--gutter); }
+.toast { top: var(--under-top); }
+/* Contrôles de la carte (échelle, légende de pluie) : même marge gauche, sous les filtres */
+.leaflet-top { margin-top: var(--under-top); }
+.leaflet-top.leaflet-left .leaflet-control { margin-left: var(--gutter); margin-top: 0; margin-bottom: 8px; }
+.leaflet-top.leaflet-left .leaflet-control-scale { margin-left: var(--gutter); }
+/* Bas : crédits collés au bord, tout le reste juste au-dessus, même largeur */
+.leaflet-bottom { margin-bottom: env(safe-area-inset-bottom); }
+.leaflet-control-attribution { font-size: 9px; line-height: 1.4; padding: 0 6px; opacity: .85; }
+.bottom, .add-bar, .adjust-bar { left: var(--gutter); right: var(--gutter); bottom: var(--bottom-gap); }
+.add-bar, .adjust-bar { gap: 10px; padding: 14px; }
+.bar-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bar-grid .btn { width: 100%; min-height: 48px; justify-content: center; text-align: center; display: inline-flex; align-items: center; margin: 0; }
+.bar-grid .wide { grid-column: 1 / -1; }
+/* Pastilles : pas d'ombre (coupée par la zone qui défile, elle dessinait une bande claire) ; contour net à la place */
+.species-bar .sp-chip { box-shadow: none; border: 1px solid rgba(0,0,0,.18); }
+:root[data-theme="dark"] .species-bar .sp-chip { border-color: rgba(255,255,255,.18); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme]) .species-bar .sp-chip { border-color: rgba(255,255,255,.18); } }
+.species-bar { -webkit-mask-image: linear-gradient(to right, #000 88%, transparent); mask-image: linear-gradient(to right, #000 88%, transparent); }
