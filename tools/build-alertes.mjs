@@ -8,4 +8,7 @@ await build({
   banner: { js: '// FICHIER GÉNÉRÉ par tools/build-alertes.mjs depuis site/js/advisor.js et logic.js : ne pas modifier à la main.' },
   outfile: 'supabase/functions/champi-alertes/rules.js',
 });
-console.log('rules.js généré');
+// Pluie mesurée : copie telle quelle (module sans dépendance).
+import { readFileSync, writeFileSync } from 'node:fs';
+writeFileSync('supabase/functions/champi-alertes/rain.js', '// COPIE de site/js/rain.js par tools/build-alertes.mjs : ne pas modifier à la main.\n' + readFileSync('site/js/rain.js', 'utf8'));
+console.log('rules.js et rain.js générés');

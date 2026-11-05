@@ -21,7 +21,10 @@ const db = { profiles: [{ id: ME, display_name: 'Enzo', avatar_emoji: null, avat
     const send = (body, st = 200) => route.fulfill({ status: st, contentType: 'application/json', body: JSON.stringify(obj && Array.isArray(body) ? body[0] ?? null : body) });
     if (t === 'champi_profiles' && req.method() === 'PATCH') { const p = JSON.parse(req.postData()); db.patches.push(p); Object.assign(db.profiles[0], p); return send([db.profiles[0]]); }
     if (t === 'champi_profiles') return send(db.profiles);
-    const body = { champi_allowed_emails: [{ email: 'x', label: 'Enzo' }] }[t] ?? (u.pathname.startsWith('/functions/') ? { depts: {} } : []);
+    const days = []; for (let i = 1; i <= 14; i++) days.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10));
+    const rain = days.map((day, i) => ({ station_id: 'MRS', day, rr: i === 3 ? 31 : 0 }));   // une station près de Marseille : 31 mm il y a 4 j
+    if (t === 'champi_rain_daily' && Number(u.searchParams.get('offset') || 0) > 0) return send([]);
+    const body = { champi_allowed_emails: [{ email: 'x', label: 'Enzo' }], champi_rain_stations: [{ id: 'MRS', name: 'MARSEILLE-TEST', lat: 43.26, lon: 5.50 }], champi_rain_daily: rain }[t] ?? (u.pathname.startsWith('/functions/') ? { depts: {} } : []);
     send(body);
   });
   await page.addInitScript(([ref, me]) => {

@@ -7,7 +7,8 @@ import {
 } from './logic.js';
 import { createPhotoStore, thumbPath } from './photos.js';
 import { GUIDE, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown } from './advisor.js';
-import { dailyFor, forestAt, soilAt, historyFor } from './weather.js';
+import { dailyFor as openMeteoFor, forestAt, soilAt, historyFor } from './weather.js';
+import { rainIndex, mergeRain, rainSource } from './rain.js';
 import { treesAt, soilKind, whatGrows, fix as cleanText } from './here.js';
 import { historyRange, findConditions, spotProfile, personalAdvice, profileSummary } from './learn.js';
 import { massifAt, accessFor, inFireSeason, DEPT_PAGES, ACCESS_ICON } from './access.js';
@@ -383,6 +384,44 @@ async function loadData() {
 
 const month = () => new Date().getMonth() + 1;
 
+// ---------------------------------------------------------------------------
+// Météo « doublée » : pluie mesurée par les stations Météo-France (relevée chaque nuit sur le serveur)
+// + Open-Meteo (températures, prévisions, et pluie entre les stations). L'une sert de secours à l'autre.
+let rainIdx = null, rainIdxAt = 0, rainIdxLoading = null;
+async function loadRainIndex() {
+  if (rainIdx && Date.now() - rainIdxAt < 30 * 60 * 1000) return rainIdx;
+  if (rainIdxLoading) return rainIdxLoading;
+  rainIdxLoading = (async () => {
+    const since = new Date(Date.now() - 16 * 86400000).toISOString().slice(0, 10);
+    const st = await sb.from('champi_rain_stations').select('id, name, lat, lon');
+    if (st.error) throw st.error;
+    const rows = [];
+    for (let from = 0; from < 20000; from += 1000) {   // 1 000 lignes par réponse au maximum
+      const r = await sb.from('champi_rain_daily').select('station_id, day, rr').gte('day', since).order('day').order('station_id').range(from, from + 999);
+      if (r.error) throw r.error;
+      rows.push(...r.data);
+      if (r.data.length < 1000) break;
+    }
+    rainIdx = rainIndex(st.data, rows); rainIdxAt = Date.now();
+    return rainIdx;
+  })().catch(() => rainIdx).finally(() => { rainIdxLoading = null; });
+  return rainIdxLoading;
+}
+const rainInfo = new WeakMap();   // daily → { measured, near, rainOnly } (pour afficher la source)
+async function dailyFor(points) {
+  const [om, idx] = await Promise.all([openMeteoFor(points).catch((e) => ({ error: e })), loadRainIndex().catch(() => null)]);
+  const today = todayIso();
+  const out = points.map(([lat, lon], i) => {
+    const r = mergeRain(om.error ? null : om[i], lat, lon, idx, today);
+    if (r.daily) rainInfo.set(r.daily, r);
+    return r.daily;
+  });
+  if (om.error && out.every((d) => !d)) throw om.error;
+  return out;
+}
+const sourceOf = (daily) => rainSource(rainInfo.get(daily));
+
+
 function render() {
   decorateShares();
   const me = state.user?.id;
@@ -589,7 +628,7 @@ function setSpecies(ids, remember = true) {
   habitatKeys = colorKeyMap(favorableColorsMany(state.species));
   habitat.ids = [...state.species]; habitat.table = habitatTable(habitat.ids); habitat.codes = new Map();
   if (any && habitatKeys.size) {
-    if (!habitatLayer) habitatLayer = new HabitatLayer({ minZoom: 8, maxNativeZoom: 16, maxZoom: 19, opacity: 1, zIndex: 250, attribution: 'BD Forêt® V2 © IGN, météo Open-Meteo' });
+    if (!habitatLayer) habitatLayer = new HabitatLayer({ minZoom: 8, maxNativeZoom: 16, maxZoom: 19, opacity: 1, zIndex: 250, attribution: 'BD Forêt® V2 © IGN, pluie Météo-France et Open-Meteo' });
     if (map.hasLayer(habitatLayer)) habitatLayer.redraw(); else habitatLayer.addTo(map);
     updateHabitatWeather();
   } else if (habitatLayer) habitatLayer.remove();
@@ -750,7 +789,7 @@ async function analyzeHere(lat, lon) {
       : `${sk.kind ? `<b>${SOIL_TEXT[sk.kind]}</b>` : '<span class="muted">calcaire ou siliceux : non déterminé</span>'}${sk.name ? ` · <span class="small muted">${esc(sk.name.toLowerCase())}</span>` : ''}
         ${sk.text ? `<details class="small"><summary>Description du terrain</summary>${esc(sk.text)}</details>` : ''}`}</div>
     <div>⛰️ ${z != null ? `<b>${z} m</b>` : '<span class="muted">altitude inconnue</span>'} · 📅 ${esc(MONTHS[m - 1])}</div>
-    <div>🌧️ ${w ? `<b>${w.rain10} mm</b> sur 10 jours${w.bigRainAgo != null ? ` · grosse pluie il y a ${w.bigRainAgo} j` : ''}` : '<span class="muted">météo indisponible</span>'}</div>
+    <div>🌧️ ${w ? `<b>${w.rain10} mm</b> sur 10 jours${w.bigRainAgo != null ? ` · grosse pluie il y a ${w.bigRainAgo} j` : ''}<br><span class="small muted">${esc(sourceOf(daily.value))}</span>` : '<span class="muted">météo indisponible</span>'}</div>
   </div>`;
 
   const items = list.map((r) => {
@@ -1381,7 +1420,7 @@ async function renderBilan(s) {
     ${p.topSpecies.length ? `<p class="small muted">Espèces : ${esc(p.topSpecies.slice(0, 4).map((x) => `${x.label} (${x.k})`).join(', '))}</p>` : ''}`;
 }
 
-function meteoHtml(w, a) {
+function meteoHtml(w, a, src = '') {
   const rows = [...w.days, ...(w.today ? [w.today] : []), ...w.future.slice(0, 2)];
   const max = Math.max(20, ...rows.map((r) => r.rain || 0));
   const today = todayIso();
@@ -1393,7 +1432,7 @@ function meteoHtml(w, a) {
     <div class="rainbars" aria-label="Pluie jour par jour">${rows.map((r) => `<div class="d${r.date === today ? ' today' : ''}${r.date > today ? ' future' : ''}" title="${formatDate(r.date)} : ${r.rain} mm">
       <span class="mm">${r.rain >= 1 ? Math.round(r.rain) : ''}</span><span class="b" style="height:${Math.round(((r.rain || 0) / max) * 64)}px"></span><span>${r.date === today ? 'auj.' : shortDay(r.date)}</span></div>`).join('')}</div>
     <div class="temps">${rows.map((r) => `<span>${r.tmax != null ? Math.round(r.tmax) + '°' : ''}</span>`).join('')}</div>
-    <p class="small muted">Pluie sur 10 jours : <b>${w.rain10} mm</b> · températures sur 7 jours : ${w.tmin7 ?? '?'}–${w.tmax7 ?? '?'} °C · hachuré = prévision. Données Open-Meteo, précision ~1–2 km.</p>`;
+    <p class="small muted">Pluie sur 10 jours : <b>${w.rain10} mm</b> · températures sur 7 jours : ${w.tmin7 ?? '?'}–${w.tmax7 ?? '?'} °C · hachuré = prévision.<br>${esc(src || 'Pluie : Open-Meteo (modèle)')} · températures et prévisions : Open-Meteo.</p>`;
 }
 
 async function renderMeteo(s) {
@@ -1405,7 +1444,7 @@ async function renderMeteo(s) {
     const w = summarizeWeather(daily, todayIso());
     await spotProfileFor(s).catch(() => null);
     if (state.openSpotId !== s.id) return;
-    box.innerHTML = meteoHtml(w, assess(w, spotContext(s, w)));
+    box.innerHTML = meteoHtml(w, assess(w, spotContext(s, w)), sourceOf(daily));
   } catch (err) {
     if (state.openSpotId === s.id) box.innerHTML = `<h3>Météo et conditions</h3><p class="small muted">Météo indisponible (${esc(frError(err))}).</p>`;
   }
@@ -1456,6 +1495,7 @@ async function showRain(on) {
       const all = await dailyFor(grid);
       rainLayer = L.layerGroup();
       grid.forEach((p, i) => {
+        if (!all[i]) return;   // ni Open-Meteo ni station proche
         const w = summarizeWeather(all[i], todayIso());
         L.circleMarker(p, { radius: 11, stroke: false, fillColor: rainColor(w.rain10), fillOpacity: 0.75, interactive: true })
           .bindTooltip(`Près de ${nearestTown(...p)} : <b>${w.rain10} mm</b> sur 10 j${w.lastRainAgo != null ? ` · dernière pluie il y a ${w.lastRainAgo} j` : ''}`)
@@ -1501,10 +1541,11 @@ async function openAdvisor() {
     const grid = pacaGrid();
     const spots = state.spots.slice(0, 100);
     const all = await dailyFor([...grid, ...spots.map((s) => [s.lat, s.lon])]);
-    const ws = all.map((d) => summarizeWeather(d, todayIso()));
-    const g = ws.slice(0, grid.length);
+    const ws = all.map((d) => (d ? summarizeWeather(d, todayIso()) : null));
+    const g = ws.slice(0, grid.length).filter(Boolean);
+    if (!g.length) throw new Error('météo indisponible');
     const avg = Math.round((g.reduce((t, w) => t + w.rain10, 0) / g.length) * 10) / 10;
-    const wet = grid.map((p, i) => ({ p, w: g[i] })).sort((a, b) => b.w.rain10 - a.w.rain10);
+    const wet = grid.map((p, i) => ({ p, w: ws[i] })).filter((x) => x.w).sort((a, b) => b.w.rain10 - a.w.rain10);
     const seen = new Set(); const top = [];
     for (const x of wet) { const t = nearestTown(...x.p); if (!seen.has(t)) { seen.add(t); top.push([t, x.w.rain10]); } if (top.length === 4) break; }
     html += `<h3>Pluie sur 10 jours en PACA</h3>

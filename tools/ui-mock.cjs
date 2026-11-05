@@ -36,7 +36,7 @@ async function setup(page, data, { session = true } = {}) {
       if (m === 'PATCH') { const id = url.searchParams.get('id').slice(3); const s = data.spots.find((x) => x.id === id); Object.assign(s, JSON.parse(req.postData())); return send([s]); }
       if (m === 'DELETE') { const id = url.searchParams.get('id').slice(3); data.spots = data.spots.filter((x) => x.id !== id); return send([], 204); }
     }
-    if (table === 'champi_photos') return send([]);
+    if (table === 'champi_photos' || table === 'champi_rain_stations' || table === 'champi_rain_daily') return send([]);
     if (table === 'champi_finds') {
       if (m === 'GET') return send(data.finds.map((f) => ({ ...f, author: author(f.user_id) })).sort((a, b) => (a.found_on < b.found_on ? 1 : -1)));
       if (m === 'POST') { const r = { id: 'f' + Date.now(), user_id: ME, created_at: new Date().toISOString(), ...JSON.parse(req.postData()) }; data.finds.push(r); return send([r], 201); }

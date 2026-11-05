@@ -9,6 +9,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import webpush from 'npm:web-push@3.6.7';
 // Règles du conseiller : copie générée depuis l'appli (node tools/build-alertes.mjs).
 import { summarizeWeather, assess, spotSpecies, SPECIES } from './rules.js';
+import { rainIndex, mergeRain } from './rain.js';
 
 const SITE = 'https://enzofeltri-sys.github.io/Champipi/';
 const ORIGINS = ['https://enzofeltri-sys.github.io', 'http://localhost:5173'];
@@ -89,8 +90,20 @@ async function morningRun(cfg: any) {
   const day = today();
   const month = Number(day.slice(5, 7));
   const list = spots.data!;
-  const daily = await weatherFor(list.map((s: any) => [s.lat, s.lon]));
-  const verdict = new Map(list.map((s: any, i: number) => {
+  // Météo « doublée » : pluie mesurée Météo-France (relevée cette nuit) + Open-Meteo ; chacune secourt l'autre.
+  const om = await weatherFor(list.map((s: any) => [s.lat, s.lon])).catch(() => null);
+  const since = new Date(Date.now() - 16 * 86400000).toISOString().slice(0, 10);
+  const st = await admin.from('champi_rain_stations').select('id, name, lat, lon');
+  const rows: any[] = []; let rainOk = !st.error;
+  for (let from = 0; rainOk && from < 20000; from += 1000) {   // 1 000 lignes par réponse au maximum
+    const r = await admin.from('champi_rain_daily').select('station_id, day, rr').gte('day', since).order('day').order('station_id').range(from, from + 999);
+    if (r.error) { rainOk = false; break; }
+    rows.push(...r.data); if (r.data.length < 1000) break;
+  }
+  const idx = rainOk ? rainIndex(st.data, rows) : null;
+  const daily = list.map((s: any, i: number) => mergeRain(om?.[i] ?? null, s.lat, s.lon, idx, day).daily);
+  const verdict = new Map(list.filter((_: any, i: number) => daily[i]).map((s: any) => {
+    const i = list.indexOf(s);
     const w = summarizeWeather(daily[i], day);
     const a = assess(w, { month, species: spotSpecies(s, finds.data!), trees: s.trees ?? [], history: finds.data!.filter((f: any) => f.spot_id === s.id) });
     return [s.id, { s, a }];
@@ -102,7 +115,7 @@ async function morningRun(cfg: any) {
   for (const sub of subs.data!) if (!muted.has(sub.user_id)) byUser.set(sub.user_id, [...(byUser.get(sub.user_id) ?? []), sub]);
   const report: any[] = [];
   for (const [uid, userSubs] of byUser) {
-    const good = list.filter((s: any) => visible(uid, s) && verdict.get(s.id)!.a.level === 'bon' && !recent.has(`${s.id}|${uid}`))
+    const good = list.filter((s: any) => visible(uid, s) && verdict.get(s.id)?.a.level === 'bon' && !recent.has(`${s.id}|${uid}`))
       .map((s: any) => verdict.get(s.id)!).sort((x: any, y: any) => y.a.score - x.a.score);
     if (!good.length) { report.push({ uid, coins: 0 }); continue; }
     const top = good[0];
@@ -113,7 +126,7 @@ async function morningRun(cfg: any) {
     if (res.includes('ok')) await admin.from('champi_alert_log').insert(good.map((g: any) => ({ spot_id: g.s.id, user_id: uid, sent_on: day })));
     report.push({ uid, coins: good.length, envois: res });
   }
-  return { jour: day, abonnés: subs.data!.length, report };
+  return { jour: day, abonnés: subs.data!.length, pluie_mesuree: idx ? idx.stations.length : 0, report };
 }
 
 async function familyEmails() {
