@@ -1,5 +1,6 @@
 // Parcours conseiller / météo / forêts / guide, avec les vraies API Open-Meteo et IGN (Supabase simulé).
 const { chromium, devices } = require('playwright');
+const { closeDialogs, openList, openSpot, setScope, pickSpecies, addAtCenter } = require('./ui-helpers.cjs');
 const [, , SITE, OUT] = process.argv;
 const REF = 'vvegujltsjgwszeloyaz';
 const ME = '11111111-1111-1111-1111-111111111111';
@@ -29,7 +30,7 @@ const finds = [{ id: 'f1', spot_id: 's1', user_id: ME, found_on: '2025-11-15', s
   await page.goto(SITE); await page.waitForSelector('#screen-app:not([hidden])'); await page.waitForTimeout(1200);
 
   // 1. Fiche : météo + avis
-  await page.locator('.spot-item', { hasText: 'Luminy' }).click();
+  await openSpot(page, 'Luminy');
   await page.waitForSelector('#spot-meteo .rainbars', { timeout: 20000 });
   console.log('avis Luminy :', await page.textContent('#spot-meteo .verdict'));
   console.log('raisons :', await page.locator('#spot-meteo .reasons li').allTextContents());
@@ -39,8 +40,8 @@ const finds = [{ id: 'f1', spot_id: 's1', user_id: ME, found_on: '2025-11-15', s
 
   // 2. Modifier : forêt IGN lue sous l'épingle (Collobrières)
   await page.click('#dlg-spot .js-close');
-  await page.locator('.spot-item', { hasText: 'Collobrières' }).click();
-  await page.waitForSelector('#spot-meteo .rainbars', { timeout: 20000 });
+  await openSpot(page, 'Collobrières');
+  await page.waitForSelector('#spot-meteo .rainbars', { timeout: 20000 }).catch(async (e) => { console.log('météo Collobrières :', (await page.textContent('#spot-meteo')).trim()); throw e; });
   console.log('avis Collobrières :', await page.textContent('#spot-meteo .verdict'));
   await page.click('#spot-edit');
   await page.click('#edit-more summary').catch(() => {});
@@ -49,8 +50,7 @@ const finds = [{ id: 'f1', spot_id: 's1', user_id: ME, found_on: '2025-11-15', s
   await page.click('#edit-form [value=cancel] >> nth=1');
 
   // 3. Conseiller
-  await page.click('#peek'); await page.waitForTimeout(300);
-  await page.click('#advisor-btn');
+  await closeDialogs(page); await page.click('#menu-btn'); await page.click('#advisor-btn2');
   await page.waitForSelector('#advisor-body .rank, #advisor-body .error', { timeout: 25000 });
   console.log('conseiller :', (await page.textContent('#advisor-body')).replace(/\s+/g, ' ').slice(0, 600));
   await page.screenshot({ path: `${OUT}/51-conseiller.png` });

@@ -1,5 +1,6 @@
 // Parcours hors ligne : enregistrer une zone (vraies tuiles IGN), couper le réseau, travailler, reconnecter.
 const { chromium, devices } = require('playwright');
+const { closeDialogs, openList, openSpot, setScope, pickSpecies, addAtCenter } = require('./ui-helpers.cjs');
 const fakeMeteo = require('./fake-meteo.cjs');
 const [, , SITE, OUT, PHOTO] = process.argv;
 const REF = 'vvegujltsjgwszeloyaz';
@@ -56,7 +57,7 @@ let offline = false;
   offline = true; await ctx.setOffline(true);
   await page.reload(); await page.waitForSelector('#screen-app:not([hidden])', { timeout: 15000 });
   const tOpen = Date.now();
-  await page.waitForSelector('.spot-item', { timeout: 20000 });
+  await page.waitForSelector('.spot-item', { timeout: 20000, state: 'attached' });
   console.log('HORS LIGNE · coins affichés après', ((Date.now() - tOpen) / 1000).toFixed(1), 's');
   await page.waitForTimeout(1500);
   const tiles = await page.evaluate(() => { const im = [...document.querySelectorAll('img.leaflet-tile')]; return { total: im.length, ok: im.filter((i) => i.complete && i.naturalWidth > 0).length }; });
@@ -64,7 +65,7 @@ let offline = false;
   await page.screenshot({ path: `${OUT}/81-hors-ligne-carte.png` });
 
   // 3. Trouvaille avec photo, hors ligne
-  await page.click('#peek'); await page.locator('.spot-item', { hasText: 'Hêtraie' }).click();
+  await openSpot(page, 'Hêtraie', { more: false });
   await page.click('#find-add summary'); await page.click('#find-species [data-sp=cepe]');
   await page.setInputFiles('#find-photos', PHOTO);
   await page.click('#find-form button[type=submit]');
@@ -74,8 +75,7 @@ let offline = false;
   await page.click('#dlg-spot .js-close');
 
   // 4. Nouveau coin, hors ligne
-  await page.evaluate(() => scrollTo(0, 0));
-  await page.mouse.click(200, 400); await page.click('#adjust-done');
+  await addAtCenter(page);
   await page.fill('#edit-name', 'Coin noté en forêt'); await page.click('#edit-save');
   await page.waitForSelector('#dlg-spot[open]');
   await page.click('#dlg-spot .js-close');

@@ -91,15 +91,10 @@
   <!-- Application -->
   <main id="screen-app" hidden>
     <div id="map-wrap">
-      <div id="map" aria-label="Carte des coins"></div>
+      <div id="map" aria-label="Carte"></div>
 
       <header class="topbar">
-        <div class="seg" role="radiogroup" aria-label="Quels coins afficher">
-          <button type="button" data-scope="all" class="on" role="radio" aria-checked="true">Tout</button>
-          <button type="button" data-scope="mine" role="radio" aria-checked="false">Mes coins</button>
-          <button type="button" data-scope="family" role="radio" aria-checked="false">Famille</button>
-        </div>
-        <select id="filter-species" aria-label="Filtrer par espèce"><option value="">Espèces</option></select>
+        <div id="species-bar" class="species-bar" role="radiogroup" aria-label="Quel champignon ?"></div>
         <button id="menu-btn" class="icon-btn" type="button" aria-label="Menu" aria-haspopup="true">☰<span id="menu-dot" class="menu-dot" hidden></span></button>
       </header>
 
@@ -114,9 +109,13 @@
             <button type="button" data-base="otm">Topo</button>
           </div>
         </div>
-        <label class="check"><input type="checkbox" id="toggle-massifs"> Massifs (cercles indicatifs)</label>
-        <label class="check"><input type="checkbox" id="toggle-rain"> Pluie des 10 derniers jours (PACA)</label>
-        <label class="check"><input type="checkbox" id="toggle-forest"> Forêts IGN (types de peuplement)</label>
+        <details class="more">
+          <summary>Autres calques</summary>
+          <label class="check"><input type="checkbox" id="toggle-massifs"> Massifs (cercles indicatifs)</label>
+          <label class="check"><input type="checkbox" id="toggle-rain"> Pluie des 10 derniers jours (PACA)</label>
+          <label class="check"><input type="checkbox" id="toggle-forest"> Tous les types de forêts (IGN)</label>
+        </details>
+        <button id="list-btn" class="btn" type="button">📋 Mes coins (liste)</button>
         <button id="advisor-btn2" class="btn" type="button">🤖 Conseiller du jour</button>
         <button id="guide-btn" class="btn" type="button">📖 Guide des espèces</button>
         <div class="row">
@@ -137,7 +136,28 @@
         <button class="btn js-logout" type="button">Se déconnecter</button>
       </div>
 
+      <div class="rail" role="toolbar" aria-label="Affichage">
+        <button id="rail-spots" class="rail-btn" type="button" aria-pressed="true">⭐<span>Coins</span></button>
+        <button id="rail-rain" class="rail-btn" type="button" aria-pressed="false">🌧️<span>Pluie</span></button>
+        <button id="rail-base" class="rail-btn" type="button" aria-pressed="false">🛰️<span>Photo</span></button>
+        <button id="rail-locate" class="rail-btn" type="button">📍<span>Moi</span></button>
+      </div>
+
       <div id="offline-bar" class="offline-bar" role="status" hidden></div>
+      <div id="crosshair" class="crosshair" aria-hidden="true" hidden><span></span></div>
+
+      <div id="add-bar" class="add-bar card" hidden>
+        <b>Où est ton coin ?</b>
+        <span class="small muted">Fais glisser la carte pour mettre le viseur dessus.</span>
+        <div class="row">
+          <button id="add-locate" class="btn" type="button">📍 Ma position</button>
+          <button id="btn-coords" class="btn" type="button">⌖ Coordonnées</button>
+        </div>
+        <div class="row end">
+          <button id="add-cancel" class="btn" type="button">Annuler</button>
+          <button id="add-here" class="btn primary" type="button">✓ C'est ici</button>
+        </div>
+      </div>
 
       <div id="adjust-bar" class="adjust-bar card" hidden>
         <span class="small">Fais glisser l'épingle (ou touche la carte) pour l'ajuster</span>
@@ -147,32 +167,34 @@
         </div>
       </div>
 
-      <div class="fab-row">
-        <button id="btn-here" class="btn fab" type="button">📍 Je suis ici</button>
-        <button id="btn-coords" class="btn fab" type="button">⌖ Coordonnées</button>
+      <div id="bottom" class="bottom">
+        <div id="species-banner" class="species-banner card" hidden></div>
+        <button id="btn-add" class="btn primary add-btn" type="button">＋ Noter un coin</button>
       </div>
-      <div id="hint" class="hint">Touche la carte pour marquer un coin</div>
-
-      <button id="peek" class="peek" type="button" aria-controls="list">
-        <span id="peek-count">0 coin</span> <span aria-hidden="true">▾ liste</span>
-      </button>
     </div>
+  </main>
 
-    <section id="list" class="list" aria-label="Liste des coins">
+  <dialog id="dlg-list" class="sheet">
+    <div class="stack">
+      <div class="sheet-head">
+        <h2>📋 Mes coins</h2>
+        <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
+      </div>
+      <div class="seg" id="scope-seg" role="radiogroup" aria-label="Quels coins">
+        <button type="button" data-scope="all" class="on" role="radio" aria-checked="true">Tous</button>
+        <button type="button" data-scope="mine" role="radio" aria-checked="false">À moi</button>
+        <button type="button" data-scope="family" role="radio" aria-checked="false">Famille</button>
+      </div>
+      <input id="search" type="search" placeholder="🔎 Rechercher un coin, une note, une espèce…" autocomplete="off" aria-label="Rechercher">
+      <p class="small muted" id="list-count"></p>
+      <ul id="spot-list" class="spot-list"></ul>
+      <p id="list-empty" class="muted" hidden>Aucun coin pour ces filtres.</p>
       <div class="safety" role="note">
         ⚠️ Fais contrôler <b>chaque récolte</b> par un pharmacien ou une association mycologique avant de la manger.
         Centre antipoison de Marseille : <a class="tel" href="tel:+33491752525">04 91 75 25 25</a>
       </div>
-      <div class="row cta-row">
-        <button id="advisor-btn" class="btn primary" type="button">🤖 Conseiller du jour</button>
-        <button id="guide-btn2" class="btn" type="button">📖 Guide des espèces</button>
-      </div>
-      <h2>Coins <span class="muted small">— par dernière trouvaille</span></h2>
-      <input id="search" type="search" placeholder="🔎 Rechercher un coin, une note, une espèce…" autocomplete="off" aria-label="Rechercher">
-      <ul id="spot-list" class="spot-list"></ul>
-      <p id="list-empty" class="muted" hidden>Aucun coin pour ces filtres. Touche la carte pour en ajouter un.</p>
-    </section>
-  </main>
+    </div>
+  </dialog>
 
   <!-- Fiche (création / modification) -->
   <dialog id="dlg-edit" class="sheet">
@@ -232,25 +254,12 @@
         <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
       </div>
       <div id="spot-badges" class="badges"></div>
-      <div id="spot-species" class="chips readonly"></div>
-      <p id="spot-note" class="note"></p>
-      <dl id="spot-details" class="details"></dl>
-      <p id="spot-access" class="access-line small" hidden></p>
-      <section id="spot-meteo" class="meteo"></section>
-      <section id="spot-bilan" class="bilan"></section>
-      <p class="small muted" id="spot-coords"></p>
-      <div id="spot-photos" class="photos"></div>
-      <label id="spot-photo-add" class="btn small-btn">📷 Ajouter une photo du coin
-        <input id="spot-photo-input" type="file" accept="image/*" multiple hidden></label>
+      <section id="spot-found" class="found"></section>
       <div class="row">
         <a id="spot-route" class="btn primary" target="_blank" rel="noopener">🚗 Itinéraire</a>
-        <button id="spot-share" class="btn" type="button" hidden>🤝 Partager…</button>
         <button id="spot-compass" class="btn primary" type="button">🧭 Retrouver</button>
-        <button id="spot-edit" class="btn" type="button">Modifier</button>
       </div>
-
-      <button id="spot-unshare" class="btn link" type="button" hidden>Ne plus voir ce coin partagé</button>
-      <h3>Journal des trouvailles</h3>
+      <h3>Journal</h3>
       <ul id="find-list" class="find-list"></ul>
       <details id="find-add">
         <summary class="btn">＋ Noter une trouvaille</summary>
@@ -274,6 +283,26 @@
           <p id="find-error" class="error" role="alert" hidden></p>
           <button class="btn primary" type="submit">Ajouter au journal</button>
         </form>
+      </details>
+      <details id="spot-more" class="more">
+        <summary>Météo, bilan et détails du coin</summary>
+        <div class="stack">
+          <p id="spot-access" class="access-line small" hidden></p>
+          <section id="spot-meteo" class="meteo"></section>
+          <section id="spot-bilan" class="bilan"></section>
+          <div id="spot-species" class="chips readonly"></div>
+          <p id="spot-note" class="note"></p>
+          <dl id="spot-details" class="details"></dl>
+          <p class="small muted" id="spot-coords"></p>
+          <div id="spot-photos" class="photos"></div>
+          <label id="spot-photo-add" class="btn small-btn">📷 Ajouter une photo du coin
+            <input id="spot-photo-input" type="file" accept="image/*" multiple hidden></label>
+          <div class="row">
+            <button id="spot-edit" class="btn" type="button">✏️ Modifier</button>
+            <button id="spot-share" class="btn" type="button" hidden>🤝 Partager…</button>
+          </div>
+          <button id="spot-unshare" class="btn link" type="button" hidden>Ne plus voir ce coin partagé</button>
+        </div>
       </details>
     </div>
   </dialog>

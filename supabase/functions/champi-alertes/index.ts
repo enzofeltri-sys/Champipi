@@ -32,7 +32,8 @@ async function config() {
 }
 
 async function send(cfg: any, sub: any, payload: unknown) {
-  webpush.setVapidDetails('mailto:noreply@champipi.invalid', cfg.vapid_public, cfg.vapid_private);
+  // Apple refuse un contact invalide (403 BadJwtToken) : on donne l'adresse du site.
+  webpush.setVapidDetails(SITE, cfg.vapid_public, cfg.vapid_private);
   try {
     await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, JSON.stringify(payload), { TTL: 6 * 3600 });
     return 'ok';
@@ -41,7 +42,7 @@ async function send(cfg: any, sub: any, payload: unknown) {
       await admin.from('champi_push_subscriptions').delete().eq('endpoint', sub.endpoint);
       return 'expiré';
     }
-    return `erreur ${err?.statusCode ?? ''} ${String(err?.message ?? err).slice(0, 120)}`;
+    return `erreur ${err?.statusCode ?? ''} ${String(err?.body || err?.message || err).slice(0, 160)}`;
   }
 }
 

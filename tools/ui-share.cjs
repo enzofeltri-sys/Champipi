@@ -1,6 +1,7 @@
 // Parcours partage : Enzo partage un coin privé avec Mamie ; Tonton ne le voit pas.
 // Fausse base qui applique les mêmes règles que la RLS (coins, partages, trouvailles).
 const { chromium, devices } = require('playwright');
+const { closeDialogs, openList, openSpot, setScope, pickSpecies, addAtCenter } = require('./ui-helpers.cjs');
 const fakeMeteo = require('./fake-meteo.cjs');
 const [, , SITE, OUT] = process.argv;
 const REF = 'vvegujltsjgwszeloyaz';
@@ -64,7 +65,7 @@ async function open(b, who) {
   console.log('avant partage · Mamie voit :', await m.page.locator('.spot-item').count(), '| Tonton voit :', await t.page.locator('.spot-item').count());
 
   // Enzo partage avec Mamie
-  await e.page.locator('.spot-item', { hasText: 'Coin secret' }).click();
+  await openSpot(e.page, 'Coin secret');
   console.log('Enzo · bouton :', await e.page.textContent('#spot-share'));
   await e.page.click('#spot-share');
   console.log('Enzo · personnes proposées :', (await e.page.locator('.share-person').allTextContents()).map((x) => x.trim()));
@@ -76,20 +77,20 @@ async function open(b, who) {
   await e.page.screenshot({ path: `${OUT}/91-partage-fiche.png` });
 
   // Mamie et Tonton rechargent
-  await m.page.reload(); await m.page.waitForSelector('.spot-item');
+  await m.page.reload(); await m.page.waitForSelector('.spot-item', { state: 'attached' });
   await t.page.reload(); await t.page.waitForSelector('#screen-app:not([hidden])'); await t.page.waitForTimeout(800);
   console.log('Mamie voit :', await m.page.locator('.spot-item .title').allTextContents(), '| classe :', await m.page.getAttribute('.spot-item', 'class'), '| Tonton voit :', await t.page.locator('.spot-item').count());
-  await m.page.click('.topbar [data-scope=family]');
+  await setScope(m.page, 'family');
   console.log('Mamie · filtre Famille :', await m.page.locator('.spot-item').count());
-  await m.page.click('.topbar [data-scope=mine]');
+  await setScope(m.page, 'mine');
   console.log('Mamie · filtre Mes coins :', await m.page.locator('.spot-item').count());
-  await m.page.click('.topbar [data-scope=all]');
-  await m.page.locator('.spot-item').click();
+  await setScope(m.page, 'all');
+  await openSpot(m.page);
   console.log('Mamie · badges :', (await m.page.textContent('#spot-badges')).replace(/\s+/g, ' ').trim(), '| Modifier :', await m.page.isVisible('#spot-edit'), '| Partager :', await m.page.isVisible('#spot-share'), '| Ne plus voir :', await m.page.isVisible('#spot-unshare'));
   await m.page.click('#find-add summary'); await m.page.click('#find-species [data-sp=cepe]'); await m.page.click('#find-form button[type=submit]');
   await m.page.waitForFunction(() => document.querySelectorAll('#find-list .head').length === 1);
   await m.page.screenshot({ path: `${OUT}/92-partage-mamie.png` });
-  await e.page.reload(); await e.page.locator('.spot-item').click(); await e.page.waitForSelector('#find-list .head');
+  await e.page.reload(); await e.page.waitForSelector('#screen-app:not([hidden])'); await openSpot(e.page); await e.page.waitForSelector('#find-list .head');
   console.log('Enzo voit la trouvaille de Mamie :', (await e.page.textContent('#find-list li')).replace(/\s+/g, ' ').trim().slice(0, 60));
 
   // Mamie ne veut plus le voir

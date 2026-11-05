@@ -286,3 +286,54 @@ dialog.viewer img { width: 100%; height: calc(100dvh - 64px); object-fit: contai
 .bilan:empty { display: none; }
 .months.counts span { font-size: 10px; padding: 2px 0 3px; line-height: 1.2; }
 .months.counts span b { display: block; font-size: 11px; color: var(--text); }
+
+/* ===== Version simplifiée : la carte seule ===== */
+#map-wrap { height: 100dvh; }
+.topbar { align-items: flex-start; }
+.species-bar { flex: 1; min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px 2px 6px; -webkit-overflow-scrolling: touch; }
+.species-bar::-webkit-scrollbar { display: none; }
+.sp-chip { flex: none; font: inherit; font-size: .9rem; font-weight: 600; min-height: 40px; padding: 6px 13px; border-radius: 999px; cursor: pointer;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border); box-shadow: var(--shadow); white-space: nowrap; }
+.sp-chip.on { background: var(--primary); color: var(--primary-text); border-color: transparent; }
+.sp-chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--season); margin-left: 5px; vertical-align: 1px; }
+.sp-chip.on .dot { background: currentColor; }
+.sp-chip.off-season { opacity: .75; font-weight: 500; }
+
+.rail { position: absolute; z-index: 1000; right: 8px; top: calc(64px + env(safe-area-inset-top)); display: flex; flex-direction: column; gap: 8px; }
+.rail-btn { width: 54px; height: 54px; border-radius: 16px; border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  box-shadow: var(--shadow); font-size: 1.25rem; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; cursor: pointer; }
+.rail-btn span { font-size: .62rem; font-weight: 700; margin-top: 3px; }
+.rail-btn[aria-pressed="true"] { background: var(--primary); color: var(--primary-text); border-color: transparent; }
+
+.bottom { position: absolute; z-index: 1000; left: 8px; right: 8px; bottom: calc(26px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 8px; align-items: stretch; pointer-events: none; }
+.bottom > * { pointer-events: auto; }
+.add-btn { min-height: 54px; font-size: 1.1rem; box-shadow: var(--shadow); align-self: center; padding: 10px 28px; }
+.species-banner { padding: 10px 12px; font-size: .9rem; display: flex; flex-direction: column; gap: 4px; }
+.species-banner .head { display: flex; align-items: center; gap: 8px; }
+.species-banner .head b { font-size: 1.05rem; margin-right: auto; }
+.species-banner .warn { color: var(--danger); }
+.species-banner .key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+.species-banner .btns { display: flex; gap: 6px; }
+.species-banner .btns .btn { min-height: 34px; padding: 4px 12px; font-size: .85rem; }
+
+.crosshair { position: absolute; z-index: 999; left: 50%; top: 50%; width: 46px; height: 46px; transform: translate(-50%, -50%); pointer-events: none; }
+.crosshair span, .crosshair::before, .crosshair::after { position: absolute; content: ''; background: var(--danger); }
+.crosshair::before { left: 50%; top: 0; bottom: 0; width: 3px; transform: translateX(-50%); }
+.crosshair::after { top: 50%; left: 0; right: 0; height: 3px; transform: translateY(-50%); }
+.crosshair span { left: 50%; top: 50%; width: 16px; height: 16px; border-radius: 50%; background: transparent; border: 3px solid var(--danger); transform: translate(-50%, -50%); }
+.add-bar { position: absolute; z-index: 1001; left: 8px; right: 8px; bottom: calc(26px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+.adjust-bar { bottom: calc(26px + env(safe-area-inset-bottom)); }
+.offline-bar { bottom: auto; top: calc(64px + env(safe-area-inset-top)); left: 8px; transform: none; max-width: calc(100% - 90px); }
+
+.found .sp { display: inline-flex; align-items: center; gap: 4px; padding: 5px 11px; border-radius: 999px; background: var(--surface-2); margin: 0 6px 6px 0; font-size: .9rem; }
+.found .sp b { color: var(--primary); }
+.found .sp.match { outline: 2px solid var(--primary); }
+.loc-dot { width: 16px; height: 16px; border-radius: 50%; background: #2b7cd3; border: 3px solid #fff; box-shadow: 0 0 0 2px rgba(43,124,211,.35); }
+
+.species-banner { padding: 8px 10px; gap: 2px; }
+.species-banner .head { gap: 6px; }
+.icon-btn.mini { width: 34px; height: 34px; font-size: .95rem; box-shadow: none; }
+.species-bar { -webkit-mask-image: linear-gradient(to right, #000 85%, transparent); mask-image: linear-gradient(to right, #000 85%, transparent); padding-right: 30px; }
+
+/* Champignon choisi : le fond de carte passe en gris, seules les forêts favorables restent en vert. */
+.habitat-on .leaflet-tile-pane img.leaflet-tile { filter: grayscale(1) contrast(.85) brightness(1.08); }

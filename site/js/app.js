@@ -10,6 +10,7 @@ import { GUIDE, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainC
 import { dailyFor, forestAt, historyFor } from './weather.js';
 import { historyRange, findConditions, spotProfile, personalAdvice, profileSummary } from './learn.js';
 import { massifAt, accessFor, inFireSeason, DEPT_PAGES, ACCESS_ICON } from './access.js';
+import { favorableColors, favorableLabels, colorKeyMap } from './forests.js';
 import { tilesFor, bestMaxZoom, PLAN_IGN, TILE_CACHE, TILE_LIMIT, isNetworkError, queue, mergePending, sendOrder } from './offline.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -34,8 +35,10 @@ const state = {
   spots: [], finds: [], photos: [], shares: [], people: [],
   isAdmin: false, request: null,
   scope: store.get('champi-scope') || 'all',
-  species: '',
+  species: store.get('champi-species') || '',
   query: '',
+  showSpots: store.get('champi-spots') !== '0',
+  adding: false,
   draft: null,          // { lat, lon, id?: string } pendant la création / modification
   openSpotId: null,
 };
@@ -242,15 +245,7 @@ function initMap() {
   setBase(bases[store.get('champi-base')] ? store.get('champi-base') : 'plan', false);
 
   massifsLayer = buildMassifs();
-  L.control.zoom({ position: 'topright', zoomInTitle: 'Zoomer', zoomOutTitle: 'Dézoomer' }).addTo(map);
   L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
-  const legend = L.control({ position: 'topleft' });
-  legend.onAdd = () => {
-    const d = L.DomUtil.create('div', 'legend');
-    d.innerHTML = '<div><i style="background:var(--private)"></i>Moi seul</div><div><i style="background:var(--family)"></i>Famille</div><div><i style="background:var(--shared)"></i>Partagé</div><div><i style="background:var(--season)"></i>En saison</div>';
-    return d;
-  };
-  legend.addTo(map);
   if (store.get('champi-massifs') === '1') massifsLayer.addTo(map);
   $('#toggle-massifs').checked = map.hasLayer(massifsLayer);
   setTimeout(() => { if (store.get('champi-forest') === '1') showForests(true); if (store.get('champi-rain') === '1') showRain(true); }, 0);
@@ -261,8 +256,7 @@ function initMap() {
   });
   map.on('click', (e) => {
     $('#menu').hidden = true;
-    if (state.draft) { moveDraft(e.latlng.lat, e.latlng.lng); return; }
-    startDraft(e.latlng.lat, e.latlng.lng);
+    if (state.draft) moveDraft(e.latlng.lat, e.latlng.lng);   // ajustement d'une épingle en cours
   });
 
   // Secours automatique : si un fond IGN n'envoie aucune tuile, on bascule sur OpenTopoMap.
@@ -277,7 +271,10 @@ function initMap() {
       }
     });
   }
-  markersLayer = L.layerGroup().addTo(map);
+  markersLayer = L.layerGroup();
+  if (state.showSpots) markersLayer.addTo(map);
+  syncRail();
+  if (state.species) setSpecies(state.species, false);
 }
 
 function setBase(name, remember = true) {
@@ -365,20 +362,23 @@ const month = () => new Date().getMonth() + 1;
 function render() {
   decorateShares();
   const me = state.user?.id;
-  const visible = searchSpots(filterSpots(state.spots, state.finds, { scope: state.scope, species: state.species, me }), state.finds, state.query);
-  const sorted = sortSpots(visible, state.finds);
-  const last = lastFinds(state.finds);
-
+  // Carte : tous les coins visibles, filtrés par le champignon choisi.
+  const onMap = filterSpots(state.spots, state.finds, { scope: 'all', species: state.species, me });
   markersLayer.clearLayers();
-  for (const s of sorted) {
+  for (const s of onMap) {
     if (state.draft?.id === s.id) continue;
     const seasonal = inSeason(spotSpecies(s, state.finds), month()).length > 0;
     L.marker([s.lat, s.lon], { icon: pinIcon(s.sharedWithMe ? 'shared' : s.visibility, seasonal), title: s.name, keyboard: true })
       .on('click', () => openSpot(s.id)).addTo(markersLayer);
   }
+  if (state.species) renderBanner();
 
+  // Liste (panneau « Mes coins ») : portée + recherche + champignon choisi.
+  const visible = searchSpots(filterSpots(state.spots, state.finds, { scope: state.scope, species: state.species, me }), state.finds, state.query);
+  const sorted = sortSpots(visible, state.finds);
+  const last = lastFinds(state.finds);
   const n = sorted.length;
-  $('#peek-count').textContent = `${n} coin${n > 1 ? 's' : ''}`;
+  $('#list-count').textContent = `${n} coin${n > 1 ? 's' : ''}${state.species ? ` avec ${speciesLabel(state.species)}` : ''} — par dernière trouvaille`;
   $('#list-empty').hidden = n > 0;
   $('#spot-list').innerHTML = sorted.map((s) => {
     const sp = spotSpecies(s, state.finds);
@@ -393,7 +393,6 @@ function render() {
         <span class="meta">${lf ? `Dernière trouvaille : ${formatDate(lf)}` : 'Pas encore de trouvaille'}${author}</span>
       </span></button></li>`;
   }).join('');
-  $('#hint').hidden = !!state.draft || state.spots.length > 0;
 }
 
 function badgesHtml(s, season) {
@@ -410,23 +409,169 @@ function badgesHtml(s, season) {
 $('#spot-list').addEventListener('click', (e) => {
   const b = e.target.closest('.spot-item'); if (!b) return;
   const s = state.spots.find((x) => x.id === b.dataset.id); if (!s) return;
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  $('#dlg-list').close();
   map.setView([s.lat, s.lon], Math.max(map.getZoom(), 15));
   openSpot(s.id);
 });
 
 // Filtres
-for (const b of $$('.topbar .seg button')) {
+for (const b of $$('#scope-seg button')) {
   b.addEventListener('click', () => { state.scope = b.dataset.scope; store.set('champi-scope', state.scope); syncScope(); render(); });
 }
 function syncScope() {
-  for (const b of $$('.topbar .seg button')) {
+  for (const b of $$('#scope-seg button')) {
     const on = b.dataset.scope === state.scope; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on));
   }
 }
-$('#filter-species').innerHTML += SPECIES.map((s) => `<option value="${s.id}">${esc(s.label)}</option>`).join('');
-$('#filter-species').addEventListener('change', (e) => { state.species = e.target.value; render(); });
 syncScope();
+$('#list-btn').addEventListener('click', () => { $('#menu').hidden = true; render(); $('#dlg-list').showModal(); });
+$('#dlg-list .js-close').addEventListener('click', () => $('#dlg-list').close());
+
+// ---------------------------------------------------------------------------
+// « Quel champignon ? » : pastilles en haut, forêts favorables colorées, coins filtrés
+
+function renderSpeciesBar() {
+  const m = month();
+  const list = SPECIES.filter((s) => s.id !== 'autre')
+    .sort((a, b) => Number(b.months.includes(m)) - Number(a.months.includes(m)));
+  $('#species-bar').innerHTML = `<button type="button" class="sp-chip${state.species ? '' : ' on'}" data-sp="" role="radio" aria-checked="${!state.species}">🍄 Tous</button>`
+    + list.map((s) => {
+      const on = state.species === s.id, now = s.months.includes(m);
+      return `<button type="button" class="sp-chip${on ? ' on' : ''}${now ? '' : ' off-season'}" data-sp="${s.id}" role="radio" aria-checked="${on}">${esc(s.label.replace(/ \(.*\)$/, ''))}${now ? '<span class="dot" title="en saison"></span>' : ''}</button>`;
+    }).join('');
+}
+$('#species-bar').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-sp]'); if (!b) return;
+  setSpecies(state.species === b.dataset.sp ? '' : b.dataset.sp);
+});
+
+// Calque « forêts favorables » : les tuiles BD Forêt de l'IGN sont repeintes sur le téléphone
+// (une couleur = un type de forêt) pour ne garder que les forêts où pousse le champignon choisi.
+let habitatLayer = null, habitatKeys = new Map();
+const HABITAT_STRONG = [22, 163, 74, 150], HABITAT_WEAK = [132, 204, 22, 95];
+const HabitatLayer = L.GridLayer.extend({
+  createTile(coords, done) {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    fetch(PLAN_FOREST(coords.z, coords.x, coords.y), { mode: 'cors' })
+      .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(r.status))))
+      .then((b) => createImageBitmap(b))
+      .then((img) => {
+        const g = c.getContext('2d', { willReadFrequently: true });
+        g.drawImage(img, 0, 0);
+        const d = g.getImageData(0, 0, 256, 256), px = d.data;
+        for (let i = 0; i < px.length; i += 4) {
+          const k = px[i + 3] > 200 ? habitatKeys.get((px[i] << 16) | (px[i + 1] << 8) | px[i + 2]) : 0;
+          const col = k === 2 ? HABITAT_STRONG : k === 1 ? HABITAT_WEAK : null;
+          if (col) { px[i] = col[0]; px[i + 1] = col[1]; px[i + 2] = col[2]; px[i + 3] = col[3]; } else px[i + 3] = 0;
+        }
+        g.putImageData(d, 0, 0);
+        done(null, c);
+      })
+      .catch((err) => done(err, c));
+    return c;
+  },
+});
+const PLAN_FOREST = (z, x, y) => `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=LANDCOVER.FORESTINVENTORY.V2&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}&FORMAT=image/png`;
+
+function setSpecies(id, remember = true) {
+  state.species = id;
+  if (remember) store.set('champi-species', id || null);
+  renderSpeciesBar();
+  habitatKeys = colorKeyMap(id ? favorableColors(id) : new Map());
+  if (id && habitatKeys.size) {
+    if (!habitatLayer) habitatLayer = new HabitatLayer({ minZoom: 8, maxNativeZoom: 16, maxZoom: 19, opacity: 1, zIndex: 250, attribution: 'BD Forêt® V2 © IGN' });
+    if (map.hasLayer(habitatLayer)) habitatLayer.redraw(); else habitatLayer.addTo(map);
+  } else if (habitatLayer) habitatLayer.remove();
+  $('#species-banner').hidden = !id;
+  map.getContainer().classList.toggle('habitat-on', !!(id && habitatKeys.size));   // fond en gris : le vert ressort
+  render();
+}
+
+function renderBanner() {
+  const id = state.species; if (!id) return;
+  const s = SPECIES.find((x) => x.id === id); const g = GUIDE[id] ?? {};
+  const m = month(); const now = s.months.includes(m); const peak = (s.peak ?? []).includes(m);
+  const forests = favorableLabels(id);
+  const mine = filterSpots(state.spots, state.finds, { species: id }).length;
+  const look = g.lookalikes ?? '';
+  const warn = look.includes('⚠️') ? look.replace(/⚠️/g, '').split(/[.(:]/)[0].trim() : '';
+  $('#species-banner').innerHTML = `<div class="head"><b>${esc(s.label)}</b>
+      <span class="badge ${now ? 'season' : ''}">${now ? (peak ? 'pic' : 'en saison') : `hors saison`}</span>
+      <button class="icon-btn mini" type="button" data-banner="guide" aria-label="Fiche du champignon">📖</button>
+      <button class="icon-btn mini" type="button" data-banner="clear" aria-label="Tous les champignons">✕</button></div>
+    <div class="small">${forests.length
+      ? `<span class="key" style="background:rgba(22,163,74,.6)"></span>${esc(forests.slice(0, 4).join(', '))}${forests.length > 4 ? '…' : ''}`
+      : `🌿 ${esc(g.habitat ?? 'Pas de forêt type.')}`}${!now ? ` · saison : ${esc(seasonText(id))}` : ''}</div>
+    <div class="small">${mine ? `⭐ ${mine} de tes coins` : 'Aucun de tes coins'}${warn ? ` · <span class="warn">⚠️ sosie : ${esc(warn)}</span>` : ''} · <a class="tel" href="tel:+33491752525">antipoison</a></div>`;
+}
+$('#species-banner').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-banner]'); if (!b) return;
+  if (b.dataset.banner === 'clear') setSpecies('');
+  else { openGuide(); setTimeout(() => document.getElementById('guide-' + state.species)?.scrollIntoView({ block: 'start' }), 50); }
+});
+renderSpeciesBar();
+
+// ---------------------------------------------------------------------------
+// Boutons ronds : coins, pluie, photo aérienne, ma position
+function syncRail() {
+  $('#rail-spots').setAttribute('aria-pressed', String(state.showSpots));
+  $('#rail-rain').setAttribute('aria-pressed', String($('#toggle-rain').checked));
+  $('#rail-base').setAttribute('aria-pressed', String(!!(bases && map?.hasLayer(bases.ortho))));
+}
+$('#rail-spots').addEventListener('click', () => {
+  state.showSpots = !state.showSpots; store.set('champi-spots', state.showSpots ? '1' : '0');
+  if (state.showSpots) markersLayer.addTo(map); else markersLayer.remove();
+  syncRail();
+  toast(state.showSpots ? '⭐ Coins affichés' : 'Coins masqués', 1500);
+});
+$('#rail-rain').addEventListener('click', async () => { await showRain(!$('#toggle-rain').checked); syncRail(); });
+$('#rail-base').addEventListener('click', () => { setBase(map.hasLayer(bases.ortho) ? 'plan' : 'ortho'); syncRail(); });
+let locMarker = null;
+function locate(then) {
+  if (!navigator.geolocation) { toast('Géolocalisation indisponible sur cet appareil.'); return; }
+  toast('Recherche de ta position…', 15000);
+  navigator.geolocation.getCurrentPosition((pos) => {
+    $('#toast').hidden = true;
+    const { latitude: lat, longitude: lon, accuracy } = pos.coords;
+    map.setView([lat, lon], Math.max(map.getZoom(), 15));
+    locMarker?.remove();
+    locMarker = L.marker([lat, lon], { icon: L.divIcon({ className: '', html: '<div class="loc-dot"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }), interactive: false, zIndexOffset: 900 }).addTo(map);
+    if (accuracy > 50) toast(`Précision : ± ${Math.round(accuracy)} m`, 3000);
+    then?.(lat, lon);
+  }, (err) => {
+    toast(err.code === 1 ? 'Autorise la localisation pour ce site dans les réglages du téléphone.' : 'Position introuvable. Réessaie à découvert.', 5000);
+  }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+}
+$('#rail-locate').addEventListener('click', () => locate());
+
+// ---------------------------------------------------------------------------
+// « ＋ Noter un coin » : viseur au centre, on fait glisser la carte dessous
+let addPhoto = null;
+function enterAddMode() {
+  cancelDraft();
+  state.adding = true; addPhoto = null;
+  $('#menu').hidden = true;
+  for (const el of ['#bottom', '.rail']) $(el).hidden = true;
+  $('#crosshair').hidden = false; $('#add-bar').hidden = false;
+  if (map.getZoom() < 14) toast('Zoome sur ton coin, puis place le viseur dessus.', 3500);
+}
+function exitAddMode() {
+  state.adding = false;
+  for (const el of ['#bottom', '.rail']) $(el).hidden = false;
+  $('#crosshair').hidden = true; $('#add-bar').hidden = true;
+}
+$('#btn-add').addEventListener('click', enterAddMode);
+$('#add-cancel').addEventListener('click', exitAddMode);
+$('#add-locate').addEventListener('click', () => locate((lat, lon) => map.setView([lat, lon], Math.max(map.getZoom(), 17))));
+$('#add-here').addEventListener('click', () => {
+  const c = map.getCenter();
+  const photo = addPhoto;
+  exitAddMode();
+  startDraft(c.lat, c.lng);
+  if (photo) state.draft.photo = photo;
+  $('#adjust-bar').hidden = true;
+  openEdit();
+});
 
 // Menu
 $('#menu-btn').addEventListener('click', () => { $('#menu').hidden = !$('#menu').hidden; });
@@ -443,7 +588,7 @@ for (const b of $$('#theme-seg button')) b.addEventListener('click', () => { sto
 syncTheme();
 
 $('#search').addEventListener('input', (e) => { state.query = e.target.value; render(); });
-$('#peek').addEventListener('click', () => $('#list').scrollIntoView({ behavior: 'smooth' }));
+
 
 // ---------------------------------------------------------------------------
 // Création / modification d'un coin
@@ -470,14 +615,13 @@ function cancelDraft() {
   const had = state.draft?.id;
   state.draft = null;
   $('#adjust-bar').hidden = true;
-  $('.fab-row').hidden = false;
+  if (!state.adding) { $('#bottom').hidden = false; $('.rail').hidden = false; }
   if (had) render();
 }
 
 function showAdjust() {
   $('#adjust-bar').hidden = false;
-  $('.fab-row').hidden = true;
-  $('#hint').hidden = true;
+  $('#bottom').hidden = true; $('.rail').hidden = true;
 }
 
 $('#adjust-cancel').addEventListener('click', cancelDraft);
@@ -654,23 +798,6 @@ $('#edit-delete').addEventListener('click', async () => {
   await loadData();
 });
 
-// « Je suis ici »
-$('#btn-here').addEventListener('click', () => {
-  if (!navigator.geolocation) { toast('Géolocalisation indisponible sur cet appareil.'); return; }
-  const btn = $('#btn-here'); busy(btn, true); toast('Recherche de ta position…', 15000);
-  navigator.geolocation.getCurrentPosition((pos) => {
-    busy(btn, false); $('#toast').hidden = true;
-    const { latitude: lat, longitude: lon, accuracy } = pos.coords;
-    map.setView([lat, lon], Math.max(map.getZoom(), 16));
-    startDraft(lat, lon);
-    accuracyCircle = L.circle([lat, lon], { radius: accuracy, color: '#2b7cd3', weight: 1, fillOpacity: 0.1, interactive: false }).addTo(map);
-    if (accuracy > 50) toast(`Précision : ± ${Math.round(accuracy)} m. Ajuste l'épingle si besoin.`, 5000);
-  }, (err) => {
-    busy(btn, false);
-    toast(err.code === 1 ? 'Autorise la localisation pour ce site dans les réglages du téléphone.' : 'Position introuvable. Réessaie à découvert.', 5000);
-  }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
-});
-
 // Coller des coordonnées
 $('#btn-coords').addEventListener('click', () => {
   $('#coords-input').value = ''; showError('#coords-error');
@@ -680,7 +807,7 @@ $('#coords-form').addEventListener('submit', (e) => {
   if (e.submitter?.value === 'cancel') return;
   const p = parseCoords($('#coords-input').value);
   if (!p) { e.preventDefault(); showError('#coords-error', 'Format non reconnu. Exemple : 43.5297, 5.4474'); return; }
-  setTimeout(() => { map.setView([p.lat, p.lon], 16); startDraft(p.lat, p.lon); }, 0);
+  setTimeout(() => { map.setView([p.lat, p.lon], 17); if (!state.adding) startDraft(p.lat, p.lon); }, 0);
 });
 $('#coords-photo').addEventListener('change', async (e) => {
   const file = e.target.files[0]; e.target.value = '';
@@ -688,9 +815,8 @@ $('#coords-photo').addEventListener('change', async (e) => {
   const p = exifGps(await file.arrayBuffer());
   if (!p) { showError('#coords-error', 'Pas de position dans cette photo : le téléphone l\'a sans doute retirée. Place l\'épingle à la main.'); return; }
   $('#dlg-coords').close();
-  map.setView([p.lat, p.lon], 16);
-  startDraft(p.lat, p.lon);
-  state.draft.photo = file;
+  map.setView([p.lat, p.lon], 17);
+  if (state.adding) addPhoto = file; else { startDraft(p.lat, p.lon); state.draft.photo = file; }
   toast('Position lue dans la photo 📷');
 });
 
@@ -698,9 +824,27 @@ $('#coords-photo').addEventListener('change', async (e) => {
 // Détail d'un coin et journal
 
 function openSpot(id) {
+  if (state.openSpotId !== id) $('#spot-more').open = false;
   state.openSpotId = id;
   renderSpot(id);
   if (!$('#dlg-spot').open) $('#dlg-spot').showModal();
+}
+
+function renderFound(s) {
+  const finds = state.finds.filter((f) => f.spot_id === s.id);
+  const count = new Map(), lastOn = new Map();
+  for (const f of finds) for (const sp of f.species ?? []) {
+    count.set(sp, (count.get(sp) ?? 0) + 1);
+    if (!lastOn.has(sp) || f.found_on > lastOn.get(sp)) lastOn.set(sp, f.found_on);
+  }
+  const box = $('#spot-found');
+  if (!count.size) {
+    const noted = (s.species ?? []).map(speciesLabel);
+    box.innerHTML = `<p class="small muted">Rien noté ici pour l'instant${noted.length ? ` (espèces repérées : ${esc(noted.join(', '))})` : ''}. Note ta première trouvaille ci-dessous.</p>`;
+    return;
+  }
+  box.innerHTML = '<div class="small muted">Ce que tu y as trouvé :</div>' + [...count.entries()].sort((a, b) => b[1] - a[1])
+    .map(([sp, k]) => `<span class="sp${sp === state.species ? ' match' : ''}">${esc(speciesLabel(sp))} <b>×${k}</b> <span class="small muted">· ${formatDate(lastOn.get(sp))}</span></span>`).join('');
 }
 
 function renderSpot(id) {
@@ -711,6 +855,7 @@ function renderSpot(id) {
   const season = inSeason(sp, month());
   const mine = s.owner === me;
   $('#spot-name').textContent = s.name;
+  renderFound(s);
   $('#spot-badges').innerHTML = badgesHtml(s, season)
     + (s.visibility === 'family' ? `<span class="badge">par ${esc(mine ? 'moi' : s.author?.display_name ?? '?')}</span>` : '');
   $('#spot-species').innerHTML = sp.length
@@ -997,11 +1142,11 @@ $('#export-csv').addEventListener('click', () => {
 // Petit tutoriel (première ouverture, puis menu « Aide »)
 
 const TUTO = [
-  ['🗺️', 'Marquer un coin', 'Touche la carte, ou « Je suis ici » sur place, ou « Coordonnées ». Fais glisser l\'épingle pour l\'ajuster, puis donne un nom.'],
-  ['👪', 'Moi seul ou Famille', '<b style="color:var(--private)">Violet</b> : visible par toi seul. <b style="color:var(--family)">Orange</b> : partagé avec la famille. Tu choisis pour chaque coin.'],
-  ['📷', 'Le journal', 'Touche un coin puis « Noter une trouvaille » : date, espèces, quantité, photos. Tes trouvailles rendent le conseiller plus juste.'],
-  ['🧭', 'Sur le terrain', '« Retrouver » affiche une flèche et la distance jusqu\'au coin. « Itinéraire » ouvre Google Maps pour la route.'],
-  ['🤖', 'Le conseiller', 'Il croise la pluie des 10 derniers jours, la saison et le milieu pour dire où ça peut pousser. Ce n\'est jamais une identification.'],
+  ['🍄', 'Choisis un champignon', 'Touche une pastille en haut (Cèpe, Girolle…) : la carte colore en vert les forêts où il pousse, et ne garde que tes coins où tu l\'as déjà trouvé. Le point vert = en saison.'],
+  ['⭐', 'Tes coins', 'Les épingles sont tes coins (violet : à toi seul, orange : famille). Touche-en une pour voir ce que tu y as trouvé. Le bouton ⭐ à droite les masque ou les affiche.'],
+  ['＋', 'Noter un coin', 'Touche « ＋ Noter un coin », fais glisser la carte pour mettre le viseur dessus (ou « Ma position »), puis « C\'est ici ».'],
+  ['🧭', 'Sur le terrain', 'Dans un coin : « Retrouver » affiche une flèche et la distance, « Itinéraire » ouvre Google Maps. Les boutons ronds : 🌧️ pluie des 10 derniers jours, 🛰️ photo aérienne, 📍 ta position.'],
+  ['☰', 'Le reste', 'Dans le menu : liste de tes coins, conseiller du jour, guide des espèces, cartes hors ligne, alertes de pousse.'],
   ['⚠️', 'Sécurité', 'Fais contrôler <b>chaque récolte</b> par un pharmacien ou une association mycologique. Antipoison Marseille : <a class="tel" href="tel:+33491752525">04 91 75 25 25</a>.'],
 ];
 let tutoI = 0;
@@ -1134,7 +1279,7 @@ let rainLayer = null, rainLegend = null;
 async function showRain(on) {
   store.set('champi-rain', on ? '1' : '0');
   $('#toggle-rain').checked = on;
-  if (!on) { rainLayer?.remove(); rainLegend?.remove(); return; }
+  if (!on) { rainLayer?.remove(); rainLegend?.remove(); syncRail(); return; }
   if (!rainLayer) {
     toast('Chargement de la pluie sur la région…', 10000);
     const grid = pacaGrid();
@@ -1157,6 +1302,7 @@ async function showRain(on) {
     };
   }
   if ($('#toggle-rain').checked) { rainLayer.addTo(map); rainLegend.addTo(map); }
+  syncRail();
 }
 $('#toggle-rain').addEventListener('change', (e) => showRain(e.target.checked));
 
@@ -1212,11 +1358,10 @@ async function openAdvisor() {
   }
   body.innerHTML = html;
 }
-$('#advisor-btn').addEventListener('click', openAdvisor);
 $('#advisor-btn2').addEventListener('click', openAdvisor);
 $('#dlg-advisor .js-close').addEventListener('click', () => $('#dlg-advisor').close());
 $('#dlg-advisor').addEventListener('click', (e) => {
-  if (e.target.closest('#advisor-rain')) { $('#dlg-advisor').close(); window.scrollTo({ top: 0 }); map.setView([43.95, 6.1], 8); showRain(true); return; }
+  if (e.target.closest('#advisor-rain')) { $('#dlg-advisor').close(); map.setView([43.95, 6.1], 8); showRain(true).then(syncRail); return; }
   const b = e.target.closest('[data-spot]'); if (!b) return;
   const s = state.spots.find((x) => x.id === b.dataset.spot); if (!s) return;
   $('#dlg-advisor').close(); window.scrollTo({ top: 0 });
@@ -1234,7 +1379,7 @@ function renderGuide() {
       return `<span class="${cls}" title="${name}">${name[0].toUpperCase()}</span>`;
     }).join('');
     const trees = g.trees.map((t) => labelOf(TREES, t)).join(', ');
-    return `<div class="guide-card">
+    return `<div class="guide-card" id="guide-${s.id}">
       <h4>${esc(s.label)}</h4><div class="latin">${esc(g.latin)}</div>
       <div class="months">${cells}</div>
       <p>${esc(g.habitat)}</p>
@@ -1244,7 +1389,6 @@ function renderGuide() {
 }
 function openGuide() { $('#menu').hidden = true; renderGuide(); $('#dlg-guide').showModal(); }
 $('#guide-btn').addEventListener('click', openGuide);
-$('#guide-btn2').addEventListener('click', openGuide);
 $('#dlg-guide .js-close').addEventListener('click', () => $('#dlg-guide').close());
 $('#guide-forest').addEventListener('click', () => { $('#dlg-guide').close(); window.scrollTo({ top: 0 }); showForests(true); if (map.getZoom() < 11) map.setZoom(11); toast('Forêts IGN affichées (légende dans le guide).'); });
 

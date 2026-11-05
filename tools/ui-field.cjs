@@ -1,5 +1,6 @@
 // Parcours terrain : tutoriel, boussole (GPS simulé qui se déplace), recherche, exports, date EXIF.
 const { chromium, devices } = require('playwright');
+const { closeDialogs, openList, openSpot, setScope, pickSpecies, addAtCenter } = require('./ui-helpers.cjs');
 const fakeMeteo = require('./fake-meteo.cjs');
 const fs = require('fs');
 const [, , SITE, OUT, DATEJPG] = process.argv;
@@ -37,7 +38,7 @@ const finds = [{ id: 'f1', spot_id: 's2', user_id: ME, found_on: '2026-10-01', s
   console.log('tutoriel :', titles.join(' → '), '| fermé :', !(await page.isVisible('#dlg-tuto')), '| mémorisé :', await page.evaluate(() => localStorage.getItem('champi-tuto')));
 
   // 2. Boussole : à ~500 m au nord du coin, puis on se rapproche
-  await page.locator('.spot-item', { hasText: 'Pinède' }).click();
+  await openSpot(page, 'Pinède', { more: false });
   await page.click('#spot-compass');
   await page.waitForFunction(() => /m$/.test(document.querySelector('#compass-dist').textContent));
   console.log('boussole :', await page.textContent('#compass-dist'), '|', await page.textContent('#compass-dir'), '|', await page.textContent('#compass-acc'));
@@ -61,7 +62,7 @@ const finds = [{ id: 'f1', spot_id: 's2', user_id: ME, found_on: '2026-10-01', s
   await page.click('#dlg-spot .js-close');
 
   // 3. Recherche
-  await page.click('#peek'); await page.waitForTimeout(300);
+  await openList(page);
   for (const q of ['barriere', 'ENORME', 'morille', 'cèpe', 'introuvable']) {
     await page.fill('#search', q);
     console.log(`recherche « ${q} » :`, await page.locator('.spot-item .title').allTextContents());
@@ -69,7 +70,7 @@ const finds = [{ id: 'f1', spot_id: 's2', user_id: ME, found_on: '2026-10-01', s
   await page.fill('#search', '');
 
   // 4. Exports
-  await page.evaluate(() => scrollTo(0, 0));
+  await closeDialogs(page);
   await page.click('#menu-btn');
   const [g] = await Promise.all([page.waitForEvent('download'), page.click('#export-gpx')]);
   const gpx = fs.readFileSync(await g.path(), 'utf8');
@@ -80,7 +81,7 @@ const finds = [{ id: 'f1', spot_id: 's2', user_id: ME, found_on: '2026-10-01', s
   console.log('CSV :', c.suggestedFilename(), '|', JSON.stringify(csv.split('\r\n').slice(0, 2)));
 
   // 5. Date reprise de la photo
-  await page.locator('.spot-item', { hasText: 'Pinède' }).click().catch(async () => { await page.click('#peek'); await page.locator('.spot-item', { hasText: 'Pinède' }).click(); });
+  await openSpot(page, 'Pinède', { more: false });
   await page.click('#find-add summary');
   await page.setInputFiles('#find-photos', DATEJPG);
   await page.waitForFunction(() => document.querySelector('#find-date').value !== new Date().toISOString().slice(0, 10), null, { timeout: 5000 }).catch(() => {});

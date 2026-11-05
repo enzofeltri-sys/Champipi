@@ -1,6 +1,7 @@
 // Parcours photos + détails dans Chromium, avec faux Supabase (base + stockage) en mémoire.
 // Usage : node tools/ui-photos.cjs <url du site> <dossier captures> <photo jpeg avec GPS>
 const { chromium, devices } = require('playwright');
+const { closeDialogs, openList, openSpot, setScope, pickSpecies, addAtCenter } = require('./ui-helpers.cjs');
 const fakeMeteo = require('./fake-meteo.cjs');
 const fs = require('fs');
 const [, , SITE, OUT, PHOTO] = process.argv;
@@ -86,10 +87,10 @@ const ME = '11111111-1111-1111-1111-111111111111';
   await page.goto(SITE); await page.waitForSelector('#screen-app:not([hidden])'); await page.waitForTimeout(1500);
 
   // 1. Coin depuis la position d'une photo
-  await page.click('#btn-coords');
+  await page.click('#btn-add'); await page.click('#btn-coords');
   await page.setInputFiles('#coords-photo', PHOTO);
-  await page.waitForSelector('#adjust-bar:not([hidden])');
-  await page.click('#adjust-done');
+  await page.waitForTimeout(500); await page.click('#add-here');
+  await page.waitForSelector('#dlg-edit[open]');
   console.log('coords lues dans la photo :', await page.textContent('#edit-coords'));
   console.log('photo en attente visible :', await page.isVisible('#edit-photo'));
   await page.fill('#edit-name', 'Croix de Provence');
@@ -143,6 +144,7 @@ const ME = '11111111-1111-1111-1111-111111111111';
   console.log('après suppression : lignes', data.photos.length, 'fichiers', data.files.size, 'retirés', data.removed.length);
 
   // 4. Supprimer le coin → fichiers supprimés
+  await page.evaluate(() => { document.querySelector('#spot-more').open = true; });
   await page.click('#spot-edit');
   page.once('dialog', (d) => d.accept());
   await page.click('#edit-delete');

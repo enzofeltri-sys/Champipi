@@ -1,5 +1,6 @@
 // Parcours apprentissage : bilan du coin et « Ton expérience » avec la vraie archive Open-Meteo.
 const { chromium, devices } = require('playwright');
+const { closeDialogs, openList, openSpot, setScope, pickSpecies, addAtCenter } = require('./ui-helpers.cjs');
 const fakeMeteo = require('./fake-meteo.cjs');
 const [, , SITE, OUT] = process.argv;
 const REF = 'vvegujltsjgwszeloyaz';
@@ -32,7 +33,7 @@ const finds = ['2024-10-28', '2024-11-08', '2025-10-25', '2025-11-12'].map((d, i
     localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: 'x.y.z', refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 9999999, user: { id: me, email: 'x@y.fr' } }));
   }, [REF, ME]);
   await page.goto(SITE); await page.waitForSelector('#screen-app:not([hidden])');
-  await page.locator('.spot-item').click();
+  await openSpot(page);
   await page.waitForFunction(() => /trouvailles \(/.test(document.querySelector('#spot-bilan')?.textContent || ''), null, { timeout: 30000 });
   console.log('bilan :', (await page.textContent('#spot-bilan')).replace(/\s+/g, ' ').trim());
   await page.waitForSelector('#spot-meteo .verdict', { timeout: 30000 });
@@ -41,7 +42,7 @@ const finds = ['2024-10-28', '2024-11-08', '2025-10-25', '2025-11-12'].map((d, i
   await page.screenshot({ path: `${OUT}/95-bilan.png` });
   // 2e ouverture : l'historique est mémorisé (pas de nouvel appel)
   const before = archive;
-  await page.click('#dlg-spot .js-close'); await page.locator('.spot-item').click(); await page.waitForTimeout(1500);
+  await openSpot(page); await page.waitForTimeout(1500);
   console.log('appels archive :', before, '→ après réouverture :', archive);
   console.log('ERREURS :', errors.length ? errors : 'aucune');
   await b.close();

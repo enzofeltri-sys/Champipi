@@ -1,6 +1,7 @@
 // Parcours de l'interface dans Chromium avec une fausse API Supabase en mémoire.
 // Usage : node tools/ui-mock.cjs <url du site> <dossier des captures>
 const { chromium, devices } = require('playwright');
+const { closeDialogs, openList, openSpot, setScope, pickSpecies, addAtCenter } = require('./ui-helpers.cjs');
 const fakeMeteo = require('./fake-meteo.cjs');
 const [, , SITE, OUT] = process.argv;
 const REF = 'vvegujltsjgwszeloyaz';
@@ -86,13 +87,11 @@ async function setup(page, data, { session = true } = {}) {
   console.log('épingles affichées :', pins);
 
   // 4. Toucher la carte → épingle provisoire déplaçable → fiche
-  await page.mouse.click(200, 380);
-  await page.waitForSelector('#adjust-bar:not([hidden])');
-  const draggable = await page.locator('.leaflet-marker-draggable').count();
-  console.log('épingle déplaçable :', draggable);
-  await page.mouse.click(220, 400);   // ajuster en touchant ailleurs
+  await page.click('#btn-add');
   await shot(page, '04-epingle');
-  await page.click('#adjust-done');
+  await page.click('#add-here');
+  await page.waitForSelector('#dlg-edit[open]');
+  console.log('épingle déplaçable :', await page.locator('.leaflet-marker-draggable').count());
   await page.fill('#edit-name', 'Pinède test <b>gras</b>');
   await page.click('#edit-vis [data-vis=family]');
   await page.click('#edit-species [data-sp=cepe]');
@@ -115,50 +114,48 @@ async function setup(page, data, { session = true } = {}) {
   await page.click('#dlg-spot .js-close');
 
   // 6. Liste et filtres
-  await page.click('#peek'); await page.waitForTimeout(600);
+  await openList(page); await page.waitForTimeout(300);
   await shot(page, '08-liste');
   const order = await page.locator('.spot-item .title').allTextContents();
   console.log('ordre de la liste :', order);
-  await page.evaluate(() => scrollTo(0, 0));
-  await page.click('.topbar [data-scope=mine]');
+  await setScope(page, 'mine');
   console.log('Mes coins :', await page.locator('.spot-item .title').allTextContents());
-  await page.click('.topbar [data-scope=family]');
+  await setScope(page, 'family');
   console.log('Famille :', await page.locator('.spot-item .title').allTextContents());
-  await page.click('.topbar [data-scope=all]');
-  await page.selectOption('#filter-species', 'morille');
-  console.log('Morille :', await page.locator('.spot-item .title').allTextContents());
-  await page.selectOption('#filter-species', '');
+  await setScope(page, 'all');
+  await pickSpecies(page, 'Morille');
+  await openList(page);
+  console.log('Morille :', await page.locator('.spot-item .title').allTextContents(), '| épingles :', await page.locator('.leaflet-marker-icon').count());
+  await pickSpecies(page, 'Tous');
 
   // 7. Je suis ici
-  await page.click('#btn-here'); await page.waitForSelector('#adjust-bar:not([hidden])');
-  const ll = await page.evaluate(() => document.querySelector('#edit-coords') && 1);
-  await page.click('#adjust-done');
+  await page.click('#btn-add'); await page.click('#add-locate'); await page.waitForTimeout(800); await page.click('#add-here');
+  await page.waitForSelector('#dlg-edit[open]');
   console.log('coords géoloc :', await page.textContent('#edit-coords'));
   await page.click('#edit-form [value=cancel] >> nth=1');
 
   // 8. Coordonnées collées
-  await page.click('#btn-coords'); await page.fill('#coords-input', `43°31'47"N 5°26'51"E`);
-  await page.click('#coords-form [value=ok]'); await page.waitForSelector('#adjust-bar:not([hidden])');
-  await page.click('#adjust-done');
+  await page.click('#btn-add'); await page.click('#btn-coords'); await page.fill('#coords-input', `43°31'47"N 5°26'51"E`);
+  await page.click('#coords-form [value=ok]'); await page.waitForTimeout(500); await page.click('#add-here');
+  await page.waitForSelector('#dlg-edit[open]');
   console.log('coords collées :', await page.textContent('#edit-coords'));
   await page.click('#edit-form [value=cancel] >> nth=1');
 
   // 9. Menu, massifs, thème sombre, fond photo
-  await page.click('#menu-btn'); await page.check('#toggle-massifs');
+  await page.click('#menu-btn'); await page.click('#menu details.more summary'); await page.check('#toggle-massifs');
   await page.click('#theme-seg [data-theme=dark]'); await page.click('#menu-btn');
   await page.click('#menu-btn'); await page.click('#base-seg [data-base=ortho]'); await page.click('#menu-btn');
   await page.waitForTimeout(2500);
   await shot(page, '09-sombre-massifs-photos');
-  await page.click('#peek'); await page.waitForTimeout(600);
+  await openList(page); await page.waitForTimeout(300);
   await shot(page, '10-liste-sombre');
 
   // 10. Modifier puis supprimer mon coin
-  await page.evaluate(() => scrollTo(0, 0));
-  await page.locator('.spot-item', { hasText: 'Pinède' }).click();
+  await openSpot(page, 'Pinède');
   await page.click('#spot-edit'); await page.fill('#edit-name', 'Pinède renommée');
   await page.click('#edit-save'); await page.waitForSelector('#dlg-spot[open]');
   console.log('renommé :', await page.textContent('#spot-name'));
-  console.log('Modifier visible sur coin de Tata ?', await (async () => { await page.click('#dlg-spot .js-close'); await page.locator('.spot-item', { hasText: 'Vallon' }).click(); return page.isVisible('#spot-edit'); })());
+  console.log('Modifier visible sur coin de Tata ?', await (async () => { await openSpot(page, 'Vallon'); return page.$eval('#spot-edit', (el) => !el.hidden); })());
 
   console.log('ERREURS :', errors.length ? errors : 'aucune');
   await browser.close();

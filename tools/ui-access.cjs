@@ -1,5 +1,6 @@
 // Parcours « accès aux massifs » : hors saison (date réelle) et en été (horloge simulée au 10 août).
 const { chromium, devices } = require('playwright');
+const { closeDialogs, openList, openSpot, setScope, pickSpecies, addAtCenter } = require('./ui-helpers.cjs');
 const fakeMeteo = require('./fake-meteo.cjs');
 const [, , SITE, OUT] = process.argv;
 const REF = 'vvegujltsjgwszeloyaz';
@@ -36,14 +37,14 @@ async function run(b, summer) {
   await page.goto(SITE); await page.waitForSelector('#screen-app:not([hidden])');
   const label = summer ? 'ÉTÉ (10 août)' : 'AUJOURD\'HUI';
   for (const name of ['Hêtraie', 'Sainte-Victoire', 'Parc']) {
-    await page.locator('.spot-item', { hasText: name }).click();
+    await openSpot(page, name);
     await page.waitForTimeout(1200);
     const vis = await page.isVisible('#spot-access');
     console.log(`${label} · ${name} :`, vis ? (await page.textContent('#spot-access')).replace(/\s+/g, ' ').trim() : '(pas de ligne : hors massif)', '| classe :', await page.getAttribute('#spot-access', 'class'));
     if (summer && name === 'Hêtraie') await page.screenshot({ path: `${OUT}/70-acces-ferme.png` });
     await page.click('#dlg-spot .js-close');
   }
-  await page.click('#peek'); await page.click('#advisor-btn');
+  await closeDialogs(page); await page.click('#menu-btn'); await page.click('#advisor-btn2');
   await page.waitForSelector('#advisor-body .rank', { timeout: 15000 });
   const txt = (await page.textContent('#advisor-body')).replace(/\s+/g, ' ');
   console.log(`${label} · conseiller :`, txt.match(/Accès aux massifs.*?(?=Tes coins)/)?.[0], '|', txt.match(/Tes coins.*/)?.[0].slice(0, 160));

@@ -44,6 +44,17 @@ Les migrations sont dans `supabase/migrations/`. Règles (RLS) :
 - trouvailles : lecture et ajout si le coin m'est visible ; suppression de mes propres trouvailles ;
 - une personne connectée hors de la liste ne voit rien et a un message clair.
 
+## La carte (version simplifiée)
+
+- En haut, « Quel champignon ? » : une pastille par espèce (point vert = en saison). En choisir une colore en vert
+  les forêts favorables (vert foncé = peuplement pur, vert clair = mélange) et ne garde que les coins où elle a été notée.
+  Le recoloriage se fait sur le téléphone à partir des tuiles BD Forêt® V2 de l'IGN : la table des 29 couleurs
+  (`site/js/forests.js`) a été relevée sur toute la région et vérifiée auprès de l'IGN.
+- À droite : ⭐ coins (affichés par défaut), 🌧️ pluie des 10 derniers jours, 🛰️ photo aérienne, 📍 ma position.
+- En bas : « ＋ Noter un coin » (viseur au centre, « Ma position » ou « Coordonnées », puis « C'est ici »).
+- Toucher un coin : ce qui y a été trouvé, itinéraire, boussole, journal ; le reste dans « Météo, bilan et détails ».
+- Menu ☰ : liste des coins (Tous / À moi / Famille, recherche), conseiller, guide, hors ligne, alertes, famille, aide.
+
 ## Conseiller, météo et forêts
 
 - **🤖 Conseiller du jour** (sous la carte ou dans le menu) : espèces en saison, pluie sur 10 jours en PACA,
@@ -124,6 +135,7 @@ node tools/ui-offline.cjs http://localhost:5173/ shots tests/gps.jpg  # hors lig
 node tools/ui-share.cjs http://localhost:5173/ shots      # partage d'un coin (3 personnes)
 node tools/ui-learn.cjs http://localhost:5173/ shots      # bilan et apprentissage (vraie archive ; FAKE_ARCHIVE=1 pour simuler)
 node tools/ui-alerts.cjs http://localhost:5173/ shots     # alertes : écran, notification simulée, lien direct
+node tools/ui-map.cjs http://localhost:5173/ shots        # carte : champignon choisi, forêts favorables (vraies tuiles IGN)
 ```
 
 ## Sécurité
