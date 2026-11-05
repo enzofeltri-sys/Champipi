@@ -151,7 +151,8 @@ export function filterSpots(spots, finds, { scope = 'all', species = '', me = nu
   return spots.filter((s) => {
     if (scope === 'mine' && s.owner !== me) return false;
     if (scope === 'family' && s.visibility !== 'family' && !s.sharedWithMe) return false;   // + coins partagés avec moi
-    if (species && !(s.species ?? []).includes(species) && !fromFinds.get(s.id)?.has(species)) return false;
+    const want = Array.isArray(species) ? species : species ? [species] : [];   // un ou plusieurs champignons : l'un d'eux
+    if (want.length && !want.some((sp) => (s.species ?? []).includes(sp) || fromFinds.get(s.id)?.has(sp))) return false;
     return true;
   });
 }
@@ -332,4 +333,12 @@ const csvCell = (v) => { const s = String(v ?? ''); return /[;"\n\r]/.test(s) ? 
 export function toCsv(rows, columns) {
   // Point-virgule + BOM : s'ouvre directement dans Excel en français.
   return '﻿' + [columns.map((c) => csvCell(c[0])).join(';'), ...rows.map((r) => columns.map((c) => csvCell(c[1](r))).join(';'))].join('\r\n') + '\r\n';
+}
+
+// Ordre des pastilles : les grands classiques d'abord, puis les autres (ceux en saison en premier).
+export const FAVORITES = ['cepe', 'girolle', 'trompette', 'pied-de-mouton', 'chanterelle-grise'];
+export function chipOrder(month) {
+  const rest = SPECIES.filter((s) => s.id !== 'autre' && !FAVORITES.includes(s.id))
+    .sort((a, b) => Number(b.months.includes(month)) - Number(a.months.includes(month)));
+  return [...FAVORITES.map((id) => SPECIES.find((s) => s.id === id)), ...rest];
 }

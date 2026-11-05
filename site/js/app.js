@@ -3,7 +3,7 @@ import {
   SPECIES, speciesLabel, inSeason, seasonText, parseCoords, formatCoords, directionsUrl,
   sortSpots, filterSpots, spotSpecies, lastFinds, formatDate, todayIso, escapeHtml as esc, MONTHS,
   round6, MASSIFS, FORBIDDEN, TREES, SOILS, EXPOSURES, QUANTITIES, CONDITIONS, labelOf, exifGps,
-  exifDate, searchSpots, toGpx, toCsv,
+  exifDate, searchSpots, toGpx, toCsv, chipOrder,
 } from './logic.js';
 import { createPhotoStore, thumbPath } from './photos.js';
 import { GUIDE, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown } from './advisor.js';
@@ -11,7 +11,7 @@ import { dailyFor, forestAt, soilAt, historyFor } from './weather.js';
 import { treesAt, soilKind, whatGrows, fix as cleanText } from './here.js';
 import { historyRange, findConditions, spotProfile, personalAdvice, profileSummary } from './learn.js';
 import { massifAt, accessFor, inFireSeason, DEPT_PAGES, ACCESS_ICON } from './access.js';
-import { favorableColors, favorableLabels, colorKeyMap } from './forests.js';
+import { favorableColors, favorableColorsMany, favorableLabels, colorKeyMap } from './forests.js';
 import { avatarOf, avatarHtml, AVATAR_EMOJIS, AVATAR_COLORS } from './avatars.js';
 
 // ---------------------------------------------------------------------------
@@ -47,7 +47,8 @@ const state = {
   spots: [], finds: [], photos: [], shares: [], people: [],
   isAdmin: false, request: null,
   scope: store.get('champi-scope') || 'all',
-  species: store.get('champi-species') || '',
+  species: (() => { const v = store.get('champi-species'); try { const a = JSON.parse(v); return Array.isArray(a) ? a : []; } catch { return v ? [v] : []; } })(),   // champignons choisis
+  moment: new Map(),    // id → niveau du conseiller au centre de la carte (« bon moment ? »)
   query: '',
   showSpots: store.get('champi-spots') !== '0',
   adding: false,
@@ -286,7 +287,8 @@ function initMap() {
   markersLayer = L.layerGroup();
   if (state.showSpots) markersLayer.addTo(map);
   syncRail();
-  if (state.species) setSpecies(state.species, false);
+  setSpecies(state.species, false);
+  map.on('moveend', scheduleMoment); scheduleMoment();
 }
 
 function setBase(name, remember = true) {
@@ -392,14 +394,14 @@ function render() {
     L.marker([s.lat, s.lon], { icon: pinIcon(s.sharedWithMe || s.sharedWith?.length ? 'shared' : s.visibility, seasonal, false, personOf(s.owner)), title: s.name, keyboard: true })
       .on('click', () => openSpot(s.id)).addTo(markersLayer);
   }
-  if (state.species) renderBanner();
+  if (state.species.length) renderBanner();
 
   // Liste (panneau « Mes coins ») : portée + recherche + champignon choisi.
   const visible = searchSpots(filterSpots(state.spots, state.finds, { scope: state.scope, species: state.species, me }), state.finds, state.query);
   const sorted = sortSpots(visible, state.finds);
   const last = lastFinds(state.finds);
   const n = sorted.length;
-  $('#list-count').textContent = `${n} coin${n > 1 ? 's' : ''}${state.species ? ` avec ${speciesLabel(state.species)}` : ''} — par dernière trouvaille`;
+  $('#list-count').textContent = `${n} coin${n > 1 ? 's' : ''}${state.species.length ? ` avec ${state.species.map(speciesLabel).join(' ou ')}` : ''} — par dernière trouvaille`;
   $('#list-empty').hidden = n > 0;
   $('#spot-list').innerHTML = sorted.map((s) => {
     const sp = spotSpecies(s, state.finds);
@@ -452,20 +454,50 @@ $('#dlg-list .js-close').addEventListener('click', () => $('#dlg-list').close())
 // ---------------------------------------------------------------------------
 // « Quel champignon ? » : pastilles en haut, forêts favorables colorées, coins filtrés
 
+const MOMENT = {
+  bon: { cls: 'm-bon', text: 'bon moment ici' },
+  moyen: { cls: 'm-moyen', text: 'en saison, conditions moyennes ici' },
+  faible: { cls: 'm-faible', text: 'en saison, mais pas le bon moment ici (trop sec ou trop froid)' },
+};
+function momentOf(id) {
+  const s = SPECIES.find((x) => x.id === id);
+  if (!s?.months.includes(month())) return null;
+  return state.moment.get(id) ?? 'saison';
+}
 function renderSpeciesBar() {
-  const m = month();
-  const list = SPECIES.filter((s) => s.id !== 'autre')
-    .sort((a, b) => Number(b.months.includes(m)) - Number(a.months.includes(m)));
-  $('#species-bar').innerHTML = `<button type="button" class="sp-chip${state.species ? '' : ' on'}" data-sp="" role="radio" aria-checked="${!state.species}">🍄 Tous</button>`
-    + list.map((s) => {
-      const on = state.species === s.id, now = s.months.includes(m);
-      return `<button type="button" class="sp-chip${on ? ' on' : ''}${now ? '' : ' off-season'}" data-sp="${s.id}" role="radio" aria-checked="${on}">${esc(s.label.replace(/ \(.*\)$/, ''))}${now ? '<span class="dot" title="en saison"></span>' : ''}</button>`;
+  const m = month(); const none = !state.species.length;
+  $('#species-bar').innerHTML = `<button type="button" class="sp-chip${none ? ' on' : ''}" data-sp="" aria-pressed="${none}">🍄 Tous</button>`
+    + chipOrder(m).map((s) => {
+      const on = state.species.includes(s.id), mo = momentOf(s.id);
+      const dot = mo ? `<span class="dot ${MOMENT[mo]?.cls ?? ''}" title="${esc(MOMENT[mo]?.text ?? 'en saison')}"></span>` : '';
+      return `<button type="button" class="sp-chip${on ? ' on' : ''}${mo ? '' : ' off-season'}" data-sp="${s.id}" aria-pressed="${on}">${on ? '✓ ' : ''}${esc(s.label.replace(/ \(.*\)$/, ''))}${dot}</button>`;
     }).join('');
 }
 $('#species-bar').addEventListener('click', (e) => {
   const b = e.target.closest('[data-sp]'); if (!b) return;
-  setSpecies(state.species === b.dataset.sp ? '' : b.dataset.sp);
+  const id = b.dataset.sp;
+  if (!id) return setSpecies([]);
+  setSpecies(state.species.includes(id) ? state.species.filter((x) => x !== id) : [...state.species, id]);
 });
+
+// « Bon moment ? » : avis du conseiller (pluie, températures, saison) au centre de la carte, pour chaque espèce.
+let momentTimer = null, momentCell = '';
+function scheduleMoment() { clearTimeout(momentTimer); momentTimer = setTimeout(updateMoment, 700); }
+async function updateMoment() {
+  const c = map.getCenter();
+  const lat = Math.round(c.lat * 4) / 4, lon = Math.round(c.lng * 4) / 4;   // grille de 0,25° : peu d'appels
+  const cell = `${lat},${lon}`;
+  if (cell === momentCell) return;
+  try {
+    const [daily] = await dailyFor([[lat, lon]]);
+    const w = summarizeWeather(daily, todayIso());
+    const m = month(); const next = new Map();
+    for (const s of SPECIES) if (s.months.includes(m)) next.set(s.id, assess(w, { month: m, species: [s.id] }).level);
+    state.moment = next; state.momentRain = w.rain10; momentCell = cell;
+  } catch { state.moment = new Map(); }   // météo indisponible : on n'affiche que la saison
+  renderSpeciesBar();
+  if (state.species.length) renderBanner();
+}
 
 // Calque « forêts favorables » : les tuiles BD Forêt de l'IGN sont repeintes sur le téléphone
 // (une couleur = un type de forêt) pour ne garder que les forêts où pousse le champignon choisi.
@@ -495,41 +527,57 @@ const HabitatLayer = L.GridLayer.extend({
 });
 const PLAN_FOREST = (z, x, y) => `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=LANDCOVER.FORESTINVENTORY.V2&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}&FORMAT=image/png`;
 
-function setSpecies(id, remember = true) {
-  state.species = id;
-  if (remember) store.set('champi-species', id || null);
+function setSpecies(ids, remember = true) {
+  state.species = (Array.isArray(ids) ? ids : ids ? [ids] : []).filter((id) => SPECIES.some((s) => s.id === id));
+  if (remember) store.set('champi-species', state.species.length ? JSON.stringify(state.species) : null);
   renderSpeciesBar();
-  habitatKeys = colorKeyMap(id ? favorableColors(id) : new Map());
-  if (id && habitatKeys.size) {
+  const any = state.species.length > 0;
+  habitatKeys = colorKeyMap(favorableColorsMany(state.species));
+  if (any && habitatKeys.size) {
     if (!habitatLayer) habitatLayer = new HabitatLayer({ minZoom: 8, maxNativeZoom: 16, maxZoom: 19, opacity: 1, zIndex: 250, attribution: 'BD Forêt® V2 © IGN' });
     if (map.hasLayer(habitatLayer)) habitatLayer.redraw(); else habitatLayer.addTo(map);
   } else if (habitatLayer) habitatLayer.remove();
-  $('#species-banner').hidden = !id;
-  map.getContainer().classList.toggle('habitat-on', !!(id && habitatKeys.size));   // fond en gris : le vert ressort
+  $('#species-banner').hidden = !any;
+  map.getContainer().classList.toggle('habitat-on', !!(any && habitatKeys.size));   // fond en gris : le vert ressort
   render();
 }
 
+function momentLine(id) {
+  const s = SPECIES.find((x) => x.id === id); const m = month();
+  if (!s.months.includes(m)) return `⚪ hors saison (saison : ${esc(seasonText(id))})`;
+  const peak = (s.peak ?? []).includes(m) ? ' · mois de pic' : '';
+  const mo = state.moment.get(id);
+  if (!mo) return `🟡 en saison${peak}`;
+  return `${LEVELS[mo].icon} ${esc(MOMENT[mo].text)}${peak}`;
+}
 function renderBanner() {
-  const id = state.species; if (!id) return;
-  const s = SPECIES.find((x) => x.id === id); const g = GUIDE[id] ?? {};
-  const m = month(); const now = s.months.includes(m); const peak = (s.peak ?? []).includes(m);
-  const forests = favorableLabels(id);
-  const mine = filterSpots(state.spots, state.finds, { species: id }).length;
-  const look = g.lookalikes ?? '';
-  const warn = look.includes('⚠️') ? look.replace(/⚠️/g, '').split(/[.(:]/)[0].trim() : '';
-  $('#species-banner').innerHTML = `<div class="head"><b>${esc(s.label)}</b>
-      <span class="badge ${now ? 'season' : ''}">${now ? (peak ? 'pic' : 'en saison') : `hors saison`}</span>
-      <button class="icon-btn mini" type="button" data-banner="guide" aria-label="Fiche du champignon">📖</button>
-      <button class="icon-btn mini" type="button" data-banner="clear" aria-label="Tous les champignons">✕</button></div>
-    <div class="small">${forests.length
-      ? `<span class="key" style="background:rgba(22,163,74,.6)"></span>${esc(forests.slice(0, 4).join(', '))}${forests.length > 4 ? '…' : ''}`
-      : `🌿 ${esc(g.habitat ?? 'Pas de forêt type.')}`}${!now ? ` · saison : ${esc(seasonText(id))}` : ''}</div>
-    <div class="small">${mine ? `⭐ ${mine} de tes coins` : 'Aucun de tes coins'}${warn ? ` · <span class="warn">⚠️ sosie : ${esc(warn)}</span>` : ''} · <a class="tel" href="tel:+33491752525">antipoison</a></div>`;
+  const ids = state.species; if (!ids.length) return;
+  const mine = filterSpots(state.spots, state.finds, { species: ids }).length;
+  const tools = `<button class="icon-btn mini" type="button" data-banner="guide" aria-label="Fiche du champignon">📖</button>
+      <button class="icon-btn mini" type="button" data-banner="clear" aria-label="Tous les champignons">✕</button>`;
+  const rain = state.momentRain != null ? ` <span class="muted">(pluie ici : ${state.momentRain} mm / 10 j)</span>` : '';
+  if (ids.length === 1) {
+    const id = ids[0]; const s = SPECIES.find((x) => x.id === id); const g = GUIDE[id] ?? {};
+    const forests = favorableLabels(id);
+    const look = g.lookalikes ?? '';
+    const warn = look.includes('⚠️') ? look.replace(/⚠️/g, '').split(/[.(:]/)[0].trim() : '';
+    $('#species-banner').innerHTML = `<div class="head"><b>${esc(s.label)}</b>${tools}</div>
+      <div class="small">${momentLine(id)}${rain}</div>
+      <div class="small">${forests.length
+        ? `<span class="key" style="background:rgba(22,163,74,.6)"></span>${esc(forests.slice(0, 4).join(', '))}${forests.length > 4 ? '…' : ''}`
+        : `🌿 ${esc(g.habitat ?? 'Pas de forêt type.')}`}</div>
+      <div class="small">${mine ? `⭐ ${mine} de tes coins` : 'Aucun de tes coins'}${warn ? ` · <span class="warn">⚠️ sosie : ${esc(warn)}</span>` : ''} · <a class="tel" href="tel:+33491752525">antipoison</a></div>`;
+    return;
+  }
+  $('#species-banner').innerHTML = `<div class="head"><b>${ids.length} champignons</b>${tools}</div>
+    ${ids.map((id) => `<div class="small"><b>${esc(speciesLabel(id))}</b> : ${momentLine(id)}</div>`).join('')}
+    <div class="small"><span class="key" style="background:rgba(22,163,74,.6)"></span>forêts favorables à l'un d'eux${rain}</div>
+    <div class="small">${mine ? `⭐ ${mine} de tes coins` : 'Aucun de tes coins'} · <a class="tel" href="tel:+33491752525">antipoison</a></div>`;
 }
 $('#species-banner').addEventListener('click', (e) => {
   const b = e.target.closest('[data-banner]'); if (!b) return;
-  if (b.dataset.banner === 'clear') setSpecies('');
-  else { openGuide(); setTimeout(() => document.getElementById('guide-' + state.species)?.scrollIntoView({ block: 'start' }), 50); }
+  if (b.dataset.banner === 'clear') setSpecies([]);
+  else { openGuide(); setTimeout(() => document.getElementById('guide-' + state.species[0])?.scrollIntoView({ block: 'start' }), 50); }
 });
 renderSpeciesBar();
 
@@ -945,7 +993,7 @@ function renderFound(s) {
     return;
   }
   box.innerHTML = '<div class="small muted">Ce que tu y as trouvé :</div>' + [...count.entries()].sort((a, b) => b[1] - a[1])
-    .map(([sp, k]) => `<span class="sp${sp === state.species ? ' match' : ''}">${esc(speciesLabel(sp))} <b>×${k}</b> <span class="small muted">· ${formatDate(lastOn.get(sp))}</span></span>`).join('');
+    .map(([sp, k]) => `<span class="sp${state.species.includes(sp) ? ' match' : ''}">${esc(speciesLabel(sp))} <b>×${k}</b> <span class="small muted">· ${formatDate(lastOn.get(sp))}</span></span>`).join('');
 }
 
 function renderSpot(id) {

@@ -155,3 +155,15 @@ test('filtre Famille : inclut les coins partagés avec moi', () => {
   assert.deepEqual(filterSpots(sp, [], { scope: 'family', me: 'me' }).map((x) => x.id), ['s', 'f']);
   assert.deepEqual(filterSpots(sp, [], { scope: 'mine', me: 'me' }).map((x) => x.id), ['p']);
 });
+
+import { chipOrder, FAVORITES } from '../site/js/logic.js';
+test('filtre : plusieurs espèces (l\'une ou l\'autre)', () => {
+  assert.deepEqual(filterSpots(spots, finds, { species: ['morille', 'lactaire-sanguin'] }).map((s) => s.id), ['b', 'c']);
+  assert.equal(filterSpots(spots, finds, { species: [] }).length, 4);
+});
+test('pastilles : cèpe, girolle, trompette, pied-de-mouton, chanterelle en premier', () => {
+  const ids = chipOrder(4).map((s) => s.id);
+  assert.deepEqual(ids.slice(0, 5), FAVORITES);
+  assert.equal(ids[5], 'berigoule');            // ensuite, les espèces en saison (avril)
+  assert.ok(!ids.includes('autre'));
+});

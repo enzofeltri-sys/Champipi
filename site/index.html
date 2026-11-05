@@ -94,7 +94,7 @@
       <div id="map" aria-label="Carte"></div>
 
       <header class="topbar">
-        <div id="species-bar" class="species-bar" role="radiogroup" aria-label="Quel champignon ?"></div>
+        <div id="species-bar" class="species-bar" role="group" aria-label="Quel champignon ?"></div>
         <button id="menu-btn" class="icon-btn" type="button" aria-label="Menu" aria-haspopup="true">☰<span id="menu-dot" class="menu-dot" hidden></span></button>
       </header>
 
@@ -392,10 +392,12 @@
       </details>
 
       <details><summary>🍄 Chercher un champignon</summary>
-        <p>Touche une pastille en haut (Cèpe, Girolle…). Le <b>point vert</b> indique qu'il est en saison.</p>
+        <p>Touche une ou <b>plusieurs pastilles</b> en haut (Cèpe, Girolle…) ; touche-la à nouveau pour la retirer, « 🍄 Tous » pour tout enlever.</p>
+        <p>Le point sur chaque pastille dit si c'est <b>le bon moment</b> là où tu regardes la carte (pluie et températures des derniers jours, saison) :
+          <b style="color:#16a34a">●</b> bon moment · <b style="color:#eab308">●</b> en saison, conditions moyennes · <b style="color:#dc2626">●</b> en saison mais trop sec ou trop froid · pas de point = hors saison.</p>
         <ul>
           <li>La carte passe en gris et les <b>forêts où il pousse</b> apparaissent en vert : vert foncé = forêt pure de la bonne essence, vert clair = mélange (possible). Zoome pour les voir en détail.</li>
-          <li>Seuls <b>les coins où il a déjà été noté</b> restent affichés.</li>
+          <li>Seuls <b>les coins où l'un d'eux a déjà été noté</b> restent affichés.</li>
           <li>Le bandeau du bas rappelle la saison, les forêts, le <b>sosie dangereux</b> ; 📖 ouvre la fiche du guide ; ✕ revient à tous les champignons.</li>
         </ul>
         <p class="small muted">Forêts : carte forestière BD Forêt® de l'IGN. C'est une aide pour chercher, pas une garantie.</p>

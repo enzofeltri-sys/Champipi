@@ -66,6 +66,13 @@ export function favorableLabels(speciesId) {
   return FOREST_CLASSES.filter((c) => m.get(c.hex) === 2).map((c) => c.label);
 }
 
+/** Forêts favorables à l'un des champignons choisis (on garde le meilleur niveau). */
+export function favorableColorsMany(ids) {
+  const out = new Map();
+  for (const id of ids) for (const [hex, k] of favorableColors(id)) out.set(hex, Math.max(out.get(hex) ?? 0, k));
+  return out;
+}
+
 /** Table de recoloriage rapide : clé entière RVB → niveau. */
 export function colorKeyMap(levels) {
   const out = new Map();

@@ -379,3 +379,15 @@ button, .btn, .chip, .sp-chip, .rail-btn, summary { -webkit-user-select: none; u
 .here-sp .small-btn { align-self: flex-start; min-height: 36px; padding: 4px 12px; font-size: .85rem; }
 .notify-prefs { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
 .notify-prefs .check { align-items: flex-start; } .notify-prefs .check input { flex: none; margin-top: 2px; }
+
+/* Filtres encore un peu plus bas (demande d'Enzo) */
+.topbar { top: calc(44px + env(safe-area-inset-top)); }
+.rail { top: calc(102px + env(safe-area-inset-top)); }
+.menu { top: calc(96px + env(safe-area-inset-top)); }
+.offline-bar { top: calc(102px + env(safe-area-inset-top)); }
+/* « Bon moment ? » sur les pastilles */
+.sp-chip .dot.m-bon { background: #16a34a; box-shadow: 0 0 0 2px rgba(22,163,74,.25); }
+.sp-chip .dot.m-moyen { background: #eab308; }
+.sp-chip .dot.m-faible { background: #dc2626; }
+.sp-chip.on .dot { box-shadow: 0 0 0 2px #fff; }
+.sp-chip.on .dot:not(.m-bon):not(.m-moyen):not(.m-faible) { background: currentColor; }
