@@ -112,7 +112,8 @@ function fatal(err) {
 function frError(err) {
   const msg = err?.message || String(err);
   if (err?.code === '42501' || /row-level security/i.test(msg)) return 'action non autorisée.';
-  if (err?.status === 429 || /rate limit|too many/i.test(msg)) return 'trop de demandes, réessaie dans quelques minutes.';
+  if (/email rate limit|over_email_send_rate_limit/i.test(msg + (err?.code ?? ''))) return 'trop d\'e-mails envoyés (limite de Supabase). Réessaie dans une heure, ou utilise le dernier code reçu.';
+  if (err?.status === 429 || /rate limit|too many/i.test(msg)) return 'trop de tentatives, attends une minute.';
   if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) return 'pas de réseau ?';
   if (/expired|invalid/i.test(msg) && /token|otp/i.test(msg)) return 'code invalide ou expiré.';
   return msg;
