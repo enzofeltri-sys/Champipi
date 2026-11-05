@@ -1,7 +1,7 @@
 // « Qu'est-ce qui pousse ici ? » : à partir de la forêt (IGN BD Forêt V2), du sol (carte des sols INRAE,
 // diffusée par l'IGN), de l'altitude et du mois, liste les champignons du carnet qui ont leur milieu ici.
 // Règles simples et transparentes, pas d'IA. Indicatif : un milieu favorable ne garantit rien.
-import { SPECIES, seasonText } from './logic.js';
+import { SPECIES, seasonText, seasonOf } from './logic.js';
 import { GUIDE } from './advisor.js';
 import { speciesTrees } from './forests.js';
 
@@ -82,9 +82,9 @@ export function whatGrows({ trees, soil = null, alt = null, month }) {
       else why.push({ ok: true, text: `altitude ${alt} m` });
     }
     if (why.some((w) => w.ok === false)) continue;   // une contrainte nette n'est pas remplie : on ne le propose pas
-    const inSeason = sp.months.includes(month);
+    const inSeason = sp.months.includes(month), late = seasonOf(sp.id, month) === 'late';
     out.push({
-      id: sp.id, label: sp.label, score, inSeason, peak: (sp.peak ?? []).includes(month), season: seasonText(sp.id),
+      id: sp.id, label: sp.label, score, inSeason, late, peak: (sp.peak ?? []).includes(month), season: seasonText(sp.id),
       level: tree === 2 ? 'probable' : 'possible', why,
     });
   }

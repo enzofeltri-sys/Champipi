@@ -34,7 +34,7 @@ const finds = [{ id: 'f1', spot_id: 's2', user_id: ME, found_on: '2026-10-01', s
   // 1. Tutoriel à la première ouverture
   await page.waitForSelector('#coach:not([hidden])');
   const titles = [];
-  for (let i = 0; i < 9; i++) { titles.push(await page.textContent('#coach-text b')); if (i === 1) await page.screenshot({ path: `${OUT}/60-tuto.png` }); await page.click('#coach-next'); await page.waitForTimeout(100); }
+  for (let i = 0; i < 10; i++) { titles.push(await page.textContent('#coach-text b')); if (i === 1) await page.screenshot({ path: `${OUT}/60-tuto.png` }); await page.click('#coach-next'); await page.waitForTimeout(100); }
   console.log('visite guidée :', titles.join(' → '), '| fermée :', await page.isHidden('#coach'), '| mémorisée :', await page.evaluate(() => localStorage.getItem('champi-tuto')));
 
   // 3. Recherche

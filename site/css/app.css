@@ -472,3 +472,22 @@ button, .btn, .chip, .sp-chip, .rail-btn, summary { -webkit-user-select: none; u
 .coach-arrow.down { bottom: -8px; }
 .coach-arrow.right { right: -8px; }
 .coach-arrow[hidden] { display: none; }
+
+/* ===== Fiche détaillée d'une espèce ===== */
+.guide-card[data-fiche] { cursor: pointer; }
+.guide-more { margin-top: 4px; }
+.months span.late { background: color-mix(in srgb, var(--season) 35%, transparent); }
+.fiche h3 { margin: 16px 0 6px; font-size: 1rem; }
+.fiche .latin { font-style: italic; color: var(--muted); margin-bottom: 6px; }
+.fiche-now { padding: 8px 12px; border-radius: 12px; background: var(--surface-2); }
+.fiche-look { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; margin: 0; }
+.fiche-look dt { font-weight: 700; }
+.fiche-look dd { margin: 0; }
+.fiche-looks { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.fiche-looks li { padding: 8px 12px; border-radius: 12px; border: 1px solid var(--border); }
+.fiche-looks li.d3 { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.fiche-looks li.d2 { border-color: #d97706; }
+.fiche .bar-grid { margin-top: 14px; }
+.fiche .bar-grid a.btn { text-decoration: none; }
+/* la visite guidée passe au-dessus du menu */
+.coach { z-index: 4000; }

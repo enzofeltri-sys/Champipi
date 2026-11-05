@@ -3,7 +3,7 @@ import {
   SPECIES, speciesLabel, inSeason, seasonText, formatCoords, directionsUrl,
   sortSpots, filterSpots, spotSpecies, lastFinds, formatDate, todayIso, escapeHtml as esc, MONTHS,
   round6, MASSIFS, FORBIDDEN, TREES, SOILS, EXPOSURES, QUANTITIES, CONDITIONS, labelOf, exifGps,
-  exifDate, searchSpots, toGpx, toCsv, chipOrder,
+  exifDate, searchSpots, toGpx, toCsv, chipOrder, seasonOf, lateText,
 } from './logic.js';
 import { createPhotoStore, thumbPath } from './photos.js';
 import { GUIDE, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown } from './advisor.js';
@@ -15,6 +15,7 @@ import { massifAt, accessFor, inFireSeason, DEPT_PAGES, ACCESS_ICON } from './ac
 import { favorableColors, favorableColorsMany, favorableLabels, colorKeyMap } from './forests.js';
 import { habitatTable, gridStep, cellsFor, cellCodes, pixelCode, pxLat, pxLon, COLORS, ALPHA } from './moment-map.js';
 import { buildJournal, unreadCount, dayTitle } from './journal.js';
+import { INFO, DANGER } from './species-info.js';
 import { avatarOf, avatarHtml, AVATAR_EMOJIS, AVATAR_COLORS } from './avatars.js';
 
 // ---------------------------------------------------------------------------
@@ -506,8 +507,11 @@ const MOMENT = {
 };
 function momentOf(id) {
   const s = SPECIES.find((x) => x.id === id);
-  if (!s?.months.includes(month())) return null;
-  return state.moment.get(id) ?? 'saison';
+  const so = seasonOf(id, month());
+  if (so === 'off') return null;
+  const lv = state.moment.get(id);
+  if (so === 'late') return lv && lv !== 'hors-saison' ? lv : null;   // fin de saison : seulement si la météo le permet
+  return lv ?? 'saison';
 }
 function renderSpeciesBar() {
   const m = month(); const none = !state.species.length;
@@ -537,7 +541,7 @@ async function updateMoment() {
     const [daily] = await dailyFor([[lat, lon]]);
     const w = summarizeWeather(daily, todayIso());
     const m = month(); const next = new Map();
-    for (const s of SPECIES) if (s.months.includes(m)) next.set(s.id, assess(w, { month: m, species: [s.id] }).level);
+    for (const s of SPECIES) if (seasonOf(s.id, m) !== 'off') next.set(s.id, assess(w, { month: m, species: [s.id] }).level);
     state.moment = next; state.momentRain = w.rain10; momentCell = cell;
   } catch { state.moment = new Map(); }   // météo indisponible : on n'affiche que la saison
   renderSpeciesBar();
@@ -604,7 +608,7 @@ let habitatSeq = 0;
 async function updateHabitatWeather() {
   if (!habitat.ids.length || !habitatLayer || !map.hasLayer(habitatLayer)) return;
   const m = month();
-  habitat.allOff = !habitat.ids.some((id) => SPECIES.find((x) => x.id === id)?.months.includes(m));
+  habitat.allOff = !habitat.ids.some((id) => seasonOf(id, m) !== 'off');
   if (habitat.allOff) { repaintHabitat(); return; }
   const b0 = map.getBounds().pad(0.2);
   const b = { south: b0.getSouth(), north: b0.getNorth(), west: b0.getWest(), east: b0.getEast() };
@@ -644,6 +648,8 @@ function setSpecies(ids, remember = true) {
 
 function momentLine(id) {
   const s = SPECIES.find((x) => x.id === id); const m = month();
+  const so = seasonOf(id, m), lv = state.moment.get(id);
+  if (so === 'late') return lv && lv !== 'hors-saison' ? `${LEVELS[lv].icon} fin de saison : ${esc(MOMENT[lv].short)} (doux, sans gel)` : `⚪ fin de saison : possible seulement s'il fait doux et sans gel`;
   if (!s.months.includes(m)) return `⚪ hors saison (saison : ${esc(seasonText(id))})`;
   const peak = (s.peak ?? []).includes(m) ? ' · mois de pic' : '';
   const mo = state.moment.get(id);
@@ -678,6 +684,7 @@ function renderBanner() {
 $('#species-banner').addEventListener('click', (e) => {
   const b = e.target.closest('[data-banner]'); if (!b) return;
   if (b.dataset.banner === 'clear') setSpecies([]);
+  else if (INFO[state.species[0]]) openFiche(state.species[0]);
   else { openGuide(); setTimeout(() => document.getElementById('guide-' + state.species[0])?.scrollIntoView({ block: 'start' }), 50); }
 });
 renderSpeciesBar();
@@ -798,11 +805,11 @@ async function analyzeHere(lat, lon) {
   </div>`;
 
   const items = list.map((r) => {
-    const a = r.inSeason && w ? assess(w, { month: m, species: [r.id], trees: mainTrees.length ? mainTrees : [...trees.keys()] }) : null;
+    const a = (r.inSeason || r.late) && w ? assess(w, { month: m, species: [r.id], trees: mainTrees.length ? mainTrees : [...trees.keys()], alt: z }) : null;
     const lv = a?.level ? LEVELS[a.level] : null;
     return `<div class="here-sp">
       <div class="head"><b>${esc(r.label)}</b>
-        <span class="badge ${r.inSeason ? 'season' : ''}">${r.inSeason ? (r.peak ? 'pic' : 'en saison') : `saison : ${esc(r.season)}`}</span>
+        <span class="badge ${r.inSeason ? 'season' : ''}">${r.inSeason ? (r.peak ? 'pic' : 'en saison') : r.late ? 'fin de saison, si doux' : `saison : ${esc(r.season)}`}</span>
         <span class="tag ${r.level}">${r.level === 'probable' ? 'milieu typique' : 'possible'}</span></div>
       <ul class="why">${r.why.map((x) => `<li>${x.ok ? '✓' : '?'} ${esc(x.text)}</li>`).join('')}</ul>
       ${lv ? `<div class="small">${lv.icon} ${esc(lv.label)} en ce moment</div>` : ''}
@@ -1311,6 +1318,7 @@ $('#export-csv').addEventListener('click', () => {
 const COACH = [
   ['#species-bar', '🍄 Choisis un champignon', 'Touche une ou plusieurs pastilles : les forêts où il pousse se colorent (vert = bon moment, jaune = moyen, rouge = pas le moment). Le point de couleur sur la pastille dit pareil pour le secteur affiché.'],
   ['#menu-btn', '☰ Le menu', 'Journal de la famille, liste de tes coins, conseiller, guide des espèces, cartes hors ligne, alertes, aide… et 🔄 pour actualiser.'],
+  ['#guide-btn', '📖 Le guide des espèces', 'Dans le menu : le calendrier de chaque espèce. Touche une espèce pour sa fiche complète : comment la reconnaître, où la chercher, ses sosies dangereux, et vos trouvailles.', 'menu'],
   ['#rail-spots', '⭐ Tes coins', 'Affiche ou masque les épingles. Touche une épingle pour voir ce que tu y as trouvé et y aller.'],
   ['#rail-rain', '🌧️ La pluie', 'La pluie tombée ces 10 derniers jours sur la région : plus c\'est bleu foncé, plus il a plu.'],
   ['#rail-base', '🛰️ Photo aérienne', 'Passe en photo aérienne pour voir les clairières et les chemins, puis revient au plan.'],
@@ -1321,7 +1329,8 @@ const COACH = [
 ];
 let coachI = 0;
 function placeCoach() {
-  const [sel, title, txt] = COACH[coachI];
+  const [sel, title, txt, needs] = COACH[coachI];
+  $('#menu').hidden = needs !== 'menu';   // étape dans le menu : on l'ouvre le temps de l'expliquer
   const el = sel ? document.querySelector(sel) : null;
   const r = el && el.offsetParent !== null ? el.getBoundingClientRect() : null;
   const hole = $('#coach-hole'), bub = $('#coach-bubble'), arrow = $('#coach-arrow');
@@ -1364,7 +1373,7 @@ function openTuto() {
   for (const d of $$('dialog[open]')) d.close();
   coachI = 0; $('#coach').hidden = false; placeCoach();
 }
-function endTuto() { store.set('champi-tuto', '1'); $('#coach').hidden = true; }
+function endTuto() { store.set('champi-tuto', '1'); $('#coach').hidden = true; $('#menu').hidden = true; }
 $('#coach-next').addEventListener('click', (e) => { e.stopPropagation(); if (coachI < COACH.length - 1) { coachI++; placeCoach(); } else endTuto(); });
 $('#coach-skip').addEventListener('click', (e) => { e.stopPropagation(); endTuto(); });
 $('#coach').addEventListener('click', (e) => { if (!e.target.closest('#coach-bubble')) $('#coach-next').click(); });   // toucher ailleurs = suivant
@@ -1425,7 +1434,7 @@ const shortDay = (iso) => String(Number(iso.slice(8, 10)));
 
 function spotContext(s, w = null) {
   const prof = profiles.get(s.id)?.profile;
-  return { month: month(), species: spotSpecies(s, state.finds), trees: s.trees ?? [], history: state.finds.filter((f) => f.spot_id === s.id),
+  return { month: month(), species: spotSpecies(s, state.finds), trees: s.trees ?? [], history: state.finds.filter((f) => f.spot_id === s.id), alt: s.altitude ?? null,
     personal: w && prof ? personalAdvice(w, prof) : null };
 }
 
@@ -1631,18 +1640,75 @@ function renderGuide() {
   $('#guide-body').innerHTML = SPECIES.filter((s) => GUIDE[s.id]).map((s) => {
     const g = GUIDE[s.id];
     const cells = MONTHS.map((name, i) => {
-      const n = i + 1; const cls = [(s.peak ?? []).includes(n) ? 'peak' : s.months.includes(n) ? 'on' : '', n === m ? 'now' : ''].join(' ');
+      const n = i + 1; const cls = [(s.peak ?? []).includes(n) ? 'peak' : s.months.includes(n) ? 'on' : (s.late ?? []).includes(n) ? 'late' : '', n === m ? 'now' : ''].join(' ');
       return `<span class="${cls}" title="${name}">${name[0].toUpperCase()}</span>`;
     }).join('');
     const trees = g.trees.map((t) => labelOf(TREES, t)).join(', ');
-    return `<div class="guide-card" id="guide-${s.id}">
+    return `<div class="guide-card" id="guide-${s.id}" data-fiche="${s.id}">
       <h4>${esc(s.label)}</h4><div class="latin">${esc(g.latin)}</div>
       <div class="months">${cells}</div>
       <p>${esc(g.habitat)}</p>
       <p class="small muted">${trees ? `Arbres : ${esc(trees)} · ` : ''}${g.soil ? `sol ${esc(g.soil)} · ` : ''}altitude ~${g.alt[0]}–${g.alt[1]} m</p>
-      <p class="small ${g.lookalikes.includes('⚠️') ? 'warn' : ''}"><b>Sosies :</b> ${esc(g.lookalikes)}</p></div>`;
+      <p class="small ${g.lookalikes.includes('⚠️') ? 'warn' : ''}"><b>Sosies :</b> ${esc(g.lookalikes)}</p>
+      ${INFO[s.id] ? `<button class="btn small-btn guide-more" type="button" data-fiche="${s.id}">En savoir plus ›</button>` : ''}</div>`;
   }).join('');
 }
+// Fiche détaillée d'une espèce (depuis le guide ou le bandeau 📖)
+function renderFiche(id) {
+  const s = SPECIES.find((x) => x.id === id), g = GUIDE[id] ?? {}, info = INFO[id];
+  if (!s || !info) return;
+  const m = month();
+  const cells = MONTHS.map((name, i) => {
+    const n = i + 1; const cls = [(s.peak ?? []).includes(n) ? 'peak' : s.months.includes(n) ? 'on' : (s.late ?? []).includes(n) ? 'late' : '', n === m ? 'now' : ''].join(' ');
+    return `<span class="${cls}" title="${name}">${name[0].toUpperCase()}</span>`;
+  }).join('');
+  const finds = state.finds.filter((f) => (f.species ?? []).includes(id) && !f.pending);
+  const byMonth = Array(12).fill(0); for (const f of finds) byMonth[Number(f.found_on.slice(5, 7)) - 1]++;
+  const spotsN = new Set(finds.map((f) => f.spot_id)).size;
+  const last = finds.map((f) => f.found_on).sort().pop();
+  const trees = (g.trees ?? []).map((t) => labelOf(TREES, t)).join(', ');
+  const looks = [...info.looks].sort((a, b) => b[0] - a[0]);
+  $('#fiche-title').textContent = s.label;
+  $('#fiche-body').innerHTML = `
+    <div class="latin">${esc(g.latin ?? '')}</div>
+    <div class="months">${cells}</div>
+    <p class="small muted">Saison : ${esc(seasonText(id))}${lateText(id) ? ` · encore possible ${esc(lateText(id))}` : ''}${(s.peak ?? []).length ? ` · pic en ${esc(s.peak.map((x) => MONTHS[x - 1]).join(', '))}` : ''}</p>
+    <p class="fiche-now">${momentLine(id)}</p>
+    <h3>🔎 Le reconnaître</h3>
+    <dl class="fiche-look">${info.look.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+    <h3>🌲 Où le chercher</h3>
+    <p>${esc(info.where)}</p>
+    <p class="small muted">${trees ? `Arbres : ${esc(trees)} · ` : ''}${g.soil ? `sol ${esc(g.soil)} · ` : ''}${g.alt ? `altitude ~${g.alt[0]}–${g.alt[1]} m` : ''}</p>
+    <h3>⚠️ Ses sosies</h3>
+    <ul class="fiche-looks">${looks.map(([d, n, t]) => `<li class="d${d}"><b>${DANGER[d].icon} ${esc(n)}</b> <span class="small">(${DANGER[d].label})</span><br>${esc(t)}</li>`).join('')}</ul>
+    <h3>🧺 Conseils</h3>
+    <p>${esc(info.tips)}</p>
+    <p class="small"><b>En cuisine :</b> ${esc(info.cook)}</p>
+    <h3>📓 Dans la famille</h3>
+    ${finds.length ? `<p>${finds.length} trouvaille${finds.length > 1 ? 's' : ''} dans ${spotsN} coin${spotsN > 1 ? 's' : ''} · la dernière le ${esc(formatDate(last))}.</p>
+      <div class="months counts">${MONTHS.map((n, i) => `<span class="${byMonth[i] ? 'on' : ''}" title="${n}">${n[0].toUpperCase()}<b>${byMonth[i] || ''}</b></span>`).join('')}</div>`
+      : '<p class="small muted">Pas encore de trouvaille notée : à vous de remplir !</p>'}
+    <div class="bar-grid">
+      <button class="btn primary" type="button" data-fiche-map="${id}">🗺️ Voir ses forêts</button>
+      <a class="btn" href="https://fr.wikipedia.org/wiki/${encodeURIComponent(info.wiki)}" target="_blank" rel="noopener">📚 Wikipédia</a>
+    </div>
+    <p class="safety small">L'appli n'identifie aucun champignon. Au moindre doute, fais contrôler par un pharmacien ou une association mycologique. Antipoison : <a class="tel" href="tel:+33491752525">04 91 75 25 25</a></p>`;
+}
+function openFiche(id) {
+  if (!INFO[id]) return;
+  $('#menu').hidden = true;
+  renderFiche(id);
+  if (!$('#dlg-fiche').open) $('#dlg-fiche').showModal();
+  $('#dlg-fiche .stack').scrollTop = 0; $('#dlg-fiche').scrollTop = 0;
+}
+$('#guide-body').addEventListener('click', (e) => { const c = e.target.closest('[data-fiche]'); if (c) openFiche(c.dataset.fiche); });
+$('#dlg-fiche .js-close').addEventListener('click', () => $('#dlg-fiche').close());
+$('#fiche-body').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-fiche-map]'); if (!b) return;
+  for (const d of $$('dialog[open]')) d.close();
+  setSpecies([b.dataset.ficheMap]);
+  if (map.getZoom() < 10) map.setZoom(10);
+});
 function openGuide() { $('#menu').hidden = true; renderGuide(); $('#dlg-guide').showModal(); }
 $('#guide-btn').addEventListener('click', openGuide);
 $('#dlg-guide .js-close').addEventListener('click', () => $('#dlg-guide').close());

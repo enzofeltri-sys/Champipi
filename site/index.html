@@ -478,6 +478,7 @@
       </details>
 
       <details><summary>📖 Guide, règles de cueillette</summary>
+        <p>Menu → <b>📖 Guide des espèces</b> : touche une espèce (ou « En savoir plus ») pour sa <b>fiche complète</b> : comment la reconnaître, où la chercher en Provence, ses sosies (☠️ mortels en premier), conseils de cueillette et de cuisine, et les trouvailles de la famille. Le bouton 📖 du bandeau d'un champignon ouvre directement sa fiche.</p>
         <p>Menu → <b>📖 Guide des espèces</b> : saison, milieux, altitude et sosies dangereux de chaque espèce, et les règles de cueillette (au-delà de 10 litres sans autorisation, c'est un délit ; cueillette interdite dans les réserves).</p>
       </details>
 
@@ -603,13 +604,23 @@
     </div>
   </dialog>
 
+  <dialog id="dlg-fiche" class="sheet">
+    <div class="stack">
+      <div class="sheet-head">
+        <h2 id="fiche-title"></h2>
+        <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
+      </div>
+      <div id="fiche-body" class="fiche"></div>
+    </div>
+  </dialog>
+
   <dialog id="dlg-guide" class="sheet">
     <div class="stack">
       <div class="sheet-head">
         <h2>📖 Guide des espèces</h2>
         <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
       </div>
-      <p class="small muted">Saisons de ton calendrier, milieux et altitudes indicatifs pour la Provence. Les <b>sosies dangereux</b> sont en rouge.</p>
+      <p class="small muted">Saisons de ton calendrier, milieux et altitudes indicatifs pour la Provence. Les <b>sosies dangereux</b> sont en rouge. <b>Touche une espèce</b> pour sa fiche complète (comment la reconnaître, où la chercher, sosies, conseils, vos trouvailles). En clair sur le calendrier : mois possibles seulement s'il fait doux.</p>
       <button id="guide-forest" class="btn" type="button">🌲 Voir les forêts IGN sur la carte</button>
       <div id="guide-body"></div>
       <div class="guide-card">

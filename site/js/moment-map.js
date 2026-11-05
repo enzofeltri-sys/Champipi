@@ -1,7 +1,7 @@
 // Carte « bon moment » : les forêts favorables au champignon choisi sont coloriées selon l'avis du conseiller
 // (pluie, températures, saison) calculé sur une grille de points : vert = bon moment, jaune = moyen,
 // rouge = pas le moment, gris = hors saison (ou météo pas encore chargée).
-import { SPECIES } from './logic.js';
+import { seasonOf } from './logic.js';
 import { favorableColors } from './forests.js';
 
 /** Clé couleur RVB → { w: 2 (forêt pure) | 1 (mélange), mask: bits des espèces choisies concernées }. */
@@ -44,10 +44,10 @@ export const ALPHA = { 2: 205, 1: 120 };
 /** Avis pour une case : un code par espèce choisie (0 si hors saison). */
 export function cellCodes(ids, month, w, assess) {
   return ids.map((id) => {
-    const s = SPECIES.find((x) => x.id === id);
-    if (!s?.months.includes(month)) return 0;
+    if (seasonOf(id, month) === 'off') return 0;
     if (!w) return -1;
-    return CODE[assess(w, { month, species: [id] }).level] ?? -1;
+    const lv = assess(w, { month, species: [id] }).level;
+    return lv === 'hors-saison' ? 0 : CODE[lv] ?? -1;
   });
 }
 

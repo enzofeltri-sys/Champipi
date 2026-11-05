@@ -94,3 +94,21 @@ test('pluie d\'hier sur sol sec : « trop tôt », jamais « favorable »', () =
   assert.equal(a.level, 'moyen');
   assert.ok(a.reasons.some((r) => r.startsWith('Trop tôt')));
 });
+
+import { seasonOf, lateText } from '../site/js/logic.js';
+test('fin de saison : cèpe en décembre seulement s\'il fait doux, sans gel, à basse altitude', () => {
+  assert.equal(seasonOf('cepe', 10), 'peak'); assert.equal(seasonOf('cepe', 11), 'season');
+  assert.equal(seasonOf('cepe', 12), 'late'); assert.equal(seasonOf('cepe', 2), 'off');
+  assert.equal(lateText('cepe'), 'déc. si doux et sans gel');
+  const doux = { rain10: 45, bigRainAgo: 8, bigRainMm: 30, frost7: 0, tmin7: 7, tmax7: 15, rainNext: 0 };
+  const gel = { ...doux, frost7: 3, tmin7: -1 };
+  const a = assess(doux, { month: 12, species: ['cepe'] });
+  assert.equal(a.level, 'moyen');                                 // 3 + 2 + 1 − 1 (fin de saison) = 5 : jaune sur la carte
+  assert.equal(assess(doux, { month: 12, species: ['cepe'], trees: ['chene-vert'] }).level, 'bon');   // coin aux bons arbres : vert possible
+  assert.ok(a.perSpecies[0].reasons.includes('fin de saison : possible car doux et sans gel'));
+  assert.equal(assess(gel, { month: 12, species: ['cepe'] }).level, 'hors-saison');
+  assert.equal(assess(doux, { month: 12, species: ['cepe'], alt: 900 }).level, 'hors-saison');   // trop haut
+  assert.equal(assess(null, { month: 12, species: ['cepe'] }).level, 'hors-saison');           // météo inconnue : prudence
+  // en saison normale, pas de malus
+  assert.ok(!assess(doux, { month: 11, species: ['cepe'] }).perSpecies[0].reasons.some((r) => r.startsWith('fin de saison')));
+});

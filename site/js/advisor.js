@@ -1,6 +1,6 @@
 // Le « conseiller » : règles simples et transparentes (pas d'IA) qui croisent la météo,
 // la saison, le milieu et l'historique des trouvailles. Indicatif uniquement.
-import { SPECIES, MONTHS } from './logic.js';
+import { SPECIES, MONTHS, LATE_MAX_ALT } from './logic.js';
 
 // Fiches des espèces : milieux, sol, altitude indicative, sosies dangereux.
 // Source : connaissances mycologiques générales (à confirmer auprès d'une société mycologique).
@@ -112,9 +112,12 @@ export function nextSeason(id, month) {
  * @param w résumé météo (summarizeWeather) ou null
  * @param ctx { month, species: ids, trees: ids, history: [{ found_on, species[] }] }
  */
-export function assess(w, { month, species = [], trees = [], history = [], personal = null }) {
+export function assess(w, { month, species = [], trees = [], history = [], personal = null, alt = null }) {
   const known = species.filter((id) => SPECIES.some((s) => s.id === id && s.months.length));
-  const inSeason = known.filter((id) => SPECIES.find((s) => s.id === id).months.includes(month));
+  // Fin de saison (ex. cèpe en décembre en Provence) : seulement par temps doux, sans gel, à basse altitude.
+  const mild = !!w && w.frost7 === 0 && w.tmin7 != null && w.tmin7 >= 4 && (alt == null || alt < LATE_MAX_ALT);
+  const isLate = (id) => (SPECIES.find((s) => s.id === id).late ?? []).includes(month);
+  const inSeason = known.filter((id) => SPECIES.find((s) => s.id === id).months.includes(month) || (mild && isLate(id)));
   if (!known.length) return { level: null, score: 0, reasons: ['Aucune espèce du calendrier notée à ce coin.'], perSpecies: [] };
   if (!inSeason.length) {
     const next = known.map((id) => [id, nextSeason(id, month)]).filter(([, m]) => m)
@@ -143,6 +146,7 @@ export function assess(w, { month, species = [], trees = [], history = [], perso
     const g = GUIDE[id];
     let score = base; const reasons = [];
     if ((sp.peak ?? []).includes(month)) { score += 1; reasons.push('mois de pic'); }
+    if (!sp.months.includes(month)) { score -= 1; reasons.push('fin de saison : possible car doux et sans gel'); }
     if (g?.trees.length && trees.length) {
       if (trees.some((t) => g.trees.includes(t))) { score += 1; reasons.push('milieu typique'); }
       else { score -= 1; reasons.push('milieu peu typique'); }

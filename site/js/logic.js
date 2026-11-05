@@ -4,19 +4,36 @@
 export const SPECIES = [
   { id: 'lactaire-sanguin', label: 'Lactaire sanguin', months: [10, 11, 12, 1], peak: [11] },
   { id: 'petit-gris', label: 'Petit-gris', months: [11, 12, 1] },
-  { id: 'cepe', label: 'Cèpe', months: [6, 7, 9, 10, 11], peak: [10] },
-  { id: 'girolle', label: 'Girolle', months: [6, 9, 10, 11] },
-  { id: 'pied-de-mouton', label: 'Pied-de-mouton', months: [10, 11, 12, 1] },
-  { id: 'trompette', label: 'Trompette-de-la-mort', months: [10, 11, 12] },
+  { id: 'cepe', label: 'Cèpe', months: [6, 7, 9, 10, 11], peak: [10], late: [12] },
+  { id: 'girolle', label: 'Girolle', months: [6, 9, 10, 11], late: [12] },
+  { id: 'pied-de-mouton', label: 'Pied-de-mouton', months: [10, 11, 12, 1], late: [2] },
+  { id: 'trompette', label: 'Trompette-de-la-mort', months: [10, 11, 12], late: [1] },
   { id: 'oronge', label: 'Oronge', months: [8, 9, 10, 11] },
   { id: 'coulemelle', label: 'Coulemelle', months: [9, 10, 11] },
   { id: 'berigoule', label: 'Bérigoule (pleurote du panicaut)', months: [3, 4, 5, 10, 11, 12] },
   { id: 'morille', label: 'Morille', months: [3, 4, 5] },
   { id: 'saint-georges', label: 'Tricholome de la Saint-Georges', months: [4, 5] },
-  { id: 'chanterelle-grise', label: 'Chanterelle grise', months: [10, 11, 12] },
+  { id: 'chanterelle-grise', label: 'Chanterelle grise', months: [10, 11, 12], late: [1] },
   { id: 'autre', label: 'Autre', months: [] },
 ];
 const BY_ID = new Map(SPECIES.map((s) => [s.id, s]));
+
+// « late » : mois hors calendrier habituel où l'espèce sort encore en Provence les années douces
+// (basse altitude, sans gel). Le conseiller ne les compte que si la météo le permet (voir assess).
+export const LATE_MAX_ALT = 600;
+/** 'peak' | 'season' | 'late' | 'off' */
+export function seasonOf(id, month) {
+  const s = BY_ID.get(id);
+  if (!s) return 'off';
+  if ((s.peak ?? []).includes(month)) return 'peak';
+  if (s.months.includes(month)) return 'season';
+  if ((s.late ?? []).includes(month)) return 'late';
+  return 'off';
+}
+export const lateText = (id) => {
+  const l = BY_ID.get(id)?.late ?? [];
+  return l.length ? `${l.map((m) => MONTHS_SHORT[m - 1]).join(', ')} si doux et sans gel` : '';
+};
 
 export const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet',
   'août', 'septembre', 'octobre', 'novembre', 'décembre'];
