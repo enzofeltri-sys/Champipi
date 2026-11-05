@@ -1,7 +1,7 @@
 # Champipi — Carnet de champignons
 
 Nos coins à champignons en Provence (Aix, Marseille, Var, Luberon), privés ou partagés avec la famille.
-Site : **https://enzofeltri-sys.github.io/champipi/**
+Site : **https://enzofeltri-sys.github.io/Champipi/**
 
 - Site statique (`site/`) : HTML/CSS/JS sans framework, carte Leaflet avec fonds IGN Géoplateforme (Plan IGN v2, photos aériennes) et OpenTopoMap en secours.
 - Connexion par lien magique (Supabase Auth), données dans Supabase (tables `champi_*` du projet « Garmin »), protégées par RLS.
