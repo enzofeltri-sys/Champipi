@@ -25,6 +25,7 @@ async function setup(page, data, { session = true } = {}) {
     const obj = (req.headers()['accept'] || '').includes('vnd.pgrst.object');
     const send = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(obj && Array.isArray(body) ? body[0] ?? null : body) });
     if (url.pathname.startsWith('/auth/')) return send({});
+    if (table === 'champi_spot_shares') return send([]);
     if (table === 'champi_admins' || table === 'champi_access_requests') return send([]);
     if (table === 'champi_allowed_emails') return send(data.allowed ? [{ email: 'enzo@test.fr' }] : []);
     if (table === 'champi_profiles') return send(data.profiles.filter((p) => p.id === ME));

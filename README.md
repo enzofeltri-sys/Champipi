@@ -58,6 +58,12 @@ Les migrations sont dans `supabase/migrations/`. Règles (RLS) :
 - **📖 Guide des espèces** : saison, milieux, sol, altitude et sosies dangereux (connaissances générales, à confirmer
   auprès d'une association mycologique).
 
+## Partager un coin avec une personne
+
+- Sur la fiche d'un coin « Moi seul » : « 🤝 Partager… » → cocher des membres de la famille.
+  Ils voient le coin (épingle bleu-vert « Partagé »), son journal et ses photos, et peuvent y noter leurs trouvailles.
+  Ils peuvent aussi « Ne plus voir ce coin partagé ». Table `champi_spot_shares`, migration `20261105180000`.
+
 ## Hors ligne
 
 - Menu ☰ → « 📥 Cartes hors ligne » : enregistre le Plan IGN de la zone affichée (≤ 1 500 tuiles, zooms jusqu'à 16),
@@ -95,6 +101,7 @@ node tools/ui-advisor.cjs http://localhost:5173/ shots    # conseiller (vraies A
 node tools/ui-field.cjs http://localhost:5173/ shots tests/date.jpg   # tutoriel, boussole, recherche, exports
 node tools/ui-access.cjs http://localhost:5173/ shots     # accès aux massifs (hors saison et été simulé)
 node tools/ui-offline.cjs http://localhost:5173/ shots tests/gps.jpg  # hors ligne (vraies tuiles IGN)
+node tools/ui-share.cjs http://localhost:5173/ shots      # partage d'un coin (3 personnes)
 ```
 
 ## Sécurité

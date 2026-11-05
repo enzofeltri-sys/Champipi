@@ -9,6 +9,7 @@
   --primary-text: #ffffff;
   --private: #7a4cc2;      /* coins « Moi seul » */
   --family: #d9720b;       /* coins « Famille » */
+  --shared: #13867f;       /* coins partagés avec moi */
   --season: #1f8a4c;
   --danger: #c0392b;
   --warn-bg: #fff4d6;
@@ -274,3 +275,10 @@ dialog.viewer img { width: 100%; height: calc(100dvh - 64px); object-fit: contai
 .progress { height: 10px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
 .progress span { display: block; height: 100%; width: 0; background: var(--primary); transition: width .2s; }
 .pending-tag { font-size: .75rem; color: var(--muted); }
+
+:root[data-theme="dark"] { --shared: #3cc4bc; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --shared: #3cc4bc; } }
+.spot-item.shared { border-left-color: var(--shared); }
+.badge.shared { background: var(--shared); color: #fff; }
+.share-person { display: flex; gap: 10px; align-items: center; padding: 8px 10px; background: var(--surface-2); border-radius: 10px; font-weight: 500; }
+.share-person input { width: 22px; height: 22px; }

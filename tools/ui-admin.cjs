@@ -30,6 +30,7 @@ async function open(browser, who) {
     const table = url.pathname.replace('/rest/v1/', '');
     const eq = (k) => url.searchParams.get(k)?.replace(/^eq\./, '');
     if (url.pathname.startsWith('/auth/')) return send({});
+    if (table === 'champi_spot_shares') return send([]);
     if (table === 'champi_admins') return send(db.admins.filter((e) => e === who.email && e === eq('email')).map((email) => ({ email })));
     if (table === 'champi_allowed_emails') {
       const vis = db.allowed.filter((a) => isAdmin() || a.email === who.email);

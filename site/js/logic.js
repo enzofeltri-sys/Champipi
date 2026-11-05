@@ -150,7 +150,7 @@ export function filterSpots(spots, finds, { scope = 'all', species = '', me = nu
   }
   return spots.filter((s) => {
     if (scope === 'mine' && s.owner !== me) return false;
-    if (scope === 'family' && s.visibility !== 'family') return false;
+    if (scope === 'family' && s.visibility !== 'family' && !s.sharedWithMe) return false;   // + coins partagés avec moi
     if (species && !(s.species ?? []).includes(species) && !fromFinds.get(s.id)?.has(species)) return false;
     return true;
   });

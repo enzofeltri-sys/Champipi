@@ -242,10 +242,12 @@
         <input id="spot-photo-input" type="file" accept="image/*" multiple hidden></label>
       <div class="row">
         <a id="spot-route" class="btn primary" target="_blank" rel="noopener">🚗 Itinéraire</a>
+        <button id="spot-share" class="btn" type="button" hidden>🤝 Partager…</button>
         <button id="spot-compass" class="btn primary" type="button">🧭 Retrouver</button>
         <button id="spot-edit" class="btn" type="button">Modifier</button>
       </div>
 
+      <button id="spot-unshare" class="btn link" type="button" hidden>Ne plus voir ce coin partagé</button>
       <h3>Journal des trouvailles</h3>
       <ul id="find-list" class="find-list"></ul>
       <details id="find-add">
@@ -319,6 +321,22 @@
         <span id="tuto-step" class="small muted" style="margin-right:auto"></span>
         <button id="tuto-skip" class="btn" type="button">Passer</button>
         <button id="tuto-next" class="btn primary" type="button">Suivant</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-share" class="sheet">
+    <div class="stack">
+      <div class="sheet-head">
+        <h2>🤝 Partager ce coin</h2>
+        <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
+      </div>
+      <p class="small">Le coin reste « Moi seul » pour le reste de la famille. Les personnes cochées le voient, avec son journal et ses photos, et peuvent y noter leurs trouvailles.</p>
+      <div id="share-list" class="stack"></div>
+      <p id="share-error" class="error" role="alert" hidden></p>
+      <div class="row end">
+        <button class="btn js-close" type="button">Annuler</button>
+        <button id="share-save" class="btn primary" type="button">Enregistrer</button>
       </div>
     </div>
   </dialog>

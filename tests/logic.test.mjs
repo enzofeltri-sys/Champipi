@@ -164,3 +164,9 @@ test('exports GPX et CSV', () => {
   const c = toCsv([{ a: 'x;y', b: 'dit "oui"' }], [['A', (r) => r.a], ['B', (r) => r.b]]);
   assert.equal(c, '﻿A;B\r\n"x;y";"dit ""oui"""\r\n');
 });
+
+test('filtre Famille : inclut les coins partagés avec moi', () => {
+  const sp = [{ id: 'p', owner: 'me', visibility: 'private' }, { id: 's', owner: 'tata', visibility: 'private', sharedWithMe: true }, { id: 'f', owner: 'tata', visibility: 'family' }];
+  assert.deepEqual(filterSpots(sp, [], { scope: 'family', me: 'me' }).map((x) => x.id), ['s', 'f']);
+  assert.deepEqual(filterSpots(sp, [], { scope: 'mine', me: 'me' }).map((x) => x.id), ['p']);
+});

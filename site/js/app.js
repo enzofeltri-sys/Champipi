@@ -30,7 +30,7 @@ const photos = createPhotoStore(sb);
 
 const state = {
   user: null, profile: null,
-  spots: [], finds: [], photos: [],
+  spots: [], finds: [], photos: [], shares: [], people: [],
   isAdmin: false, request: null,
   scope: store.get('champi-scope') || 'all',
   species: '',
@@ -246,7 +246,7 @@ function initMap() {
   const legend = L.control({ position: 'topleft' });
   legend.onAdd = () => {
     const d = L.DomUtil.create('div', 'legend');
-    d.innerHTML = '<div><i style="background:var(--private)"></i>Moi seul</div><div><i style="background:var(--family)"></i>Famille</div><div><i style="background:var(--season)"></i>En saison</div>';
+    d.innerHTML = '<div><i style="background:var(--private)"></i>Moi seul</div><div><i style="background:var(--family)"></i>Famille</div><div><i style="background:var(--shared)"></i>Partagé</div><div><i style="background:var(--season)"></i>En saison</div>';
     return d;
   };
   legend.addTo(map);
@@ -302,7 +302,7 @@ function buildMassifs() {
 }
 
 function pinIcon(kind, seasonal = false, draft = false) {
-  const color = kind === 'family' ? 'var(--family)' : kind === 'draft' ? 'var(--primary)' : 'var(--private)';
+  const color = kind === 'family' ? 'var(--family)' : kind === 'shared' ? 'var(--shared)' : kind === 'draft' ? 'var(--primary)' : 'var(--private)';
   return L.divIcon({
     className: '',
     iconSize: [30, 40], iconAnchor: [15, 40], popupAnchor: [0, -36],
@@ -320,19 +320,21 @@ async function loadData() {
   // Affichage immédiat de la copie locale (ouverture rapide, réseau faible en forêt), puis mise à jour.
   const snap0 = readSnapshot();
   if (snap0 && !state.loadedOnce) {
-    Object.assign(state, { spots: snap0.spots, finds: snap0.finds, photos: snap0.photos });
+    Object.assign(state, { spots: snap0.spots, finds: snap0.finds, photos: snap0.photos, shares: snap0.shares ?? [], people: snap0.people ?? [] });
     state.loadedOnce = true;
     await applyPending(); render();
   }
   if (!navigator.onLine && snap0) {
-    Object.assign(state, { spots: snap0.spots, finds: snap0.finds, photos: snap0.photos, offlineSince: snap0.at });
+    Object.assign(state, { spots: snap0.spots, finds: snap0.finds, photos: snap0.photos, shares: snap0.shares ?? [], people: snap0.people ?? [], offlineSince: snap0.at });
     await applyPending(); render(); updateOfflineBar();
     return;
   }
-  const [spots, finds, pics] = await Promise.all([
+  const [spots, finds, shares, people, pics] = await Promise.all([
     sb.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, note, trees, soil, exposure, access, altitude, forest_type, created_at, updated_at, author:champi_profiles(display_name)'),
     sb.from('champi_finds').select('id, spot_id, user_id, found_on, species, note, quantity, condition, weather, created_at, author:champi_profiles(display_name)')
       .order('found_on', { ascending: false }).order('created_at', { ascending: false }),
+    sb.from('champi_spot_shares').select('spot_id, user_id'),
+    sb.from('champi_profiles').select('id, display_name').order('display_name'),
     sb.from('champi_photos').select('id, spot_id, find_id, user_id, path, created_at, author:champi_profiles(display_name)')
       .order('created_at', { ascending: true }),
   ]);
@@ -340,11 +342,13 @@ async function loadData() {
   if (failed) {
     const snap = isNetworkError(failed.error) ? readSnapshot() : null;
     if (!snap) throw failed.error;
-    Object.assign(state, { spots: snap.spots, finds: snap.finds, photos: snap.photos, offlineSince: snap.at });
+    Object.assign(state, { spots: snap.spots, finds: snap.finds, photos: snap.photos, shares: snap.shares ?? [], people: snap.people ?? [], offlineSince: snap.at });
   } else {
     state.spots = spots.data;
     state.finds = finds.data;
     state.photos = pics.data;
+    state.shares = shares.data ?? [];
+    state.people = people.data ?? [];
     state.offlineSince = null;
     writeSnapshot();
   }
@@ -357,6 +361,7 @@ async function loadData() {
 const month = () => new Date().getMonth() + 1;
 
 function render() {
+  decorateShares();
   const me = state.user?.id;
   const visible = searchSpots(filterSpots(state.spots, state.finds, { scope: state.scope, species: state.species, me }), state.finds, state.query);
   const sorted = sortSpots(visible, state.finds);
@@ -366,7 +371,7 @@ function render() {
   for (const s of sorted) {
     if (state.draft?.id === s.id) continue;
     const seasonal = inSeason(spotSpecies(s, state.finds), month()).length > 0;
-    L.marker([s.lat, s.lon], { icon: pinIcon(s.visibility, seasonal), title: s.name, keyboard: true })
+    L.marker([s.lat, s.lon], { icon: pinIcon(s.sharedWithMe ? 'shared' : s.visibility, seasonal), title: s.name, keyboard: true })
       .on('click', () => openSpot(s.id)).addTo(markersLayer);
   }
 
@@ -378,7 +383,7 @@ function render() {
     const season = inSeason(sp, month());
     const lf = last.get(s.id);
     const author = s.visibility === 'family' && s.owner !== me ? ` · par ${esc(s.author?.display_name ?? '?')}` : '';
-    return `<li><button class="spot-item ${s.visibility}" data-id="${s.id}" type="button">
+    return `<li><button class="spot-item ${s.sharedWithMe ? 'shared' : s.visibility}" data-id="${s.id}" type="button">
       <span class="grow">
         <span class="title">${esc(s.name)}${s.pending ? ' <span class="pending-tag">⏳ en attente d\'envoi</span>' : ''}</span>
         <span class="badges">${badgesHtml(s, season)}</span>
@@ -390,7 +395,10 @@ function render() {
 }
 
 function badgesHtml(s, season) {
-  const vis = s.visibility === 'family' ? '<span class="badge family">👪 Famille</span>' : '<span class="badge private">🔒 Moi seul</span>';
+  const names = (ids) => ids.map((id) => state.people.find((p) => p.id === id)?.display_name ?? '?').join(', ');
+  const vis = s.sharedWithMe ? `<span class="badge shared">🤝 Partagé par ${esc(s.author?.display_name ?? '?')}</span>`
+    : s.visibility === 'family' ? '<span class="badge family">👪 Famille</span>'
+    : '<span class="badge private">🔒 Moi seul</span>' + (s.sharedWith?.length ? `<span class="badge shared">🤝 ${esc(names(s.sharedWith))}</span>` : '');
   const peak = season.some((x) => x.peak);
   const seasonBadge = season.length
     ? `<span class="badge season" title="${esc(season.map((x) => x.label).join(', '))}">🍄 En saison${peak ? ' · pic' : ''}</span>` : '';
@@ -728,6 +736,9 @@ function renderSpot(id) {
   renderAccess(s);
   $('#spot-route').href = directionsUrl(s.lat, s.lon);
   $('#spot-edit').hidden = !mine || !!s.pending;
+  $('#spot-share').hidden = !mine || !!s.pending || s.visibility !== 'private';
+  $('#spot-share').textContent = s.sharedWith?.length ? `🤝 Partagé (${s.sharedWith.length})` : '🤝 Partager…';
+  $('#spot-unshare').hidden = !s.sharedWithMe;
 
   const finds = state.finds.filter((f) => f.spot_id === id);
   $('#find-list').innerHTML = finds.length ? finds.map((f) => `<li>
@@ -1282,12 +1293,56 @@ $('#add-form').addEventListener('submit', async (e) => {
 });
 
 // ---------------------------------------------------------------------------
+// Partage d'un coin privé avec des personnes précises
+
+function decorateShares() {
+  const me = state.user?.id;
+  for (const s of state.spots) {
+    s.sharedWithMe = s.owner !== me && s.visibility === 'private' && !s.pending;
+    s.sharedWith = s.owner === me ? state.shares.filter((h) => h.spot_id === s.id).map((h) => h.user_id) : [];
+  }
+}
+$('#spot-share').addEventListener('click', () => {
+  const s = state.spots.find((x) => x.id === state.openSpotId); if (!s) return;
+  const others = state.people.filter((p) => p.id !== state.user.id);
+  $('#share-list').innerHTML = others.length ? others.map((p) => `<label class="share-person"><input type="checkbox" value="${p.id}"${s.sharedWith.includes(p.id) ? ' checked' : ''}> ${esc(p.display_name)}</label>`).join('')
+    : '<p class="muted small">Personne d\'autre dans la famille pour l\'instant.</p>';
+  showError('#share-error');
+  $('#dlg-share').showModal();
+});
+$$('#dlg-share .js-close').forEach((b) => b.addEventListener('click', () => $('#dlg-share').close()));
+$('#share-save').addEventListener('click', async () => {
+  const s = state.spots.find((x) => x.id === state.openSpotId); if (!s) return;
+  const want = new Set($$('#share-list input:checked').map((i) => i.value));
+  const add = [...want].filter((id) => !s.sharedWith.includes(id)).map((user_id) => ({ spot_id: s.id, user_id }));
+  const del = s.sharedWith.filter((id) => !want.has(id));
+  const btn = $('#share-save'); busy(btn, true);
+  try {
+    if (add.length) { const { error } = await sb.from('champi_spot_shares').insert(add); if (error) throw error; }
+    if (del.length) { const { error } = await sb.from('champi_spot_shares').delete().eq('spot_id', s.id).in('user_id', del); if (error) throw error; }
+  } catch (err) { busy(btn, false); showError('#share-error', isNetworkError(err) ? 'Pas de réseau : réessaie plus tard.' : frError(err)); return; }
+  busy(btn, false);
+  $('#dlg-share').close();
+  toast(want.size ? `Coin partagé avec ${want.size} personne${want.size > 1 ? 's' : ''} ✔` : 'Partage retiré');
+  await loadData();
+});
+$('#spot-unshare').addEventListener('click', async () => {
+  const s = state.spots.find((x) => x.id === state.openSpotId); if (!s) return;
+  if (!confirm(`Ne plus voir « ${s.name} » ? ${s.author?.display_name ?? 'Son créateur'} pourra te le repartager.`)) return;
+  const { error } = await sb.from('champi_spot_shares').delete().eq('spot_id', s.id).eq('user_id', state.user.id);
+  if (error) { toast(frError(error)); return; }
+  $('#dlg-spot').close();
+  await loadData();
+});
+
+// ---------------------------------------------------------------------------
 // Hors ligne : copie locale, envois en attente, cartes enregistrées
 
 const SNAP_KEY = 'champi-snapshot';
 function writeSnapshot() {
   store.set(SNAP_KEY, JSON.stringify({ uid: state.user.id, at: new Date().toISOString(), profile: state.profile, isAdmin: state.isAdmin,
-    spots: state.spots.filter((s) => !s.pending), finds: state.finds.filter((f) => !f.pending), photos: state.photos }));
+    spots: state.spots.filter((s) => !s.pending), finds: state.finds.filter((f) => !f.pending), photos: state.photos,
+    shares: state.shares, people: state.people }));
 }
 function readSnapshot() {
   try { const s = JSON.parse(store.get(SNAP_KEY) || 'null'); return s && s.uid === state.user?.id ? s : null; } catch { return null; }
