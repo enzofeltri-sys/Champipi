@@ -43,6 +43,21 @@ Les migrations sont dans `supabase/migrations/`. Règles (RLS) :
 - trouvailles : lecture et ajout si le coin m'est visible ; suppression de mes propres trouvailles ;
 - une personne connectée hors de la liste ne voit rien et a un message clair.
 
+## Conseiller, météo et forêts
+
+- **🤖 Conseiller du jour** (sous la carte ou dans le menu) : espèces en saison, pluie sur 10 jours en PACA,
+  et classement de tes coins (🟢 favorable / 🟡 moyen / 🔴 défavorable / ⚪ hors saison).
+- **Fiche d'un coin** : pluie jour par jour sur 10 jours (+ aujourd'hui et prévision hachurée), températures, avis et raisons.
+- Les règles sont simples et affichées (`site/js/advisor.js`, testées dans `tests/advisor.test.mjs`) :
+  cumul de pluie sur 10 jours, délai depuis la dernière grosse pluie (≥ 15 mm/jour ou ≥ 20 mm sur 2 jours ;
+  fenêtre favorable 5 à 15 jours après), gel ou chaleur, mois de pic, arbres du coin, trouvailles passées au même mois.
+  **Ce n'est pas une prédiction et aucun champignon n'est identifié.**
+- **Carte des pluies PACA** (menu) : ~100 points, une seule requête Open-Meteo (gratuit, sans clé, CC BY 4.0).
+- **Forêts IGN** (menu) : BD Forêt® V2 ; le type de forêt sous l'épingle est lu automatiquement (service WMS de l'IGN)
+  et propose de cocher les arbres correspondants.
+- **📖 Guide des espèces** : saison, milieux, sol, altitude et sosies dangereux (connaissances générales, à confirmer
+  auprès d'une association mycologique).
+
 ## Photos
 
 - Stockées dans le bucket privé Supabase `champi-photos` (chemin `<id du coin>/<uuid>.jpg` + miniature `_t.jpg`).
@@ -57,6 +72,8 @@ Les migrations sont dans `supabase/migrations/`. Règles (RLS) :
 cd site && python3 -m http.server 5173   # puis http://localhost:5173
 node tools/ui-mock.cjs http://localhost:5173/ shots   # parcours Chromium avec une fausse base
 node tools/ui-photos.cjs http://localhost:5173/ shots <photo.jpg avec GPS>   # parcours photos et détails
+node tools/ui-admin.cjs http://localhost:5173/ shots      # demande d'accès + admin
+node tools/ui-advisor.cjs http://localhost:5173/ shots    # conseiller (vraies API Open-Meteo et IGN)
 ```
 
 ## Sécurité

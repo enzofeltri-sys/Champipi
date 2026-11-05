@@ -1,10 +1,12 @@
 import { SUPABASE_URL, SUPABASE_KEY, START } from './config.js';
 import {
   SPECIES, speciesLabel, inSeason, seasonText, parseCoords, formatCoords, directionsUrl,
-  sortSpots, filterSpots, spotSpecies, lastFinds, formatDate, todayIso, escapeHtml as esc,
+  sortSpots, filterSpots, spotSpecies, lastFinds, formatDate, todayIso, escapeHtml as esc, MONTHS,
   round6, MASSIFS, FORBIDDEN, TREES, SOILS, EXPOSURES, QUANTITIES, CONDITIONS, labelOf, exifGps,
 } from './logic.js';
 import { createPhotoStore, thumbPath } from './photos.js';
+import { GUIDE, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown } from './advisor.js';
+import { dailyFor, forestAt } from './weather.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -240,6 +242,7 @@ function initMap() {
   legend.addTo(map);
   if (store.get('champi-massifs') === '1') massifsLayer.addTo(map);
   $('#toggle-massifs').checked = map.hasLayer(massifsLayer);
+  setTimeout(() => { if (store.get('champi-forest') === '1') showForests(true); if (store.get('champi-rain') === '1') showRain(true); }, 0);
 
   map.on('moveend', () => {
     const c = map.getCenter();
@@ -305,7 +308,7 @@ function pinIcon(kind, seasonal = false, draft = false) {
 
 async function loadData() {
   const [spots, finds, pics] = await Promise.all([
-    sb.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, note, trees, soil, exposure, access, altitude, created_at, updated_at, author:champi_profiles(display_name)'),
+    sb.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, note, trees, soil, exposure, access, altitude, forest_type, created_at, updated_at, author:champi_profiles(display_name)'),
     sb.from('champi_finds').select('id, spot_id, user_id, found_on, species, note, quantity, condition, weather, created_at, author:champi_profiles(display_name)')
       .order('found_on', { ascending: false }).order('created_at', { ascending: false }),
     sb.from('champi_photos').select('id, spot_id, find_id, user_id, path, created_at, author:champi_profiles(display_name)')
@@ -491,6 +494,7 @@ function openEdit() {
   $('#edit-photo').hidden = !d.photo;
   if (d.photo) $('#edit-photo-img').src = URL.createObjectURL(d.photo);
   fillAltitude(d);
+  fillForest(d);
   showError('#edit-error');
   $('#dlg-edit').showModal();
   if (!d.existing) setTimeout(() => $('#edit-name').focus(), 50);
@@ -513,6 +517,32 @@ async function fillAltitude(d) {
   if (z != null && input.dataset.auto === 'yes' && state.draft === d) {
     input.value = z; $('#edit-alt-src').textContent = '(IGN, automatique)';
   }
+}
+// Type de forêt IGN sous l'épingle, avec proposition de cocher les arbres correspondants.
+async function fillForest(d) {
+  const box = $('#edit-forest');
+  const key = `${d.lat},${d.lon}`;
+  if (box.dataset.for === key) return;
+  box.dataset.for = key;
+  if (d.existing?.forest_type && d.lat === d.existing.lat && d.lon === d.existing.lon) { d.forest = d.existing.forest_type; showForest(d); return; }
+  box.hidden = false; box.textContent = '🌲 Lecture du type de forêt (IGN)…';
+  try {
+    const f = await forestAt(d.lat, d.lon);
+    if (state.draft !== d) return;
+    d.forest = f.tfv || 'Pas de forêt cartographiée ici';
+  } catch { d.forest = null; box.hidden = true; return; }
+  showForest(d);
+}
+function showForest(d) {
+  const box = $('#edit-forest');
+  const sugg = forestToTrees(d.forest).filter((t) => !chipValues('#edit-trees').includes(t));
+  box.hidden = !d.forest;
+  box.innerHTML = `🌲 <b>Forêt IGN</b> : ${esc(d.forest)}`
+    + (sugg.length ? ` <button type="button" class="btn link" id="forest-apply">Cocher ${esc(sugg.map((t) => labelOf(TREES, t)).join(', '))}</button>` : '');
+  $('#forest-apply')?.addEventListener('click', () => {
+    for (const t of sugg) { const c = $(`#edit-trees [data-sp="${t}"]`); if (c) { c.classList.add('on'); c.setAttribute('aria-pressed', 'true'); } }
+    showForest(d);
+  });
 }
 $('#edit-altitude').addEventListener('input', () => { $('#edit-altitude').dataset.auto = 'no'; $('#edit-alt-src').textContent = ''; });
 $('#edit-photo-drop').addEventListener('click', () => { if (state.draft) state.draft.photo = null; $('#edit-photo').hidden = true; });
@@ -540,6 +570,7 @@ $('#edit-form').addEventListener('submit', async (e) => {
     exposure: $('#edit-exposure').value || null,
     access: $('#edit-access').value.trim() || null,
     altitude: $('#edit-altitude').value === '' ? null : Math.round(Number($('#edit-altitude').value)),
+    forest_type: d.forest && !d.forest.startsWith('Pas de forêt') ? d.forest.slice(0, 150) : (d.forest ? null : d.existing?.forest_type ?? null),
   };
   if (!row.name) { showError('#edit-error', 'Donne un nom au coin.'); return; }
   const btn = $('#edit-save'); busy(btn, true);
@@ -645,6 +676,7 @@ function renderSpot(id) {
     ['Terrain', s.soil ? labelOf(SOILS, s.soil) : ''],
     ['Exposition', s.exposure ?? ''],
     ['Altitude', s.altitude != null ? `${s.altitude} m` : ''],
+    ['Forêt IGN', s.forest_type ?? ''],
     ['Accès', s.access ?? ''],
   ].filter(([, v]) => v);
   $('#spot-details').innerHTML = det.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('');
@@ -652,6 +684,7 @@ function renderSpot(id) {
   $('#spot-coords').textContent = `📌 ${formatCoords(s.lat, s.lon)}`;
   $('#spot-photos').innerHTML = thumbs(state.photos.filter((p) => p.spot_id === id && !p.find_id));
   $('#spot-photo-add').hidden = !mine;
+  renderMeteo(s);
   $('#spot-route').href = directionsUrl(s.lat, s.lon);
   $('#spot-edit').hidden = !mine;
 
@@ -785,6 +818,158 @@ sb.auth.onAuthStateChange((event, session) => {
     setTimeout(() => route(session), 0);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Météo, conseiller, guide
+
+const LEVEL_ORDER = { bon: 0, moyen: 1, faible: 2, 'hors-saison': 3 };
+const shortDay = (iso) => String(Number(iso.slice(8, 10)));
+
+function spotContext(s) {
+  return { month: month(), species: spotSpecies(s, state.finds), trees: s.trees ?? [], history: state.finds.filter((f) => f.spot_id === s.id) };
+}
+
+function meteoHtml(w, a) {
+  const rows = [...w.days, ...(w.today ? [w.today] : []), ...w.future.slice(0, 2)];
+  const max = Math.max(20, ...rows.map((r) => r.rain || 0));
+  const today = todayIso();
+  const lvl = a.level ? LEVELS[a.level] : null;
+  return `<h3>Météo et conditions</h3>
+    ${lvl ? `<div class="verdict lvl-${a.level}">${lvl.icon} ${lvl.label}</div>` : ''}
+    <ul class="reasons">${a.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>
+    ${a.perSpecies.length ? `<p class="small">${a.perSpecies.map((p) => `<b>${esc(p.label)}</b>${p.reasons.length ? ' : ' + esc(p.reasons.join(', ')) : ''}`).join('<br>')}</p>` : ''}
+    <div class="rainbars" aria-label="Pluie jour par jour">${rows.map((r) => `<div class="d${r.date === today ? ' today' : ''}${r.date > today ? ' future' : ''}" title="${formatDate(r.date)} : ${r.rain} mm">
+      <span class="mm">${r.rain >= 1 ? Math.round(r.rain) : ''}</span><span class="b" style="height:${Math.round(((r.rain || 0) / max) * 64)}px"></span><span>${r.date === today ? 'auj.' : shortDay(r.date)}</span></div>`).join('')}</div>
+    <div class="temps">${rows.map((r) => `<span>${r.tmax != null ? Math.round(r.tmax) + '°' : ''}</span>`).join('')}</div>
+    <p class="small muted">Pluie sur 10 jours : <b>${w.rain10} mm</b> · températures sur 7 jours : ${w.tmin7 ?? '?'}–${w.tmax7 ?? '?'} °C · hachuré = prévision. Données Open-Meteo, précision ~1–2 km.</p>`;
+}
+
+async function renderMeteo(s) {
+  const box = $('#spot-meteo');
+  box.innerHTML = '<h3>Météo et conditions</h3><p class="small muted">Chargement de la météo…</p>';
+  try {
+    const [daily] = await dailyFor([[s.lat, s.lon]]);
+    if (state.openSpotId !== s.id) return;
+    const w = summarizeWeather(daily, todayIso());
+    box.innerHTML = meteoHtml(w, assess(w, spotContext(s)));
+  } catch (err) {
+    if (state.openSpotId === s.id) box.innerHTML = `<h3>Météo et conditions</h3><p class="small muted">Météo indisponible (${esc(frError(err))}).</p>`;
+  }
+}
+
+// Carte des pluies sur 10 jours (grille PACA)
+let rainLayer = null, rainLegend = null;
+async function showRain(on) {
+  store.set('champi-rain', on ? '1' : '0');
+  $('#toggle-rain').checked = on;
+  if (!on) { rainLayer?.remove(); rainLegend?.remove(); return; }
+  if (!rainLayer) {
+    toast('Chargement de la pluie sur la région…', 10000);
+    const grid = pacaGrid();
+    try {
+      const all = await dailyFor(grid);
+      rainLayer = L.layerGroup();
+      grid.forEach((p, i) => {
+        const w = summarizeWeather(all[i], todayIso());
+        L.circleMarker(p, { radius: 11, stroke: false, fillColor: rainColor(w.rain10), fillOpacity: 0.75, interactive: true })
+          .bindTooltip(`Près de ${nearestTown(...p)} : <b>${w.rain10} mm</b> sur 10 j${w.lastRainAgo != null ? ` · dernière pluie il y a ${w.lastRainAgo} j` : ''}`)
+          .addTo(rainLayer);
+      });
+      $('#toast').hidden = true;
+    } catch (err) { toast(`Pluie indisponible : ${frError(err)}`); $('#toggle-rain').checked = false; return; }
+    rainLegend = L.control({ position: 'topleft' });
+    rainLegend.onAdd = () => {
+      const d = L.DomUtil.create('div', 'rain-legend');
+      d.innerHTML = '<b>Pluie 10 j</b><br>' + [[0, '< 2 mm'], [5, '2–10'], [15, '10–25'], [30, '25–50'], [60, '> 50 mm']].map(([v, t]) => `<i style="background:${rainColor(v)}"></i>${t}`).join('<br>');
+      return d;
+    };
+  }
+  if ($('#toggle-rain').checked) { rainLayer.addTo(map); rainLegend.addTo(map); }
+}
+$('#toggle-rain').addEventListener('change', (e) => showRain(e.target.checked));
+
+// Forêts IGN (BD Forêt V2)
+let forestLayer = null;
+function showForests(on) {
+  store.set('champi-forest', on ? '1' : '0');
+  $('#toggle-forest').checked = on;
+  if (!forestLayer) {
+    forestLayer = L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=LANDCOVER.FORESTINVENTORY.V2&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
+      { minZoom: 6, maxNativeZoom: 16, maxZoom: 19, opacity: 0.55, attribution: 'BD Forêt® V2 © IGN' });
+  }
+  if (on) forestLayer.addTo(map); else forestLayer.remove();
+}
+$('#toggle-forest').addEventListener('change', (e) => showForests(e.target.checked));
+
+// Conseiller
+async function openAdvisor() {
+  $('#menu').hidden = true;
+  const body = $('#advisor-body');
+  body.innerHTML = '<p class="muted">Analyse en cours…</p>';
+  $('#dlg-advisor').showModal();
+  const m = month();
+  const now = SPECIES.filter((s) => s.months.includes(m));
+  let html = `<h3>En saison en ${MONTHS[m - 1]}</h3><div class="chips readonly">${now.map((s) => `<span class="chip">${esc(s.label)}${(s.peak ?? []).includes(m) ? ' <span class="in">● pic</span>' : ''}</span>`).join('')}</div>`;
+  try {
+    const grid = pacaGrid();
+    const spots = state.spots.slice(0, 100);
+    const all = await dailyFor([...grid, ...spots.map((s) => [s.lat, s.lon])]);
+    const ws = all.map((d) => summarizeWeather(d, todayIso()));
+    const g = ws.slice(0, grid.length);
+    const avg = Math.round((g.reduce((t, w) => t + w.rain10, 0) / g.length) * 10) / 10;
+    const wet = grid.map((p, i) => ({ p, w: g[i] })).sort((a, b) => b.w.rain10 - a.w.rain10);
+    const seen = new Set(); const top = [];
+    for (const x of wet) { const t = nearestTown(...x.p); if (!seen.has(t)) { seen.add(t); top.push([t, x.w.rain10]); } if (top.length === 4) break; }
+    html += `<h3>Pluie sur 10 jours en PACA</h3>
+      <p>Moyenne régionale : <b>${avg} mm</b>. Les secteurs les plus arrosés : ${top.map(([t, mm]) => `${esc(t)} (${mm} mm)`).join(', ')}.</p>
+      <button id="advisor-rain" class="btn" type="button">🌧️ Voir la carte des pluies</button>`;
+    const ranked = spots.map((s, i) => ({ s, a: assess(ws[grid.length + i], spotContext(s)) }))
+      .filter((x) => x.a.level)
+      .sort((x, y) => (LEVEL_ORDER[x.a.level] - LEVEL_ORDER[y.a.level]) || (y.a.score - x.a.score));
+    html += `<h3>Tes coins</h3>` + (ranked.length ? `<ul class="rank">${ranked.slice(0, 15).map(({ s, a }) => `<li><button type="button" data-spot="${s.id}">
+        <span class="t">${LEVELS[a.level].icon} ${esc(s.name)}</span><br>
+        <span class="small">${a.perSpecies[0] ? esc(a.perSpecies[0].label) + ' · ' : ''}${esc(a.reasons[0] ?? '')}</span></button></li>`).join('')}</ul>`
+      : '<p class="muted small">Note des espèces sur tes coins pour que le conseiller puisse les évaluer.</p>');
+  } catch (err) {
+    html += `<p class="error">Météo indisponible : ${esc(frError(err))}</p>`;
+  }
+  body.innerHTML = html;
+}
+$('#advisor-btn').addEventListener('click', openAdvisor);
+$('#advisor-btn2').addEventListener('click', openAdvisor);
+$('#dlg-advisor .js-close').addEventListener('click', () => $('#dlg-advisor').close());
+$('#dlg-advisor').addEventListener('click', (e) => {
+  if (e.target.closest('#advisor-rain')) { $('#dlg-advisor').close(); window.scrollTo({ top: 0 }); map.setView([43.95, 6.1], 8); showRain(true); return; }
+  const b = e.target.closest('[data-spot]'); if (!b) return;
+  const s = state.spots.find((x) => x.id === b.dataset.spot); if (!s) return;
+  $('#dlg-advisor').close(); window.scrollTo({ top: 0 });
+  map.setView([s.lat, s.lon], Math.max(map.getZoom(), 14));
+  openSpot(s.id);
+});
+
+// Guide des espèces
+function renderGuide() {
+  const m = month();
+  $('#guide-body').innerHTML = SPECIES.filter((s) => GUIDE[s.id]).map((s) => {
+    const g = GUIDE[s.id];
+    const cells = MONTHS.map((name, i) => {
+      const n = i + 1; const cls = [(s.peak ?? []).includes(n) ? 'peak' : s.months.includes(n) ? 'on' : '', n === m ? 'now' : ''].join(' ');
+      return `<span class="${cls}" title="${name}">${name[0].toUpperCase()}</span>`;
+    }).join('');
+    const trees = g.trees.map((t) => labelOf(TREES, t)).join(', ');
+    return `<div class="guide-card">
+      <h4>${esc(s.label)}</h4><div class="latin">${esc(g.latin)}</div>
+      <div class="months">${cells}</div>
+      <p>${esc(g.habitat)}</p>
+      <p class="small muted">${trees ? `Arbres : ${esc(trees)} · ` : ''}${g.soil ? `sol ${esc(g.soil)} · ` : ''}altitude ~${g.alt[0]}–${g.alt[1]} m</p>
+      <p class="small ${g.lookalikes.includes('⚠️') ? 'warn' : ''}"><b>Sosies :</b> ${esc(g.lookalikes)}</p></div>`;
+  }).join('');
+}
+function openGuide() { $('#menu').hidden = true; renderGuide(); $('#dlg-guide').showModal(); }
+$('#guide-btn').addEventListener('click', openGuide);
+$('#guide-btn2').addEventListener('click', openGuide);
+$('#dlg-guide .js-close').addEventListener('click', () => $('#dlg-guide').close());
+$('#guide-forest').addEventListener('click', () => { $('#dlg-guide').close(); window.scrollTo({ top: 0 }); showForests(true); if (map.getZoom() < 11) map.setZoom(11); toast('Forêts IGN affichées (légende dans le guide).'); });
 
 // ---------------------------------------------------------------------------
 // Administration (Enzo)

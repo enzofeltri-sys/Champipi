@@ -115,6 +115,10 @@
           </div>
         </div>
         <label class="check"><input type="checkbox" id="toggle-massifs"> Massifs (cercles indicatifs)</label>
+        <label class="check"><input type="checkbox" id="toggle-rain"> Pluie des 10 derniers jours (PACA)</label>
+        <label class="check"><input type="checkbox" id="toggle-forest"> Forêts IGN (types de peuplement)</label>
+        <button id="advisor-btn2" class="btn" type="button">🤖 Conseiller du jour</button>
+        <button id="guide-btn" class="btn" type="button">📖 Guide des espèces</button>
         <div class="field">
           <span class="small">Thème</span>
           <div class="seg small-seg" id="theme-seg">
@@ -149,6 +153,10 @@
       <div class="safety" role="note">
         ⚠️ Fais contrôler <b>chaque récolte</b> par un pharmacien ou une association mycologique avant de la manger.
         Centre antipoison de Marseille : <a class="tel" href="tel:+33491752525">04 91 75 25 25</a>
+      </div>
+      <div class="row cta-row">
+        <button id="advisor-btn" class="btn primary" type="button">🤖 Conseiller du jour</button>
+        <button id="guide-btn2" class="btn" type="button">📖 Guide des espèces</button>
       </div>
       <h2>Coins <span class="muted small">— par dernière trouvaille</span></h2>
       <ul id="spot-list" class="spot-list"></ul>
@@ -185,6 +193,7 @@
           </div>
           <label for="edit-altitude">Altitude (m) <span class="muted small" id="edit-alt-src"></span></label>
           <input id="edit-altitude" type="number" inputmode="numeric" min="-500" max="5000" step="1">
+          <div id="edit-forest" class="small forest-line" hidden></div>
           <label for="edit-access">Accès et stationnement</label>
           <textarea id="edit-access" rows="2" maxlength="1000" placeholder="Piste, parking, barrière…"></textarea>
         </div>
@@ -216,6 +225,7 @@
       <div id="spot-species" class="chips readonly"></div>
       <p id="spot-note" class="note"></p>
       <dl id="spot-details" class="details"></dl>
+      <section id="spot-meteo" class="meteo"></section>
       <p class="small muted" id="spot-coords"></p>
       <div id="spot-photos" class="photos"></div>
       <label id="spot-photo-add" class="btn small-btn">📷 Ajouter une photo du coin
@@ -272,6 +282,37 @@
         <button class="btn primary" value="ok">Placer l'épingle</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="dlg-advisor" class="sheet">
+    <div class="stack">
+      <div class="sheet-head">
+        <h2>🤖 Conseiller du jour</h2>
+        <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
+      </div>
+      <div id="advisor-body"><p class="muted">Analyse en cours…</p></div>
+      <p class="small muted">Règles simples et affichées en clair : pluie des 10 derniers jours, délai depuis la dernière grosse pluie,
+        températures, saison, milieu (arbres) et tes trouvailles passées. Ce n'est pas une prédiction.
+        Météo : <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0).</p>
+      <p class="safety small">⚠️ Le conseiller n'identifie aucun champignon. Fais contrôler chaque récolte (pharmacien, association mycologique). Antipoison : <a class="tel" href="tel:+33491752525">04 91 75 25 25</a></p>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-guide" class="sheet">
+    <div class="stack">
+      <div class="sheet-head">
+        <h2>📖 Guide des espèces</h2>
+        <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
+      </div>
+      <p class="small muted">Saisons de ton calendrier, milieux et altitudes indicatifs pour la Provence. Les <b>sosies dangereux</b> sont en rouge.</p>
+      <button id="guide-forest" class="btn" type="button">🌲 Voir les forêts IGN sur la carte</button>
+      <div id="guide-body"></div>
+      <details class="more">
+        <summary>Lire la carte des forêts IGN</summary>
+        <img class="legend-img" src="https://data.geopf.fr/annexes/ressources/legendes/LANDCOVER.FORESTINVENTORY.V2-legend.png" alt="Légende BD Forêt V2 de l'IGN" loading="lazy">
+      </details>
+      <p class="safety small">⚠️ Ce guide ne sert pas à identifier. Seul un contrôle par un pharmacien ou une association mycologique le permet.</p>
+    </div>
   </dialog>
 
   <dialog id="dlg-admin" class="sheet">

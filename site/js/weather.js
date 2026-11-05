@@ -1,0 +1,70 @@
+// Météo (Open-Meteo, gratuit, sans clé, licence CC BY 4.0) et type de forêt (IGN BD Forêt V2).
+const OPEN_METEO = 'https://api.open-meteo.com/v1/forecast';
+const DAILY = 'precipitation_sum,temperature_2m_max,temperature_2m_min';
+const TTL = 60 * 60 * 1000;   // 1 h
+
+const mem = new Map();
+const key = (lat, lon) => `${lat.toFixed(2)},${lon.toFixed(2)}`;
+function cacheGet(k) {
+  const hit = mem.get(k);
+  if (hit && hit.t > Date.now() - TTL) return hit.v;
+  try {
+    const s = JSON.parse(sessionStorage.getItem('champi-meteo:' + k) || 'null');
+    if (s && s.t > Date.now() - TTL) { mem.set(k, s); return s.v; }
+  } catch { /* stockage indisponible */ }
+  return null;
+}
+function cacheSet(k, v) {
+  const e = { t: Date.now(), v }; mem.set(k, e);
+  try { sessionStorage.setItem('champi-meteo:' + k, JSON.stringify(e)); } catch { /* plein ou privé */ }
+}
+
+async function fetchJson(url, tries = 2) {
+  for (let i = 0; ; i++) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`Météo indisponible (${r.status})`);
+      return await r.json();
+    } catch (err) {
+      if (i >= tries) throw err;
+      await new Promise((ok) => setTimeout(ok, 800 * (i + 1)));
+    }
+  }
+}
+
+/**
+ * Données quotidiennes (14 jours passés + 3 jours de prévision) pour une liste de points [[lat, lon], …].
+ * Renvoie un tableau de « daily » dans le même ordre. Un seul appel pour 100 points maximum.
+ */
+export async function dailyFor(points) {
+  const out = new Array(points.length);
+  const todo = [];
+  points.forEach(([lat, lon], i) => { const c = cacheGet(key(lat, lon)); if (c) out[i] = c; else todo.push(i); });
+  for (let k = 0; k < todo.length; k += 100) {
+    const idx = todo.slice(k, k + 100);
+    const lats = idx.map((i) => points[i][0].toFixed(3)).join(',');
+    const lons = idx.map((i) => points[i][1].toFixed(3)).join(',');
+    const j = await fetchJson(`${OPEN_METEO}?latitude=${lats}&longitude=${lons}&daily=${DAILY}&past_days=14&forecast_days=3&timezone=Europe%2FParis`);
+    const arr = Array.isArray(j) ? j : [j];
+    idx.forEach((i, n) => { out[i] = arr[n].daily; cacheSet(key(...points[i]), arr[n].daily); });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Type de forêt à un point : service WMS « GetFeatureInfo » de l'IGN (BD Forêt V2).
+const forestCache = new Map();
+export async function forestAt(lat, lon) {
+  const k = key(lat, lon) + lat.toFixed(4) + lon.toFixed(4);
+  if (forestCache.has(k)) return forestCache.get(k);
+  const d = 0.0005;
+  const url = 'https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetFeatureInfo'
+    + '&LAYERS=LANDCOVER.FORESTINVENTORY.V2&QUERY_LAYERS=LANDCOVER.FORESTINVENTORY.V2&STYLES=&FORMAT=image/png'
+    + `&CRS=EPSG:4326&BBOX=${lat - d},${lon - d},${lat + d},${lon + d}&WIDTH=101&HEIGHT=101&I=50&J=50`
+    + '&INFO_FORMAT=application/json&FEATURE_COUNT=1';
+  const j = await fetchJson(url, 1);
+  const p = j.features?.[0]?.properties;
+  const v = p ? { tfv: p.tfv, essence: p.essence, code: p.code_tfv } : { tfv: null };
+  forestCache.set(k, v);
+  return v;
+}
