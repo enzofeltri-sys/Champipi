@@ -1,5 +1,7 @@
-// Parcours conseiller / météo / forêts / guide, avec les vraies API Open-Meteo et IGN (Supabase simulé).
+// Parcours conseiller / météo / forêts / guide, avec l'API IGN réelle et une météo simulée (Supabase simulé).
+// REAL_METEO=1 : vraie API Open-Meteo (attention, elle limite vite le nombre d'appels : erreur 429).
 const { chromium, devices } = require('playwright');
+const fakeMeteo = require('./fake-meteo.cjs');
 const { closeDialogs, openList, openSpot, setScope, pickSpecies, addAtCenter } = require('./ui-helpers.cjs');
 const [, , SITE, OUT] = process.argv;
 const REF = 'vvegujltsjgwszeloyaz';
@@ -14,6 +16,7 @@ const finds = [{ id: 'f1', spot_id: 's1', user_id: ME, found_on: '2025-11-15', s
   const b = await chromium.launch();
   const ctx = await b.newContext({ ...devices['iPhone 13'], locale: 'fr-FR' });
   const page = await ctx.newPage();
+  if (!process.env.REAL_METEO) await fakeMeteo(page);
   const errors = []; const net = {};
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
@@ -31,7 +34,7 @@ const finds = [{ id: 'f1', spot_id: 's1', user_id: ME, found_on: '2025-11-15', s
 
   // 1. Fiche : météo + avis
   await openSpot(page, 'Luminy');
-  await page.waitForSelector('#spot-meteo .rainbars', { timeout: 20000 });
+  await page.waitForSelector('#spot-meteo .rainbars', { timeout: 20000 }).catch(async (e) => { console.log('météo Luminy :', (await page.textContent('#spot-meteo')).trim().slice(0, 200)); throw e; });
   console.log('avis Luminy :', await page.textContent('#spot-meteo .verdict'));
   console.log('raisons :', await page.locator('#spot-meteo .reasons li').allTextContents());
   console.log('barres :', await page.locator('#spot-meteo .rainbars .d').count());
@@ -61,7 +64,8 @@ const finds = [{ id: 'f1', spot_id: 's1', user_id: ME, found_on: '2025-11-15', s
   await page.waitForTimeout(1500);
   console.log('points de pluie :', await page.locator('path.leaflet-interactive').count());
   await page.screenshot({ path: `${OUT}/52-pluie-paca.png` });
-  await page.click('#menu-btn'); await page.uncheck('#toggle-rain'); await page.click('#menu-btn');
+  await page.click('#rail-rain'); await page.waitForTimeout(300);   // bouton rond « 🌧️ Pluie » : on éteint
+  console.log('pluie éteinte :', await page.getAttribute('#rail-rain', 'aria-pressed') === 'false');
 
   // 5. Guide + forêts
   await page.click('#menu-btn'); await page.click('#guide-btn');

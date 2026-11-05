@@ -87,8 +87,8 @@ const ME = '11111111-1111-1111-1111-111111111111';
   await page.goto(SITE); await page.waitForSelector('#screen-app:not([hidden])'); await page.waitForTimeout(1500);
 
   // 1. Coin depuis la position d'une photo
-  await page.click('#btn-add'); await page.click('#btn-coords');
-  await page.setInputFiles('#coords-photo', PHOTO);
+  await page.click('#btn-add');
+  await page.setInputFiles('#add-photo', PHOTO);
   await page.waitForTimeout(500); await page.click('#add-here');
   await page.waitForSelector('#dlg-edit[open]');
   console.log('coords lues dans la photo :', await page.textContent('#edit-coords'));

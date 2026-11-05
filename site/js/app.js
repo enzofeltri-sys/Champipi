@@ -1,6 +1,6 @@
 import { SUPABASE_URL, SUPABASE_KEY, START } from './config.js';
 import {
-  SPECIES, speciesLabel, inSeason, seasonText, parseCoords, formatCoords, directionsUrl,
+  SPECIES, speciesLabel, inSeason, seasonText, formatCoords, directionsUrl,
   sortSpots, filterSpots, spotSpecies, lastFinds, formatDate, todayIso, escapeHtml as esc, MONTHS,
   round6, MASSIFS, FORBIDDEN, TREES, SOILS, EXPOSURES, QUANTITIES, CONDITIONS, labelOf, exifGps,
   exifDate, searchSpots, toGpx, toCsv, chipOrder,
@@ -258,7 +258,7 @@ function initMap() {
   setBase(bases[store.get('champi-base')] ? store.get('champi-base') : 'plan', false);
 
   massifsLayer = buildMassifs();
-  L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
+  L.control.scale({ imperial: false, position: 'topleft' }).addTo(map);   // en haut : ne gêne plus les boutons du bas
   if (store.get('champi-massifs') === '1') massifsLayer.addTo(map);
   $('#toggle-massifs').checked = map.hasLayer(massifsLayer);
   setTimeout(() => { if (store.get('champi-forest') === '1') showForests(true); if (store.get('champi-rain') === '1') showRain(true); }, 0);
@@ -947,26 +947,15 @@ $('#edit-delete').addEventListener('click', async () => {
   await loadData();
 });
 
-// Coller des coordonnées
-$('#btn-coords').addEventListener('click', () => {
-  $('#coords-input').value = ''; showError('#coords-error');
-  $('#dlg-coords').showModal();
-});
-$('#coords-form').addEventListener('submit', (e) => {
-  if (e.submitter?.value === 'cancel') return;
-  const p = parseCoords($('#coords-input').value);
-  if (!p) { e.preventDefault(); showError('#coords-error', 'Format non reconnu. Exemple : 43.5297, 5.4474'); return; }
-  setTimeout(() => { map.setView([p.lat, p.lon], 17); if (!state.adding) startDraft(p.lat, p.lon); }, 0);
-});
-$('#coords-photo').addEventListener('change', async (e) => {
+// « 📷 Photo » : position lue dans la photo (EXIF) ; la photo est jointe au coin dans tous les cas.
+$('#add-photo').addEventListener('change', async (e) => {
   const file = e.target.files[0]; e.target.value = '';
   if (!file) return;
+  addPhoto = file;
   const p = exifGps(await file.arrayBuffer());
-  if (!p) { showError('#coords-error', 'Pas de position dans cette photo : le téléphone l\'a sans doute retirée. Place l\'épingle à la main.'); return; }
-  $('#dlg-coords').close();
+  if (!p) { toast('Pas de position dans cette photo (l\'iPhone la retire souvent). Place le viseur à la main : la photo sera jointe au coin.', 6000); return; }
   map.setView([p.lat, p.lon], 17);
-  if (state.adding) addPhoto = file; else { startDraft(p.lat, p.lon); state.draft.photo = file; }
-  toast('Position lue dans la photo 📷');
+  toast('📷 Position lue dans la photo : vérifie le viseur, puis « C\'est ici ».', 4000);
 });
 
 // ---------------------------------------------------------------------------

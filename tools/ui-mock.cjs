@@ -135,12 +135,10 @@ async function setup(page, data, { session = true } = {}) {
   console.log('coords géoloc :', await page.textContent('#edit-coords'));
   await page.click('#edit-form [value=cancel] >> nth=1');
 
-  // 8. Coordonnées collées
-  await page.click('#btn-add'); await page.click('#btn-coords'); await page.fill('#coords-input', `43°31'47"N 5°26'51"E`);
-  await page.click('#coords-form [value=ok]'); await page.waitForTimeout(500); await page.click('#add-here');
-  await page.waitForSelector('#dlg-edit[open]');
-  console.log('coords collées :', await page.textContent('#edit-coords'));
-  await page.click('#edit-form [value=cancel] >> nth=1');
+  // 8. Bouton « 📷 Photo » à la place de « Coordonnées »
+  await page.click('#btn-add');
+  console.log('barre d\'ajout :', (await page.textContent('#add-bar .row')).replace(/\s+/g, ' ').trim());
+  await page.click('#add-cancel');
 
   // 9. Menu, massifs, thème sombre, fond photo
   await page.click('#menu-btn'); await page.click('#menu details.more summary'); await page.check('#toggle-massifs');

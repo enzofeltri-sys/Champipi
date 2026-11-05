@@ -51,7 +51,7 @@ Les migrations sont dans `supabase/migrations/`. Règles (RLS) :
   Le recoloriage se fait sur le téléphone à partir des tuiles BD Forêt® V2 de l'IGN : la table des 29 couleurs
   (`site/js/forests.js`) a été relevée sur toute la région et vérifiée auprès de l'IGN.
 - À droite : ⭐ coins (affichés par défaut), 🌧️ pluie des 10 derniers jours, 🛰️ photo aérienne, 📍 ma position.
-- En bas : « ＋ Noter un coin » (viseur au centre, « Ma position » ou « Coordonnées », puis « C'est ici »).
+- En bas : « ＋ Noter un coin » (viseur au centre, « Ma position » ou « 📷 Photo » (position lue dans la photo), puis « C'est ici »).
 - Toucher un coin : ce qui y a été trouvé, itinéraire, journal ; le reste dans « Météo, bilan et détails ».
 - Menu ☰ : liste des coins (Tous / À moi / Famille, recherche), conseiller, guide, hors ligne, alertes, famille, aide.
 - Mon profil (menu ☰ → son nom) : chaque personne choisit un petit logo (emblème + couleur de fond) ; il colore ses épingles sur la carte et signe ses trouvailles dans le journal.

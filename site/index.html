@@ -152,7 +152,7 @@
         <span class="small muted">Fais glisser la carte pour mettre le viseur dessus.</span>
         <div class="row">
           <button id="add-locate" class="btn" type="button">📍 Ma position</button>
-          <button id="btn-coords" class="btn" type="button">⌖ Coordonnées</button>
+          <label class="btn">📷 Photo<input id="add-photo" type="file" accept="image/jpeg" hidden></label>
         </div>
         <div class="row end">
           <button id="add-cancel" class="btn" type="button">Annuler</button>
@@ -317,27 +317,6 @@
     </div>
   </dialog>
 
-  <!-- Coller des coordonnées -->
-  <dialog id="dlg-coords" class="sheet">
-    <form id="coords-form" method="dialog" class="stack">
-      <div class="sheet-head">
-        <h2>Coller des coordonnées</h2>
-        <button class="icon-btn" value="cancel" formnovalidate aria-label="Fermer">✕</button>
-      </div>
-      <label for="coords-input">Coordonnées GPS ou lien de carte</label>
-      <input id="coords-input" autocomplete="off" placeholder="43.5297, 5.4474">
-      <p class="small muted">Acceptés : 43.5297, 5.4474 · 43°31'47"N 5°26'51"E · N 43° 31.78' E 5° 26.85' · lien Google Maps</p>
-      <label class="btn">📷 Depuis la position d'une photo
-        <input id="coords-photo" type="file" accept="image/jpeg" hidden></label>
-      <p class="small muted">Marche si le téléphone a gardé la position dans la photo (souvent retirée par l'iPhone).</p>
-      <p id="coords-error" class="error" role="alert" hidden></p>
-      <div class="row end">
-        <button class="btn" value="cancel" formnovalidate>Annuler</button>
-        <button class="btn primary" value="ok">Placer l'épingle</button>
-      </div>
-    </form>
-  </dialog>
-
   <dialog id="dlg-profile" class="sheet">
     <div class="stack">
       <div class="sheet-head">
@@ -417,7 +396,7 @@
       <details><summary>➕ Noter un coin</summary>
         <ol>
           <li>Touche <b>« ＋ Noter un coin »</b> : un viseur rouge apparaît au centre.</li>
-          <li>Fais glisser la carte pour mettre le viseur sur le coin, ou touche <b>📍 Ma position</b> si tu y es, ou <b>⌖ Coordonnées</b> pour coller des coordonnées GPS / un lien Google Maps (ou lire la position d'une photo).</li>
+          <li>Fais glisser la carte pour mettre le viseur sur le coin, ou touche <b>📍 Ma position</b> si tu y es, ou <b>📷 Photo</b> pour choisir une photo prise sur place : l'appli lit sa position (si le téléphone l'a gardée) et la joint au coin.</li>
           <li>Touche <b>« ✓ C'est ici »</b>, donne un nom, choisis <b>🔒 Moi seul</b> ou <b>👪 Famille</b>, coche les espèces, puis Enregistrer.</li>
         </ol>
         <p>« Détails de l'endroit » : arbres, terrain, exposition, accès. L'altitude et le type de forêt (IGN) se remplissent tout seuls.</p>

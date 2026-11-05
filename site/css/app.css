@@ -391,3 +391,9 @@ button, .btn, .chip, .sp-chip, .rail-btn, summary { -webkit-user-select: none; u
 .sp-chip .dot.m-faible { background: #dc2626; }
 .sp-chip.on .dot { box-shadow: 0 0 0 2px #fff; }
 .sp-chip.on .dot:not(.m-bon):not(.m-moyen):not(.m-faible) { background: currentColor; }
+
+/* Messages en haut de l'écran, sous les filtres : ils ne cachent plus les boutons du bas */
+.toast { bottom: auto; top: calc(104px + env(safe-area-inset-top)); max-width: calc(100% - 144px); }
+/* Échelle et légende en haut à gauche, sous les filtres */
+.leaflet-top { margin-top: calc(96px + env(safe-area-inset-top)); }
+.leaflet-top.leaflet-left .leaflet-control-scale { margin-left: 10px; }
