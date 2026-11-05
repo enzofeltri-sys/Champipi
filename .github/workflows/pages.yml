@@ -27,6 +27,8 @@ jobs:
           node-version: 22
       - name: Tests
         run: npm test
+      - name: Requêtes de l'appli contre la vraie base (structure)
+        run: node tools/api-smoke.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

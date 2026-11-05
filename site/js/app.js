@@ -331,12 +331,12 @@ async function loadData() {
     return;
   }
   const [spots, finds, shares, people, pics] = await Promise.all([
-    sb.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, note, trees, soil, exposure, access, altitude, forest_type, created_at, updated_at, author:champi_profiles(display_name)'),
-    sb.from('champi_finds').select('id, spot_id, user_id, found_on, species, note, quantity, condition, weather, created_at, author:champi_profiles(display_name)')
+    sb.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, note, trees, soil, exposure, access, altitude, forest_type, created_at, updated_at, author:champi_profiles!champi_spots_owner_fkey(display_name)'),
+    sb.from('champi_finds').select('id, spot_id, user_id, found_on, species, note, quantity, condition, weather, created_at, author:champi_profiles!champi_finds_user_id_fkey(display_name)')
       .order('found_on', { ascending: false }).order('created_at', { ascending: false }),
     sb.from('champi_spot_shares').select('spot_id, user_id'),
     sb.from('champi_profiles').select('id, display_name').order('display_name'),
-    sb.from('champi_photos').select('id, spot_id, find_id, user_id, path, created_at, author:champi_profiles(display_name)')
+    sb.from('champi_photos').select('id, spot_id, find_id, user_id, path, created_at, author:champi_profiles!champi_photos_user_id_fkey(display_name)')
       .order('created_at', { ascending: true }),
   ]);
   const failed = [spots, finds, pics].find((r) => r.error);

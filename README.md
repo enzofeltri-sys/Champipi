@@ -27,7 +27,8 @@ insert into public.champi_admins (email) values ('autre-admin@exemple.fr');     
 Modifier les fichiers de `site/`, puis :
 
 ```sh
-npm test          # tests de la logique (calendrier, coordonnées, filtres)
+npm test                      # tests de la logique (calendrier, coordonnées, filtres…)
+node tools/api-smoke.mjs      # chaque requête de l'appli contre la vraie base (liens, colonnes)
 git commit -am "…" && git push origin main
 ```
 
