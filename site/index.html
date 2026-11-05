@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Carnet de champignons</title>
   <meta name="description" content="Nos coins à champignons en Provence">
   <meta name="theme-color" content="#2f5d3a" media="(prefers-color-scheme: light)">
@@ -99,7 +99,7 @@
       </header>
 
       <div id="menu" class="menu card" hidden>
-        <p class="small muted">Connecté : <b id="me-name"></b></p>
+        <button id="profile-btn" class="btn profile-line" type="button"><span id="me-avatar"></span> <b id="me-name"></b> <span class="small muted">· mon profil</span></button>
         <button id="admin-btn" class="btn" type="button" hidden>👑 Gérer la famille <span id="admin-count" class="badge season" hidden></span></button>
         <div class="field">
           <span class="small">Fond de carte</span>
@@ -124,7 +124,7 @@
         </div>
         <button id="offline-btn" class="btn" type="button">📥 Cartes hors ligne</button>
         <button id="alerts-btn" class="btn" type="button">🔔 Alertes de pousse</button>
-        <button id="help-btn" class="btn small-btn" type="button">❓ Aide</button>
+        <button id="help-btn" class="btn" type="button">❓ Aide complète</button>
         <div class="field">
           <span class="small">Thème</span>
           <div class="seg small-seg" id="theme-seg">
@@ -325,6 +325,148 @@
         <button class="btn primary" value="ok">Placer l'épingle</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="dlg-profile" class="sheet">
+    <div class="stack">
+      <div class="sheet-head">
+        <h2>👤 Mon profil</h2>
+        <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
+      </div>
+      <div class="profile-preview"><span id="prof-preview"></span><span class="small muted">Ton logo apparaît sur tes coins et dans les journaux : la famille voit qui a trouvé quoi.</span></div>
+      <label for="prof-name">Prénom</label>
+      <input id="prof-name" maxlength="40" autocomplete="given-name">
+      <span class="small">Emblème</span>
+      <div id="prof-emojis" class="pick-grid"></div>
+      <span class="small">Couleur de fond</span>
+      <div id="prof-colors" class="pick-grid colors"></div>
+      <p id="prof-error" class="error" role="alert" hidden></p>
+      <div class="row end">
+        <button class="btn js-close" type="button">Annuler</button>
+        <button id="prof-save" class="btn primary" type="button">Enregistrer</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-help" class="sheet">
+    <div class="stack help">
+      <div class="sheet-head">
+        <h2>❓ Aide</h2>
+        <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
+      </div>
+      <button id="help-tuto" class="btn" type="button">▶️ Revoir la visite rapide</button>
+
+      <details open><summary>📲 Installer l'appli sur le téléphone</summary>
+        <p><b>iPhone (Safari)</b> : ouvre le site dans <b>Safari</b> → bouton <b>Partager</b> (carré avec une flèche) → <b>« Sur l'écran d'accueil »</b> → Ajouter. Ouvre ensuite toujours l'appli depuis cette icône (indispensable pour les alertes).</p>
+        <p><b>Android (Chrome)</b> : ouvre le site dans <b>Chrome</b> → menu <b>⋮</b> → <b>« Ajouter à l'écran d'accueil »</b> (ou « Installer l'application »).</p>
+        <p class="small muted">Adresse du site : enzofeltri-sys.github.io/Champipi</p>
+      </details>
+
+      <details><summary>🔑 Se connecter</summary>
+        <p>Pas de mot de passe. Saisis ton e-mail → « Recevoir mon code » → tape le <b>code à 6 chiffres</b> reçu par e-mail (ou touche le lien de l'e-mail, sur ce même téléphone).</p>
+        <p>Rien reçu ? Regarde les indésirables, attends une minute, puis redemande <b>un seul</b> code. Une fois connecté, tu le restes.</p>
+        <p>Première fois : tu demandes l'accès en donnant ton prénom ; Enzo l'accepte, puis tu touches « Vérifier ».</p>
+      </details>
+
+      <details><summary>🗺️ La carte et les boutons</summary>
+        <ul>
+          <li><b>Deux doigts</b> pour zoomer la carte, un doigt pour la déplacer.</li>
+          <li><b>⭐ Coins</b> : affiche ou masque les coins (les tiens et ceux de la famille).</li>
+          <li><b>🌧️ Pluie</b> : pluie tombée ces 10 derniers jours sur la région (plus c'est bleu foncé, plus il a plu).</li>
+          <li><b>🛰️ Photo</b> : passe en photo aérienne, et retour au plan.</li>
+          <li><b>📍 Moi</b> : centre la carte sur ta position (point bleu).</li>
+          <li><b>☰ Menu</b> : liste des coins, conseiller, guide, hors ligne, alertes, famille, profil.</li>
+        </ul>
+      </details>
+
+      <details><summary>🍄 Chercher un champignon</summary>
+        <p>Touche une pastille en haut (Cèpe, Girolle…). Le <b>point vert</b> indique qu'il est en saison.</p>
+        <ul>
+          <li>La carte passe en gris et les <b>forêts où il pousse</b> apparaissent en vert : vert foncé = forêt pure de la bonne essence, vert clair = mélange (possible). Zoome pour les voir en détail.</li>
+          <li>Seuls <b>les coins où il a déjà été noté</b> restent affichés.</li>
+          <li>Le bandeau du bas rappelle la saison, les forêts, le <b>sosie dangereux</b> ; 📖 ouvre la fiche du guide ; ✕ revient à tous les champignons.</li>
+        </ul>
+        <p class="small muted">Forêts : carte forestière BD Forêt® de l'IGN. C'est une aide pour chercher, pas une garantie.</p>
+      </details>
+
+      <details><summary>➕ Noter un coin</summary>
+        <ol>
+          <li>Touche <b>« ＋ Noter un coin »</b> : un viseur rouge apparaît au centre.</li>
+          <li>Fais glisser la carte pour mettre le viseur sur le coin, ou touche <b>📍 Ma position</b> si tu y es, ou <b>⌖ Coordonnées</b> pour coller des coordonnées GPS / un lien Google Maps (ou lire la position d'une photo).</li>
+          <li>Touche <b>« ✓ C'est ici »</b>, donne un nom, choisis <b>🔒 Moi seul</b> ou <b>👪 Famille</b>, coche les espèces, puis Enregistrer.</li>
+        </ol>
+        <p>« Détails de l'endroit » : arbres, terrain, exposition, accès. L'altitude et le type de forêt (IGN) se remplissent tout seuls.</p>
+      </details>
+
+      <details><summary>📓 Le journal et les photos</summary>
+        <p>Touche un coin sur la carte : tu vois d'abord <b>ce que tu y as trouvé</b>, puis le journal.</p>
+        <p><b>« ＋ Noter une trouvaille »</b> : date, espèces, quantité, état, météo, note et photos. La date est reprise de la photo quand c'est possible.</p>
+        <p>Les photos sont réduites et <b>la position GPS cachée dedans est effacée</b> avant l'envoi. Elles suivent la visibilité du coin.</p>
+        <p>« Météo, bilan et détails » : pluie des derniers jours, avis du conseiller, bilan du coin (meilleurs mois), accès au massif, modifier, partager.</p>
+      </details>
+
+      <details><summary>👪 Moi seul, Famille, partager</summary>
+        <ul>
+          <li><b>🔒 Moi seul</b> : personne d'autre ne voit le coin.</li>
+          <li><b>👪 Famille</b> : tous les membres le voient, avec son journal et ses photos.</li>
+          <li><b>🤝 Partager…</b> (dans les détails d'un coin « Moi seul ») : choisis une ou plusieurs personnes précises. Elles peuvent y noter leurs trouvailles, et « Ne plus voir ce coin ».</li>
+          <li>Seul le créateur d'un coin peut le modifier ou le supprimer. Chacun ne peut supprimer que ses propres trouvailles et photos.</li>
+        </ul>
+      </details>
+
+      <details><summary>🎨 Mon logo</summary>
+        <p>Menu ☰ → ton prénom en haut : choisis un emblème et une couleur. Ton logo s'affiche sur tes épingles et à côté de tes trouvailles, pour que chacun s'y retrouve.</p>
+      </details>
+
+      <details><summary>🤖 Conseiller, pluie et saisons</summary>
+        <p>Le conseiller (menu) croise pour chaque coin : pluie des 10 derniers jours, délai depuis la dernière grosse pluie (les champignons sortent en général 5 à 15 jours après), températures, saison, arbres, et <b>tes trouvailles passées</b>.</p>
+        <p>🟢 favorable · 🟡 moyen · 🔴 défavorable · ⚪ hors saison. Dès 3 trouvailles sur un coin, il apprend ses conditions (« Ton expérience »).</p>
+        <p class="small muted">Ce sont des règles simples : une indication, jamais une certitude. Météo : Open-Meteo.</p>
+      </details>
+
+      <details><summary>🔔 Alertes de pousse</summary>
+        <p>Menu → <b>🔔 Alertes de pousse</b> → « Activer sur ce téléphone », puis « Envoyer une alerte de test ».</p>
+        <ul>
+          <li><b>iPhone</b> : uniquement depuis l'appli installée sur l'écran d'accueil (iOS 16.4 ou plus). Accepte les notifications.</li>
+          <li><b>Android</b> : avec Chrome ; accepte les notifications.</li>
+        </ul>
+        <p>Chaque matin vers 7 h 30, si un de tes coins (ou de la famille) devient 🟢 favorable pour une espèce en saison, tu reçois une notification ; au plus une par coin et par semaine. Toucher la notification ouvre le coin.</p>
+        <p>Il faut que le coin ait au moins une espèce notée. Pour arrêter : même écran → « Désactiver ».</p>
+      </details>
+
+      <details><summary>📥 Sans réseau en forêt</summary>
+        <p>Avant de partir : cadre le massif sur la carte → menu → <b>📥 Cartes hors ligne</b> → « Enregistrer la zone affichée » (quelques Mo).</p>
+        <p>En forêt sans réseau : la carte enregistrée, tes coins et le journal fonctionnent. Les coins et trouvailles notés (avec photos) sont gardés sur le téléphone et <b>partent tout seuls</b> au retour du réseau (bandeau « ⏳ envois en attente »).</p>
+      </details>
+
+      <details><summary>🔥 Accès aux massifs (été)</summary>
+        <p>De juin à septembre, les préfectures peuvent fermer des massifs à cause du risque d'incendie. La fiche d'un coin affiche son massif et l'accès du jour (🟢 autorisé, 🟠 déconseillé, ⛔ interdit) pour le 04, 06, 13, 83 et 84, avec un lien vers la carte officielle. En cas de doute, la carte officielle fait foi.</p>
+      </details>
+
+      <details><summary>📖 Guide, règles de cueillette</summary>
+        <p>Menu → <b>📖 Guide des espèces</b> : saison, milieux, altitude et sosies dangereux de chaque espèce, et les règles de cueillette (au-delà de 10 litres sans autorisation, c'est un délit ; cueillette interdite dans les réserves).</p>
+      </details>
+
+      <details><summary>👑 Gérer la famille (Enzo)</summary>
+        <p>Menu → <b>👑 Gérer la famille</b> : accepter ou refuser les demandes (pastille rouge sur le menu), ajouter directement une adresse avec un prénom, retirer un membre.</p>
+      </details>
+
+      <details><summary>⬇️ Sauvegarder mes coins</summary>
+        <p>Menu → <b>⬇️ Coins (GPX)</b> pour OsmAnd, Garmin, etc. ; <b>⬇️ Journal (CSV)</b> pour Excel.</p>
+      </details>
+
+      <details><summary>🛠️ Problèmes fréquents</summary>
+        <ul>
+          <li><b>L'appli ne se met pas à jour</b> : ferme-la complètement et rouvre-la.</li>
+          <li><b>« Trop d'e-mails envoyés »</b> : attends un peu, puis redemande un seul code.</li>
+          <li><b>Position introuvable</b> : autorise la localisation pour l'appli (Réglages → Safari/Chrome → Localisation), et mets-toi à découvert.</li>
+          <li><b>Météo indisponible</b> : pas de réseau, ou service météo saturé ; réessaie plus tard.</li>
+          <li><b>Alertes</b> : vérifie que les notifications de l'appli sont autorisées dans les réglages du téléphone, puis refais une alerte de test.</li>
+        </ul>
+      </details>
+
+      <p class="safety small">⚠️ L'appli n'identifie aucun champignon. Fais contrôler <b>chaque récolte</b> par un pharmacien ou une association mycologique avant de la manger. Centre antipoison de Marseille : <a class="tel" href="tel:+33491752525">04 91 75 25 25</a> · urgence : 15.</p>
+    </div>
   </dialog>
 
   <dialog id="dlg-tuto" class="sheet">

@@ -54,6 +54,9 @@ Les migrations sont dans `supabase/migrations/`. Règles (RLS) :
 - En bas : « ＋ Noter un coin » (viseur au centre, « Ma position » ou « Coordonnées », puis « C'est ici »).
 - Toucher un coin : ce qui y a été trouvé, itinéraire, journal ; le reste dans « Météo, bilan et détails ».
 - Menu ☰ : liste des coins (Tous / À moi / Famille, recherche), conseiller, guide, hors ligne, alertes, famille, aide.
+- Mon profil (menu ☰ → son nom) : chaque personne choisit un petit logo (emblème + couleur de fond) ; il colore ses épingles sur la carte et signe ses trouvailles dans le journal.
+- « ❓ Aide complète » : 16 rubriques (installer l'app, connexion, carte, coins, journal, partage, alertes, hors ligne, conseiller, problèmes fréquents…).
+- L'interface ne zoome pas (pincement, double-tap, champs de saisie) ; seule la carte se zoome.
 
 ## Conseiller, météo et forêts
 

@@ -11,6 +11,17 @@ import { dailyFor, forestAt, historyFor } from './weather.js';
 import { historyRange, findConditions, spotProfile, personalAdvice, profileSummary } from './learn.js';
 import { massifAt, accessFor, inFireSeason, DEPT_PAGES, ACCESS_ICON } from './access.js';
 import { favorableColors, favorableLabels, colorKeyMap } from './forests.js';
+import { avatarOf, avatarHtml, AVATAR_EMOJIS, AVATAR_COLORS } from './avatars.js';
+
+// ---------------------------------------------------------------------------
+// Pas de zoom de la page : seule la carte se zoome (deux doigts). Bloque le pincement et le double-toucher
+// sur l'interface, et le zoom automatique d'iPhone sur les champs (police ≥ 16 px dans le CSS).
+document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });       // Safari iOS
+document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false });
+document.addEventListener('touchmove', (e) => {
+  if (e.touches.length > 1 && !e.target.closest?.('#map')) e.preventDefault();
+}, { passive: false });
+// Double-toucher : désactivé par « touch-action: manipulation » (CSS), sans avaler les touchers rapides.
 import { tilesFor, bestMaxZoom, PLAN_IGN, TILE_CACHE, TILE_LIMIT, isNetworkError, queue, mergePending, sendOrder } from './offline.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -74,7 +85,7 @@ async function doRoute(session) {
   state.request = request.data;
   if (!allowed.data.length) { showDenied(); return; }
   const { data: profile, error: e2 } = await sb.from('champi_profiles')
-    .select('id, display_name').eq('id', state.user.id).maybeSingle();
+    .select('id, display_name, avatar_emoji, avatar_color').eq('id', state.user.id).maybeSingle();
   if (e2) throw e2;
   if (!profile) {
     // Prénom déjà donné dans la demande d'accès : on crée le profil directement.
@@ -89,7 +100,7 @@ async function doRoute(session) {
     show('name'); $('#name-input').focus(); return;
   }
   state.profile = profile;
-  $('#me-name').textContent = profile.display_name;
+  showMe();
   show('app');
   $('#admin-btn').hidden = !state.isAdmin;
   await loadData();
@@ -299,15 +310,24 @@ function buildMassifs() {
   return g;
 }
 
-function pinIcon(kind, seasonal = false, draft = false) {
-  const color = kind === 'family' ? 'var(--family)' : kind === 'shared' ? 'var(--shared)' : kind === 'draft' ? 'var(--primary)' : 'var(--private)';
+// Personne (avec son logo) à partir de son identifiant.
+const personOf = (id) => state.people.find((p) => p.id === id) ?? (id === state.user?.id ? state.profile : null) ?? { id };
+const nameOf = (id) => (id === state.user?.id ? 'moi' : personOf(id)?.display_name ?? '?');
+const byHtml = (id) => `${avatarHtml(personOf(id), 18)} ${esc(nameOf(id))}`;
+
+/** Épingle : couleur et emblème de la personne qui a créé le coin ; 🔒 si « Moi seul ». */
+function pinIcon(kind, seasonal = false, draft = false, person = null) {
+  const a = person ? avatarOf(person) : null;
+  const color = draft ? 'var(--primary)' : a ? a.color : 'var(--private)';
+  const inner = a && !draft ? `<span class="pin-emoji">${a.emoji}</span>`
+    : '<svg class="pin-mush" viewBox="0 0 30 40" aria-hidden="true"><path d="M8 15.5c0-4 3.2-6.6 7-6.6s7 2.6 7 6.6z" fill="#fff"/><rect x="13" y="15.5" width="4" height="5.5" rx="1.5" fill="#fff"/></svg>';
   return L.divIcon({
     className: '',
-    iconSize: [30, 40], iconAnchor: [15, 40], popupAnchor: [0, -36],
+    iconSize: [34, 44], iconAnchor: [17, 44], popupAnchor: [0, -40],
     html: `<div class="pin${draft ? ' draft' : ''}"><svg viewBox="0 0 30 40" aria-hidden="true">
       <path d="M15 1C7.3 1 1 7.2 1 14.9 1 25.3 15 39 15 39s14-13.7 14-24.1C29 7.2 22.7 1 15 1z" style="fill:${color}" stroke="#fff" stroke-width="2"/>
-      <path d="M8 15.5c0-4 3.2-6.6 7-6.6s7 2.6 7 6.6z" fill="#fff"/><rect x="13" y="15.5" width="4" height="5.5" rx="1.5" fill="#fff"/>
-    </svg>${seasonal ? '<span class="dot"></span>' : ''}</div>`,
+      <circle cx="15" cy="14.5" r="9.5" fill="rgba(255,255,255,.92)"/></svg>${inner}
+      ${kind === 'private' ? '<span class="lock">🔒</span>' : kind === 'shared' ? '<span class="lock">🤝</span>' : ''}${seasonal ? '<span class="dot"></span>' : ''}</div>`,
   });
 }
 
@@ -332,7 +352,7 @@ async function loadData() {
     sb.from('champi_finds').select('id, spot_id, user_id, found_on, species, note, quantity, condition, weather, created_at, author:champi_profiles!champi_finds_user_id_fkey(display_name)')
       .order('found_on', { ascending: false }).order('created_at', { ascending: false }),
     sb.from('champi_spot_shares').select('spot_id, user_id'),
-    sb.from('champi_profiles').select('id, display_name').order('display_name'),
+    sb.from('champi_profiles').select('id, display_name, avatar_emoji, avatar_color').order('display_name'),
     sb.from('champi_photos').select('id, spot_id, find_id, user_id, path, created_at, author:champi_profiles!champi_photos_user_id_fkey(display_name)')
       .order('created_at', { ascending: true }),
   ]);
@@ -368,7 +388,7 @@ function render() {
   for (const s of onMap) {
     if (state.draft?.id === s.id) continue;
     const seasonal = inSeason(spotSpecies(s, state.finds), month()).length > 0;
-    L.marker([s.lat, s.lon], { icon: pinIcon(s.sharedWithMe ? 'shared' : s.visibility, seasonal), title: s.name, keyboard: true })
+    L.marker([s.lat, s.lon], { icon: pinIcon(s.sharedWithMe || s.sharedWith?.length ? 'shared' : s.visibility, seasonal, false, personOf(s.owner)), title: s.name, keyboard: true })
       .on('click', () => openSpot(s.id)).addTo(markersLayer);
   }
   if (state.species) renderBanner();
@@ -384,8 +404,9 @@ function render() {
     const sp = spotSpecies(s, state.finds);
     const season = inSeason(sp, month());
     const lf = last.get(s.id);
-    const author = s.visibility === 'family' && s.owner !== me ? ` · par ${esc(s.author?.display_name ?? '?')}` : '';
+    const author = s.owner !== me ? ` · par ${esc(nameOf(s.owner))}` : '';
     return `<li><button class="spot-item ${s.sharedWithMe ? 'shared' : s.visibility}" data-id="${s.id}" type="button">
+      ${avatarHtml(personOf(s.owner), 34)}
       <span class="grow">
         <span class="title">${esc(s.name)}${s.pending ? ' <span class="pending-tag">⏳ en attente d\'envoi</span>' : ''}</span>
         <span class="badges">${badgesHtml(s, season)}</span>
@@ -397,7 +418,7 @@ function render() {
 
 function badgesHtml(s, season) {
   const names = (ids) => ids.map((id) => state.people.find((p) => p.id === id)?.display_name ?? '?').join(', ');
-  const vis = s.sharedWithMe ? `<span class="badge shared">🤝 Partagé par ${esc(s.author?.display_name ?? '?')}</span>`
+  const vis = s.sharedWithMe ? `<span class="badge shared">🤝 Partagé par ${esc(nameOf(s.owner))}</span>`
     : s.visibility === 'family' ? '<span class="badge family">👪 Famille</span>'
     : '<span class="badge private">🔒 Moi seul</span>' + (s.sharedWith?.length ? `<span class="badge shared">🤝 ${esc(names(s.sharedWith))}</span>` : '');
   const peak = season.some((x) => x.peak);
@@ -857,7 +878,7 @@ function renderSpot(id) {
   $('#spot-name').textContent = s.name;
   renderFound(s);
   $('#spot-badges').innerHTML = badgesHtml(s, season)
-    + (s.visibility === 'family' ? `<span class="badge">par ${esc(mine ? 'moi' : s.author?.display_name ?? '?')}</span>` : '');
+    + `<span class="badge by">${byHtml(s.owner)}</span>`;
   $('#spot-species').innerHTML = sp.length
     ? sp.map((x) => {
       const inNow = season.find((y) => y.id === x);
@@ -892,7 +913,7 @@ function renderSpot(id) {
   $('#find-list').innerHTML = finds.length ? finds.map((f) => `<li>
       <div class="head"><span>${formatDate(f.found_on)}${f.pending ? ` <span class="pending-tag">⏳ en attente d'envoi${f.pendingPhotos ? ` (${f.pendingPhotos} photo${f.pendingPhotos > 1 ? 's' : ''})` : ''}</span>` : ''}</span>
         ${f.user_id === me && !f.pending ? `<button class="del" type="button" data-find="${f.id}">Supprimer</button>` : ''}</div>
-      <div class="small muted">par ${esc(f.user_id === me ? 'moi' : f.author?.display_name ?? '?')}${f.species?.length ? ' · ' + esc(f.species.map(speciesLabel).join(', ')) : ''}</div>
+      <div class="small muted by">${byHtml(f.user_id)}${f.species?.length ? ' · ' + esc(f.species.map(speciesLabel).join(', ')) : ''}</div>
       ${findDetails(f)}
       ${f.note ? `<div class="note">${esc(f.note)}</div>` : ''}
       <div class="photos">${thumbs(state.photos.filter((p) => p.find_id === f.id))}</div>
@@ -1089,7 +1110,53 @@ function openTuto() { $('#menu').hidden = true; showTuto(0); $('#dlg-tuto').show
 function endTuto() { store.set('champi-tuto', '1'); $('#dlg-tuto').close(); }
 $('#tuto-next').addEventListener('click', () => (tutoI < TUTO.length - 1 ? showTuto(tutoI + 1) : endTuto()));
 $('#tuto-skip').addEventListener('click', endTuto);
-$('#help-btn').addEventListener('click', openTuto);
+$('#help-btn').addEventListener('click', () => { $('#menu').hidden = true; $('#dlg-help').showModal(); $('#dlg-help').scrollTop = 0; });
+$$('#dlg-help .js-close').forEach((b) => b.addEventListener('click', () => $('#dlg-help').close()));
+$('#help-tuto').addEventListener('click', () => { $('#dlg-help').close(); openTuto(); });
+
+// ---------------------------------------------------------------------------
+// Mon profil : prénom, emblème et couleur du logo
+function showMe() {
+  $('#me-name').textContent = state.profile?.display_name ?? '';
+  $('#me-avatar').innerHTML = state.profile ? avatarHtml(state.profile, 26) : '';
+}
+let profDraft = null;
+function renderProfile() {
+  const a = avatarOf(profDraft);
+  $('#prof-preview').innerHTML = avatarHtml(profDraft, 56);
+  $('#prof-emojis').innerHTML = AVATAR_EMOJIS.map((e) => `<button type="button" class="pick${e === a.emoji ? ' on' : ''}" data-emoji="${e}" style="background:${a.color}">${e}</button>`).join('');
+  $('#prof-colors').innerHTML = AVATAR_COLORS.map((c) => `<button type="button" class="pick${c === a.color ? ' on' : ''}" data-color="${c}" style="background:${c}" aria-label="couleur ${c}">${a.emoji}</button>`).join('');
+}
+$('#profile-btn').addEventListener('click', () => {
+  $('#menu').hidden = true;
+  const a = avatarOf(state.profile);
+  profDraft = { ...state.profile, avatar_emoji: a.emoji, avatar_color: a.color };
+  $('#prof-name').value = state.profile?.display_name ?? '';
+  showError('#prof-error');
+  renderProfile();
+  $('#dlg-profile').showModal();
+});
+$('#dlg-profile').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-emoji],[data-color]'); if (!b) return;
+  if (b.dataset.emoji) profDraft.avatar_emoji = b.dataset.emoji;
+  if (b.dataset.color) profDraft.avatar_color = b.dataset.color;
+  renderProfile();
+});
+$$('#dlg-profile .js-close').forEach((b) => b.addEventListener('click', () => $('#dlg-profile').close()));
+$('#prof-save').addEventListener('click', async () => {
+  const display_name = $('#prof-name').value.trim();
+  if (!display_name) { showError('#prof-error', 'Donne ton prénom.'); return; }
+  const row = { display_name, avatar_emoji: profDraft.avatar_emoji, avatar_color: profDraft.avatar_color };
+  const btn = $('#prof-save'); busy(btn, true);
+  const { error } = await sb.from('champi_profiles').update(row).eq('id', state.user.id);
+  busy(btn, false);
+  if (error) { showError('#prof-error', isNetworkError(error) ? 'Pas de réseau : réessaie plus tard.' : frError(error)); return; }
+  state.profile = { ...state.profile, ...row };
+  showMe();
+  $('#dlg-profile').close();
+  toast('Profil enregistré ✔');
+  await loadData();
+});
 
 // ---------------------------------------------------------------------------
 // Météo, conseiller, guide
@@ -1540,7 +1607,7 @@ function readSnapshot() {
 }
 function openFromSnapshot(snap) {
   state.profile = snap.profile; state.isAdmin = false;
-  $('#me-name').textContent = snap.profile?.display_name ?? '';
+  showMe();
   show('app');
   loadData().catch(fatal);
 }

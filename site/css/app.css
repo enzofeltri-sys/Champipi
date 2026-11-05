@@ -326,3 +326,34 @@ dialog.viewer img { width: 100%; height: calc(100dvh - 64px); object-fit: contai
 
 /* Champignon choisi : le fond de carte passe en gris, seules les forêts favorables restent en vert. */
 .habitat-on .leaflet-tile-pane img.leaflet-tile { filter: grayscale(1) contrast(.85) brightness(1.08); }
+
+/* ===== Pas de zoom de la page : seule la carte se zoome ===== */
+html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overscroll-behavior: none; }
+body { overscroll-behavior: none; }
+input, select, textarea { font-size: 16px !important; }          /* iPhone zoome sur les champs < 16 px */
+button, .btn, .chip, .sp-chip, .rail-btn, summary { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+#map { touch-action: none; }
+
+/* ===== Logos des personnes ===== */
+.avatar { display: inline-grid; place-items: center; border-radius: 50%; flex: none; line-height: 1; color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.85); vertical-align: middle; }
+.pin { width: 34px; height: 44px; }
+.pin svg { width: 34px; height: 44px; }
+.pin .pin-emoji { position: absolute; left: 0; right: 0; top: 7px; text-align: center; font-size: 15px; line-height: 18px; pointer-events: none; }
+.pin .pin-mush { position: absolute; left: 0; top: 0; filter: none; }
+.pin .pin-mush path, .pin .pin-mush rect { fill: var(--primary); }
+.pin .lock { position: absolute; left: -6px; top: -5px; font-size: 11px; background: #fff; border-radius: 50%; width: 17px; height: 17px; display: grid; place-items: center; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.spot-item { align-items: center; }
+.badge.by { background: var(--surface-2); display: inline-flex; align-items: center; gap: 5px; }
+.by .avatar { box-shadow: none; }
+.profile-line { justify-content: flex-start; gap: 8px; }
+.profile-preview { display: flex; gap: 12px; align-items: center; }
+.pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px; }
+.pick { height: 44px; border-radius: 50%; border: 3px solid transparent; font-size: 20px; cursor: pointer; display: grid; place-items: center; color: #fff; }
+.pick.on { border-color: var(--text); }
+
+/* ===== Aide ===== */
+.help details { background: var(--surface-2); border-radius: 12px; padding: 8px 12px; }
+.help summary { font-weight: 700; cursor: pointer; padding: 4px 0; list-style: revert; }
+.help details[open] > summary { display: list-item; margin-bottom: 4px; }
+.help p, .help li { font-size: .92rem; margin: 4px 0; }
+.help ul, .help ol { padding-left: 20px; margin: 4px 0; }
