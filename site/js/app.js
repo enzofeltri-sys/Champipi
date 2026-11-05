@@ -8,6 +8,7 @@ import {
 import { createPhotoStore, thumbPath } from './photos.js';
 import { GUIDE, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown } from './advisor.js';
 import { dailyFor, forestAt } from './weather.js';
+import { massifAt, accessFor, inFireSeason, DEPT_PAGES, ACCESS_ICON } from './access.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -689,6 +690,7 @@ function renderSpot(id) {
   $('#spot-photos').innerHTML = thumbs(state.photos.filter((p) => p.spot_id === id && !p.find_id));
   $('#spot-photo-add').hidden = !mine;
   renderMeteo(s);
+  renderAccess(s);
   $('#spot-route').href = directionsUrl(s.lat, s.lon);
   $('#spot-edit').hidden = !mine;
 
@@ -994,6 +996,38 @@ async function renderMeteo(s) {
   }
 }
 
+// Accès aux massifs (risque incendie, cartes du jour des préfectures)
+let massifsData = null, levelsByDay = new Map();
+function loadMassifs() {
+  massifsData ??= fetch('data/massifs-acces.json').then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  return massifsData;
+}
+function loadLevels(date = todayIso()) {
+  if (!levelsByDay.has(date)) {
+    levelsByDay.set(date, sb.functions.invoke('champi-acces', { body: { date: date.replaceAll('-', '') } })
+      .then(({ data, error }) => (error ? null : data)).catch(() => null));
+  }
+  return levelsByDay.get(date);
+}
+async function spotAccess(s) {
+  const data = await loadMassifs();
+  const massif = data ? massifAt(s.lat, s.lon, data) : null;
+  const levels = massif && inFireSeason(month()) ? await loadLevels() : null;
+  return { massif, ...accessFor(massif, levels, month()) };
+}
+async function renderAccess(s) {
+  const box = $('#spot-access');
+  box.hidden = true; box.className = 'access-line small';
+  const a = await spotAccess(s);
+  if (state.openSpotId !== s.id || !a.massif) return;
+  const page = DEPT_PAGES[a.massif.dept];
+  box.classList.toggle('closed', a.state === 'closed');
+  box.classList.toggle('warn', a.state === 'warn');
+  box.innerHTML = `${a.state ? ACCESS_ICON[a.state] : '🌲'} <b>Massif ${esc(a.massif.name)}</b> (${esc(page?.name ?? a.massif.dept)}) : ${esc(a.text)}`
+    + (page ? ` · <a href="${page.url}" target="_blank" rel="noopener">carte officielle</a>` : '');
+  box.hidden = false;
+}
+
 // Carte des pluies sur 10 jours (grille PACA)
 let rainLayer = null, rainLegend = null;
 async function showRain(on) {
@@ -1060,11 +1094,16 @@ async function openAdvisor() {
     html += `<h3>Pluie sur 10 jours en PACA</h3>
       <p>Moyenne régionale : <b>${avg} mm</b>. Les secteurs les plus arrosés : ${top.map(([t, mm]) => `${esc(t)} (${mm} mm)`).join(', ')}.</p>
       <button id="advisor-rain" class="btn" type="button">🌧️ Voir la carte des pluies</button>`;
-    const ranked = spots.map((s, i) => ({ s, a: assess(ws[grid.length + i], spotContext(s)) }))
+    const acc = await Promise.all(spots.map((s) => spotAccess(s).catch(() => ({}))));
+    const closedN = acc.filter((x) => x.state === 'closed').length;
+    html += `<h3>Accès aux massifs</h3><p class="small">${inFireSeason(m)
+      ? (closedN ? `⛔ ${closedN === 1 ? '1 de tes coins est' : `${closedN} de tes coins sont`} dans un massif fermé aujourd'hui (risque incendie).` : 'Aucun de tes coins n\'est dans un massif fermé aujourd\'hui.')
+      : 'Hors période réglementée (juin–septembre) : pas de fermeture publiée.'}</p>`;
+    const ranked = spots.map((s, i) => ({ s, a: assess(ws[grid.length + i], spotContext(s)), x: acc[i] }))
       .filter((x) => x.a.level)
-      .sort((x, y) => (LEVEL_ORDER[x.a.level] - LEVEL_ORDER[y.a.level]) || (y.a.score - x.a.score));
-    html += `<h3>Tes coins</h3>` + (ranked.length ? `<ul class="rank">${ranked.slice(0, 15).map(({ s, a }) => `<li><button type="button" data-spot="${s.id}">
-        <span class="t">${LEVELS[a.level].icon} ${esc(s.name)}</span><br>
+      .sort((x, y) => ((x.x?.state === 'closed') - (y.x?.state === 'closed')) || (LEVEL_ORDER[x.a.level] - LEVEL_ORDER[y.a.level]) || (y.a.score - x.a.score));
+    html += `<h3>Tes coins</h3>` + (ranked.length ? `<ul class="rank">${ranked.slice(0, 15).map(({ s, a, x }) => `<li><button type="button" data-spot="${s.id}">
+        <span class="t">${x?.state === 'closed' ? '⛔' : LEVELS[a.level].icon} ${esc(s.name)}</span>${x?.state === 'closed' ? ' <span class="small">(massif fermé)</span>' : ''}<br>
         <span class="small">${a.perSpecies[0] ? esc(a.perSpecies[0].label) + ' · ' : ''}${esc(a.reasons[0] ?? '')}</span></button></li>`).join('')}</ul>`
       : '<p class="muted small">Note des espèces sur tes coins pour que le conseiller puisse les évaluer.</p>');
   } catch (err) {

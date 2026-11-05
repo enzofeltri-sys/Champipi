@@ -58,6 +58,15 @@ Les migrations sont dans `supabase/migrations/`. Règles (RLS) :
 - **📖 Guide des espèces** : saison, milieux, sol, altitude et sosies dangereux (connaissances générales, à confirmer
   auprès d'une association mycologique).
 
+## Accès aux massifs (risque incendie)
+
+- Fiche d'un coin : massif officiel et accès du jour (🟢 autorisé, 🟠 déconseillé, ⛔ interdit), d'après les cartes publiées
+  chaque jour par les préfectures 04, 06, 13, 83 et 84 sur risque-prevention-incendie.fr (période réglementée : juin–septembre).
+- Contours des massifs : `site/data/massifs-acces.json` (simplifiés à ~300 m depuis les fichiers des préfectures).
+- Les niveaux du jour passent par la fonction Supabase `champi-acces` (`supabase/functions/champi-acces`), car le site
+  source ne se laisse pas lire directement depuis le navigateur. Elle demande une session connectée.
+- Toujours vérifier la carte officielle en cas de doute (lien sur la fiche).
+
 ## Photos
 
 - Stockées dans le bucket privé Supabase `champi-photos` (chemin `<id du coin>/<uuid>.jpg` + miniature `_t.jpg`).
