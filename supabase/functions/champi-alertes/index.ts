@@ -54,10 +54,13 @@ async function weatherFor(points: [number, number][]) {
   const out: any[] = [];
   for (let k = 0; k < points.length; k += 100) {
     const p = points.slice(k, k + 100);
-    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.map((x) => x[0].toFixed(3)).join(',')}&longitude=${p.map((x) => x[1].toFixed(3)).join(',')}&daily=precipitation_sum,temperature_2m_max,temperature_2m_min&past_days=14&forecast_days=3&timezone=Europe%2FParis`);
+    const q = `https://api.open-meteo.com/v1/forecast?latitude=${p.map((x) => x[0].toFixed(3)).join(',')}&longitude=${p.map((x) => x[1].toFixed(3)).join(',')}&daily=precipitation_sum,temperature_2m_max,temperature_2m_min&past_days=14&forecast_days=3&timezone=Europe%2FParis`;
+    // Modèles Météo-France (AROME, ARPEGE) via Open-Meteo ; en secours, le mélange habituel.
+    let r = await fetch(`${q}&models=meteofrance_seamless`);
+    if (!r.ok) r = await fetch(q);
     if (!r.ok) throw new Error(`Open-Meteo ${r.status}`);
     const j = await r.json();
-    out.push(...(Array.isArray(j) ? j : [j]).map((x: any) => x.daily));
+    out.push(...(Array.isArray(j) ? j : [j]).map((x: any) => ({ ...x.daily, elevation: x.elevation })));
   }
   return out;
 }
@@ -93,10 +96,10 @@ async function morningRun(cfg: any) {
   // Météo « doublée » : pluie mesurée Météo-France (relevée cette nuit) + Open-Meteo ; chacune secourt l'autre.
   const om = await weatherFor(list.map((s: any) => [s.lat, s.lon])).catch(() => null);
   const since = new Date(Date.now() - 16 * 86400000).toISOString().slice(0, 10);
-  const st = await admin.from('champi_rain_stations').select('id, name, lat, lon');
+  const st = await admin.from('champi_rain_stations').select('id, name, lat, lon, alt');
   const rows: any[] = []; let rainOk = !st.error;
   for (let from = 0; rainOk && from < 20000; from += 1000) {   // 1 000 lignes par réponse au maximum
-    const r = await admin.from('champi_rain_daily').select('station_id, day, rr').gte('day', since).order('day').order('station_id').range(from, from + 999);
+    const r = await admin.from('champi_rain_daily').select('station_id, day, rr, tn, tx, hours').gte('day', since).order('day').order('station_id').range(from, from + 999);
     if (r.error) { rainOk = false; break; }
     rows.push(...r.data); if (r.data.length < 1000) break;
   }

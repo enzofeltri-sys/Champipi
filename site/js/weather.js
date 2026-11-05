@@ -1,4 +1,4 @@
-// Météo (Open-Meteo, gratuit, sans clé, licence CC BY 4.0) et type de forêt (IGN BD Forêt V2).
+// Météo (Open-Meteo, gratuit, sans clé, licence CC BY 4.0 ; modèles Météo-France) et type de forêt (IGN BD Forêt V2).
 const OPEN_METEO = 'https://api.open-meteo.com/v1/forecast';
 const DAILY = 'precipitation_sum,temperature_2m_max,temperature_2m_min';
 const TTL = 60 * 60 * 1000;   // 1 h
@@ -58,9 +58,15 @@ export async function dailyFor(points) {
     const idx = todo.slice(k, k + 100);
     const lats = idx.map((i) => points[i][0].toFixed(3)).join(',');
     const lons = idx.map((i) => points[i][1].toFixed(3)).join(',');
-    const j = await fetchJson(`${OPEN_METEO}?latitude=${lats}&longitude=${lons}&daily=${DAILY}&past_days=14&forecast_days=3&timezone=Europe%2FParis`);
+    // Modèles de Météo-France (AROME, ARPEGE) servis par Open-Meteo ; en secours, le mélange habituel d'Open-Meteo.
+    const q = `${OPEN_METEO}?latitude=${lats}&longitude=${lons}&daily=${DAILY}&past_days=14&forecast_days=3&timezone=Europe%2FParis`;
+    let j;
+    try { j = await fetchJson(`${q}&models=meteofrance_seamless`, 1); } catch { j = await fetchJson(q); }
     const arr = Array.isArray(j) ? j : [j];
-    idx.forEach((i, n) => { out[i] = arr[n].daily; cacheSet(key(...points[i]), arr[n].daily); });
+    idx.forEach((i, n) => {
+      const d = { ...arr[n].daily, elevation: arr[n].elevation };   // altitude du point : sert à corriger les températures des stations
+      out[i] = d; cacheSet(key(...points[i]), d);
+    });
   }
   return out;
 }

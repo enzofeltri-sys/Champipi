@@ -393,11 +393,11 @@ async function loadRainIndex() {
   if (rainIdxLoading) return rainIdxLoading;
   rainIdxLoading = (async () => {
     const since = new Date(Date.now() - 16 * 86400000).toISOString().slice(0, 10);
-    const st = await sb.from('champi_rain_stations').select('id, name, lat, lon');
+    const st = await sb.from('champi_rain_stations').select('id, name, lat, lon, alt');
     if (st.error) throw st.error;
     const rows = [];
     for (let from = 0; from < 20000; from += 1000) {   // 1 000 lignes par réponse au maximum
-      const r = await sb.from('champi_rain_daily').select('station_id, day, rr').gte('day', since).order('day').order('station_id').range(from, from + 999);
+      const r = await sb.from('champi_rain_daily').select('station_id, day, rr, tn, tx, hours').gte('day', since).order('day').order('station_id').range(from, from + 999);
       if (r.error) throw r.error;
       rows.push(...r.data);
       if (r.data.length < 1000) break;
@@ -1432,7 +1432,7 @@ function meteoHtml(w, a, src = '') {
     <div class="rainbars" aria-label="Pluie jour par jour">${rows.map((r) => `<div class="d${r.date === today ? ' today' : ''}${r.date > today ? ' future' : ''}" title="${formatDate(r.date)} : ${r.rain} mm">
       <span class="mm">${r.rain >= 1 ? Math.round(r.rain) : ''}</span><span class="b" style="height:${Math.round(((r.rain || 0) / max) * 64)}px"></span><span>${r.date === today ? 'auj.' : shortDay(r.date)}</span></div>`).join('')}</div>
     <div class="temps">${rows.map((r) => `<span>${r.tmax != null ? Math.round(r.tmax) + '°' : ''}</span>`).join('')}</div>
-    <p class="small muted">Pluie sur 10 jours : <b>${w.rain10} mm</b> · températures sur 7 jours : ${w.tmin7 ?? '?'}–${w.tmax7 ?? '?'} °C · hachuré = prévision.<br>${esc(src || 'Pluie : Open-Meteo (modèle)')} · températures et prévisions : Open-Meteo.</p>`;
+    <p class="small muted">Pluie sur 10 jours : <b>${w.rain10} mm</b> · températures sur 7 jours : ${w.tmin7 ?? '?'}–${w.tmax7 ?? '?'} °C · hachuré = prévision.<br>${esc(src || 'Pluie : Open-Meteo (modèle)')} · prévisions et données manquantes : modèles Météo-France via Open-Meteo.</p>`;
 }
 
 async function renderMeteo(s) {
