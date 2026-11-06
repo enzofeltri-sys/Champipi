@@ -1,0 +1,47 @@
+<div style="font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #1f2a20; line-height: 1.5;">
+  <h1 style="font-size: 22px; margin: 0 0 12px;">🍄 Bienvenue dans notre carnet de champignons{{ if .Data.label }}, {{ .Data.label }}{{ end }} !</h1>
+
+  {{ if eq .Data.grp "ami" }}
+  <p>Enzo t'a ouvert un accès à son appli de champignons : un carnet partagé <b>entre amis</b> pour noter nos coins et nos cueillettes, avec la météo et des conseils pour savoir quand y aller.</p>
+  <p>Rassure-toi : tu verras seulement les coins des amis, et personne ne verra les tiens si tu les gardes pour toi.</p>
+  {{ else }}
+  <p>Enzo t'a ouvert un accès à notre appli de champignons : le carnet de <b>la famille</b> pour noter nos coins et nos cueillettes, avec la météo et des conseils pour savoir quand y aller.</p>
+  {{ end }}
+
+  <p style="text-align: center; margin: 24px 0;">
+    <a href="{{ .ConfirmationURL }}" style="background: #2f5e3a; color: #fff; text-decoration: none; padding: 14px 26px; border-radius: 999px; font-weight: bold; display: inline-block;">Ouvrir le carnet</a>
+  </p>
+  <p style="font-size: 13px; color: #6b746c;">Ce bouton te connecte directement, sans mot de passe. Ensuite, pour te reconnecter : <a href="https://enzofeltri-sys.github.io/Champipi/">enzofeltri-sys.github.io/Champipi</a>, ton adresse e-mail, et le code reçu par mail.</p>
+
+  <h2 style="font-size: 17px; margin: 24px 0 6px;">📲 1. Mets l'appli sur ton écran d'accueil</h2>
+  <ul style="padding-left: 20px; margin: 0;">
+    <li><b>iPhone</b> : ouvre le lien dans <b>Safari</b> → bouton Partager (le carré avec une flèche) → « Sur l'écran d'accueil ».</li>
+    <li><b>Android</b> : dans <b>Chrome</b> → menu ⋮ → « Ajouter à l'écran d'accueil ».</li>
+  </ul>
+
+  <h2 style="font-size: 17px; margin: 20px 0 6px;">🧺 2. Note une cueillette</h2>
+  <ul style="padding-left: 20px; margin: 0;">
+    <li>Touche le gros bouton <b>« ＋ J'ai trouvé quelque chose »</b>.</li>
+    <li>Place le viseur sur l'endroit, ou touche « 📍 Ma position », ou « 📷 Photo » pour une photo prise sur place.</li>
+    <li>Coche ce que tu as trouvé, ajoute une photo, donne un nom au coin.</li>
+    {{ if eq .Data.grp "ami" }}
+    <li>Choisis qui le voit : <b>🔒 Moi seul</b> (ton coin secret) ou <b>👥 Amis</b> (tous les amis du carnet).</li>
+    {{ else }}
+    <li>Choisis qui le voit : <b>🔒 Moi seul</b> (ton coin secret) ou <b>👪 Famille</b> (toute la famille).</li>
+    {{ end }}
+    <li>Si tu reviens dans un coin déjà noté, l'appli te le propose toute seule.</li>
+  </ul>
+
+  <h2 style="font-size: 17px; margin: 20px 0 6px;">🔍 3. Et ensuite</h2>
+  <ul style="padding-left: 20px; margin: 0;">
+    <li><b>Les pastilles en haut</b> (Cèpe, Girolle…) : la carte montre en vert, jaune ou rouge où c'est le bon moment.</li>
+    <li><b>🌱 Ici ?</b> : la forêt, le sol, la pluie et ce qui peut pousser là où tu es.</li>
+    <li><b>🔎 Chercher</b> : retrouve un coin par son nom ou une espèce.</li>
+    <li><b>☰ Menu</b> : le journal {{ if eq .Data.grp "ami" }}des amis{{ else }}de la famille{{ end }}, les alertes du matin quand un coin devient favorable, et l'aide complète.</li>
+  </ul>
+  <p>À la première ouverture, une petite visite guidée t'explique chaque bouton.</p>
+
+  <p style="background: #fff4e5; border-radius: 10px; padding: 10px 12px; font-size: 14px;">⚠️ L'appli aide à trouver, pas à identifier : fais toujours vérifier ta récolte par un pharmacien ou une société mycologique avant de la manger. Centre antipoison de Marseille : 04 91 75 25 25.</p>
+
+  <p>Plus on note de trouvailles, plus l'appli devient précise. Bonne cueillette ! 🍄<br>Enzo</p>
+</div>

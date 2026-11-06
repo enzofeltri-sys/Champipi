@@ -2003,7 +2003,8 @@ async function loadAdmin() {
         <span class="badge grp ${ami ? 'friends' : 'family'}">${ami ? '👥 Ami' : '👪 Famille'}</span></span>
         ${m.email === me ? '' : `<button class="del" type="button" data-remove="${esc(m.email)}">Retirer</button>`}</div>
       <div class="small muted">${esc(m.email)} · depuis le ${formatDate(m.added_at)}</div>
-      ${m.email === me ? '' : `<button class="btn link" type="button" data-grp-set="${ami ? 'famille' : 'ami'}" data-email="${esc(m.email)}">${ami ? 'Passer dans la famille' : 'Passer en ami'}</button>`}</li>`;
+      ${m.email === me ? '' : `<div class="row"><button class="btn link" type="button" data-invite="${esc(m.email)}">✉️ Envoyer l'invitation</button>
+        <button class="btn link" type="button" data-grp-set="${ami ? 'famille' : 'ami'}" data-email="${esc(m.email)}">${ami ? 'Passer dans la famille' : 'Passer en ami'}</button></div>`}</li>`;
   }).join('');
   await refreshAdminBadge();
 }
@@ -2016,6 +2017,20 @@ $('#admin-btn').addEventListener('click', async () => {
 });
 $('#dlg-admin .js-close').addEventListener('click', () => $('#dlg-admin').close());
 
+// Mail d'invitation (bienvenue + tuto + lien qui connecte directement), envoyé par le serveur.
+async function inviteMember(email, name) {
+  const { data: { session } } = await sb.auth.getSession();
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/champi-invite`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${session?.access_token ?? ''}` },
+    body: JSON.stringify({ email }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `invitation impossible (${r.status})`);
+  if (j.status === 'sent') toast(`✉️ Invitation envoyée à ${name || email}`, 5000);
+  else if (j.status === 'exists') toast(`${name || email} a déjà un compte : il suffit d'ouvrir l'appli et de se connecter avec cette adresse.`, 7000);
+  return j.status;
+}
+
 let addGrp = 'famille';
 for (const b of $$('#add-grp button')) b.addEventListener('click', () => { addGrp = b.dataset.grp; for (const x of $$('#add-grp button')) x.classList.toggle('on', x === b); });
 async function addMember(email, label, grp = 'famille') {
@@ -2025,10 +2040,11 @@ async function addMember(email, label, grp = 'famille') {
 
 $('#dlg-admin').addEventListener('click', async (e) => {
   const acc = e.target.closest('[data-accept]'), ref = e.target.closest('[data-refuse]'), rem = e.target.closest('[data-remove]');
-  const gs = e.target.closest('[data-grp-set]');
-  if (!acc && !ref && !rem && !gs) return;
+  const gs = e.target.closest('[data-grp-set]'), inv = e.target.closest('[data-invite]');
+  if (!acc && !ref && !rem && !gs && !inv) return;
   showError('#admin-error');
   try {
+    if (inv) { await inviteMember(inv.dataset.invite); return; }
     if (gs) {
       const ami = gs.dataset.grpSet === 'ami';
       if (!confirm(ami ? 'Passer cette personne en ami ? Elle ne verra plus les coins 👪 Famille (ses propres coins restent à elle).' : 'Faire entrer cette personne dans la famille ? Elle verra les coins 👪 Famille.')) return;
@@ -2062,6 +2078,7 @@ $('#add-form').addEventListener('submit', async (e) => {
     await sb.from('champi_access_requests').delete().eq('email', email);   // si elle avait déjà demandé
     $('#add-email').value = ''; $('#add-label').value = '';
     toast(`${label || email} ajouté(e) ✔`);
+    await inviteMember(email, label).catch((err) => toast(`Ajouté(e), mais invitation non envoyée : ${frError(err)}`, 7000));
     await loadAdmin();
   } catch (err) { showError('#admin-error', frError(err)); }
   busy(btn, false);

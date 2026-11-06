@@ -30,6 +30,7 @@ async function open(browser, who) {
     const table = url.pathname.replace('/rest/v1/', '');
     const eq = (k) => url.searchParams.get(k)?.replace(/^eq\./, '');
     if (url.pathname.startsWith('/auth/')) return send({});
+    if (url.pathname === '/functions/v1/champi-invite') { db.invites = [...(db.invites ?? []), JSON.parse(req.postData() || '{}').email]; return send({ status: 'sent' }); }
     if (table === 'champi_spot_shares') return send([]);
     if (table === 'champi_admins') return send(db.admins.filter((e) => e === who.email && e === eq('email')).map((email) => ({ email })));
     if (table === 'champi_allowed_emails') {
