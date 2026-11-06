@@ -7,7 +7,8 @@ import {
 } from './logic.js';
 import { createPhotoStore, thumbPath } from './photos.js';
 import { GUIDE, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown } from './advisor.js';
-import { dailyFor as openMeteoFor, forestAt, soilAt, historyFor, terrainAt } from './weather.js';
+import { dailyFor as openMeteoFor, forestAt, soilAt, historyFor, terrainAt, trophAt } from './weather.js';
+import { soilGuess, trophText } from './soil.js';
 import { ASPECT_TEXT } from './terrain.js';
 import { rainIndex, mergeRain, rainSource, distKm } from './rain.js';
 import { treesAt, soilKind, whatGrows, fix as cleanText } from './here.js';
@@ -830,8 +831,9 @@ async function analyzeHere(lat, lon) {
   hereMarker = L.marker([lat, lon], { icon: L.divIcon({ className: '', html: '<div class="here-dot">🌱</div>', iconSize: [34, 34], iconAnchor: [17, 17] }), interactive: false, zIndexOffset: 950 }).addTo(map);
   $('#here-body').innerHTML = '<p class="muted">Analyse en cours… (forêt, sol, altitude, météo)</p>';
   $('#dlg-here').showModal();
-  const [forest, soil, alt, daily] = await Promise.allSettled([
+  const [forest, soil, alt, daily, trophR] = await Promise.allSettled([
     forestAt(lat, lon), soilAt(lat, lon), terrainAt(lat, lon).catch(() => fetchAltitude(lat, lon).then((alt) => ({ alt }))), dailyFor([[lat, lon]]).then((d) => d[0]),
+    trophAt(lat, lon),
   ]);
   if (!$('#dlg-here').open || herePoint.lat !== round6(lat) || herePoint.lon !== round6(lon)) return;
   const m = month();
@@ -841,13 +843,18 @@ async function analyzeHere(lat, lon) {
   const z = ter?.alt ?? null, expo = ter?.aspect ?? null;
   const trees = treesAt(tfv);
   const w = daily.status === 'fulfilled' && daily.value ? summarizeWeather(daily.value, todayIso()) : null;
-  const list = whatGrows({ trees, soil: sk?.kind ?? null, alt: z, month: m });
+  const troph = trophR.status === 'fulfilled' ? trophR.value : undefined;
+  const guess = soilGuess(troph ?? null, sk?.kind ?? null);
+  const list = whatGrows({ trees, soil: guess.kind, alt: z, month: m });
   const mainTrees = [...trees].filter(([, k]) => k === 2).map(([t]) => t);
 
   const place = `<div class="here-place">
     <div>🌲 <b>Forêt</b> : ${tfv === undefined ? '<span class="muted">service IGN indisponible</span>'
       : tfv ? esc(tfv) : '<span class="muted">pas de forêt cartographiée ici</span>'}</div>
-    <div>🪨 <b>Sol</b> : ${sk === undefined ? '<span class="muted">service indisponible</span>'
+    <div>🧪 <b>Sol des forêts</b> : ${troph === undefined ? '<span class="muted">relevés indisponibles</span>'
+      : troph ? `<b>${esc(troph.label)}</b> <span class="small muted">(${esc(trophText(troph).replace(/^[^·]*· /, ''))})</span>`
+      : '<span class="muted">pas assez de relevés de l\'Inventaire forestier autour</span>'}</div>
+    <div>🪨 <b>Carte des sols</b> : ${sk === undefined ? '<span class="muted">service indisponible</span>'
       : !sk.name && !sk.text ? '<span class="muted">pas de donnée de sol pour cet endroit</span>'
       : `${sk.kind ? `<b>${SOIL_TEXT[sk.kind]}</b>` : '<span class="muted">calcaire ou siliceux : non déterminé</span>'}${sk.name ? ` · <span class="small muted">${esc(sk.name.toLowerCase())}</span>` : ''}
         ${sk.text ? `<details class="small"><summary>Description du terrain</summary>${esc(sk.text)}</details>` : ''}`}</div>
@@ -857,7 +864,7 @@ async function analyzeHere(lat, lon) {
   </div>`;
 
   const items = list.map((r) => {
-    const a = (r.inSeason || r.late) && w ? assess(w, { month: m, species: [r.id], trees: mainTrees.length ? mainTrees : [...trees.keys()], alt: z, exposure: expo }) : null;
+    const a = (r.inSeason || r.late) && w ? assess(w, { month: m, species: [r.id], trees: mainTrees.length ? mainTrees : [...trees.keys()], alt: z, exposure: expo, soil: guess.kind }) : null;
     const lv = a?.level ? LEVELS[a.level] : null;
     return `<div class="here-sp">
       <div class="head"><b>${esc(r.label)}</b>
@@ -998,6 +1005,7 @@ function openEdit() {
   $('#edit-coords').textContent = formatCoords(d.lat, d.lon);
   $('#edit-photo').hidden = true;   // la photo va avec la cueillette (rubrique du haut)
   fillAltitude(d);
+  fillSoil(d);
   fillExposure(d);
   fillForest(d);
   showError('#edit-error');
@@ -1041,6 +1049,21 @@ async function fillExposure(d) {
     if (!sel.value && t.aspect !== 'plat') sel.value = t.aspect;   // calculée avec l'altitude IGN ; modifiable
   } catch { /* hors ligne : on laisse vide */ }
 }
+// Terrain d'un nouveau coin : relevés de l'Inventaire forestier, sinon carte des sols ; modifiable.
+async function fillSoil(d) {
+  const sel = $('#edit-soil'), src = $('#edit-soil-src');
+  if (d.existing) { src.textContent = ''; return; }
+  const key = `${d.lat},${d.lon}`;
+  if (sel.dataset.for === key) return;
+  sel.dataset.for = key; src.textContent = '';
+  const [t, m] = await Promise.allSettled([trophAt(d.lat, d.lon), soilAt(d.lat, d.lon)]);
+  if (state.draft !== d || sel.value) return;
+  const troph = t.status === 'fulfilled' ? t.value : null;
+  const g = soilGuess(troph, m.status === 'fulfilled' ? soilKind(m.value).kind : null);
+  if (g.kind) { sel.value = g.kind; src.textContent = g.source === 'ifn' ? `(automatique : ${troph.n} relevés de l'Inventaire forestier)` : '(automatique : carte des sols)'; }
+  else if (troph) src.textContent = '(relevés : sol neutre)';
+}
+$('#edit-soil').addEventListener('change', () => { $('#edit-soil-src').textContent = ''; });
 async function fillAltitude(d) {
   const input = $('#edit-altitude');
   const key = `${d.lat},${d.lon}`;
@@ -1196,6 +1219,20 @@ function renderFound(s) {
     .map(([sp, k]) => `<span class="sp${state.species.includes(sp) ? ' match' : ''}">${esc(speciesLabel(sp))} <b>×${k}</b> <span class="small muted">· ${formatDate(lastOn.get(sp))}</span></span>`).join('');
 }
 
+/** Rubrique « Détails » d'un coin (arbres, terrain, exposition…). */
+function renderDetails(s) {
+  const det = [
+    ['Arbres', (s.trees ?? []).map((t) => labelOf(TREES, t)).join(', ')],
+    ['Terrain', s.soil ? labelOf(SOILS, s.soil) : autoSoilText(s)],
+    ['Exposition', s.exposure ?? ''],
+    ['Altitude', s.altitude != null ? `${s.altitude} m` : ''],
+    ['Forêt IGN', s.forest_type ?? ''],
+    ['Accès', s.access ?? ''],
+  ].filter(([, v]) => v);
+  $('#spot-details').innerHTML = det.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('');
+  $('#spot-details').hidden = !det.length;
+}
+
 function renderSpot(id) {
   const s = state.spots.find((x) => x.id === id);
   if (!s) { $('#dlg-spot').close(); return; }
@@ -1219,20 +1256,12 @@ function renderSpot(id) {
     : '<span class="muted small">Aucune espèce notée</span>';
   $('#spot-note').textContent = s.note || '';
   $('#spot-note').hidden = !s.note;
-  const det = [
-    ['Arbres', (s.trees ?? []).map((t) => labelOf(TREES, t)).join(', ')],
-    ['Terrain', s.soil ? labelOf(SOILS, s.soil) : ''],
-    ['Exposition', s.exposure ?? ''],
-    ['Altitude', s.altitude != null ? `${s.altitude} m` : ''],
-    ['Forêt IGN', s.forest_type ?? ''],
-    ['Accès', s.access ?? ''],
-  ].filter(([, v]) => v);
-  $('#spot-details').innerHTML = det.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('');
-  $('#spot-details').hidden = !det.length;
+  renderDetails(s);
   $('#spot-coords').textContent = `📌 ${formatCoords(s.lat, s.lon)}`;
   $('#spot-photos').innerHTML = thumbs(state.photos.filter((p) => p.spot_id === id && !p.find_id));
   $('#spot-photo-add').hidden = !mine || !!s.pending;
   renderMeteo(s);
+  autoSoilFor(s).then((changed) => { if (changed && state.openSpotId === s.id) { renderDetails(s); renderMeteo(s); } }).catch(() => {});
   renderAccess(s);
   renderBilan(s);
   $('#spot-route').href = directionsUrl(s.lat, s.lon);
@@ -1568,9 +1597,38 @@ $('#prof-save').addEventListener('click', async () => {
 const LEVEL_ORDER = { bon: 0, moyen: 1, faible: 2, 'hors-saison': 3 };
 const shortDay = (iso) => String(Number(iso.slice(8, 10)));
 
+// Sol d'un coin : celui noté dans sa fiche, sinon celui des relevés de l'Inventaire forestier (puis carte des sols),
+// cherché à l'ouverture de la fiche et gardé sur le téléphone.
+const SOIL_AUTO = 'champi-soil-auto';
+const soilAuto = new Map((() => { try { return Object.entries(JSON.parse(localStorage.getItem(SOIL_AUTO) || '{}')); } catch { return []; } })());
+function autoSoilText(s) {
+  const a = soilAuto.get(s.id);
+  if (!a || a.at !== `${s.lat},${s.lon}` || !a.text) return '';
+  const l = a.label || 'neutre';
+  return `${l[0].toUpperCase()}${l.slice(1)} (automatique : ${a.text})`;
+}
+function spotSoil(s) {
+  if (s.soil) return s.soil;
+  const a = soilAuto.get(s.id);
+  return a && a.at === `${s.lat},${s.lon}` ? a.kind : null;
+}
+async function autoSoilFor(s) {
+  const key = `${s.lat},${s.lon}`;
+  const a = soilAuto.get(s.id);
+  if (s.soil || (a && a.at === key)) return false;
+  const [t, m] = await Promise.allSettled([trophAt(s.lat, s.lon), soilAt(s.lat, s.lon)]);
+  if (t.status === 'rejected' && m.status === 'rejected') return false;
+  const troph = t.status === 'fulfilled' ? t.value : null;
+  const g = soilGuess(troph, m.status === 'fulfilled' ? soilKind(m.value).kind : null);
+  soilAuto.set(s.id, { at: key, kind: g.kind, source: g.source, label: troph?.label ?? (g.kind === 'siliceux' ? 'acide' : g.kind ?? ''),
+    text: troph ? trophText(troph).replace(/^[^·]*· /, '') : g.kind ? 'carte des sols (Gis Sol)' : '' });
+  try { localStorage.setItem(SOIL_AUTO, JSON.stringify(Object.fromEntries(soilAuto))); } catch { /* stockage plein ou privé */ }
+  return true;
+}
+
 function spotContext(s, w = null) {
   const prof = profiles.get(s.id)?.profile;
-  return { month: month(), species: spotSpecies(s, state.finds), trees: s.trees ?? [], history: state.finds.filter((f) => f.spot_id === s.id), alt: s.altitude ?? null, exposure: s.exposure ?? null,
+  return { month: month(), species: spotSpecies(s, state.finds), trees: s.trees ?? [], history: state.finds.filter((f) => f.spot_id === s.id), alt: s.altitude ?? null, exposure: s.exposure ?? null, soil: spotSoil(s),
     personal: w && prof ? personalAdvice(w, prof) : null };
 }
 

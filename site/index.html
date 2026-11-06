@@ -262,7 +262,7 @@
           <span class="small">Arbres / milieu</span>
           <div id="edit-trees" class="chips"></div>
           <div class="grid2">
-            <label>Terrain<select id="edit-soil"><option value="">—</option></select></label>
+            <label>Terrain <span id="edit-soil-src" class="small muted"></span><select id="edit-soil"><option value="">—</option></select></label>
             <label>Exposition<select id="edit-exposure"><option value="">—</option></select></label>
           </div>
           <label for="edit-altitude">Altitude (m) <span class="muted small" id="edit-alt-src"></span></label>
@@ -441,7 +441,7 @@
       <details><summary>🌱 Qu'est-ce qui pousse ici ?</summary>
         <p>Touche <b>🌱 Ici ?</b> à droite, place le viseur sur un endroit (ou « 📍 Ma position »), puis « Analyser ici ».</p>
         <ul>
-          <li><b>Le lieu</b> : type de forêt et arbres, <b>sol calcaire ou siliceux</b> (avec la description du terrain), altitude, <b>exposition et pente</b> (versant nord, sud…), <b>température et humidité du sol</b>, pluie des 10 derniers jours.</li>
+          <li><b>Le lieu</b> : type de forêt et arbres, <b>sol acide ou calcaire</b> : d'abord les relevés de terrain de l'<b>Inventaire forestier</b> (IGN) autour de l'endroit, sinon la carte des sols (Gis Sol, avec la description du terrain). Le sol remplit aussi tout seul le « Terrain » d'un nouveau coin, et compte dans l'avis (girolle, oronge, chanterelle grise sur sol acide ; lactaire sanguin, bérigoule sur calcaire ; un petit plus pour le cèpe sur acide, la trompette, la saint-georges et la morille sur calcaire), altitude, <b>exposition et pente</b> (versant nord, sud…), <b>température et humidité du sol</b>, pluie des 10 derniers jours.</li>
           <li><b>Les champignons dont c'est le milieu</b> : « milieu typique » (les bons arbres) ou « possible » (arbres mélangés), avec la saison et, s'ils sont en saison, les conditions du moment.</li>
           <li>Un champignon qui demande un autre sol (ex. girolle sur calcaire) ou une autre altitude n'est pas proposé.</li>
           <li>« Voir ses forêts sur la carte » colore les forêts favorables autour ; « ＋ Noter un coin ici » crée un coin à cet endroit.</li>

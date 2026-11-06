@@ -225,7 +225,7 @@ export const TREES = [
   { id: 'cedre', label: 'Cèdre' }, { id: 'meleze', label: 'Mélèze' },
   { id: 'prairie', label: 'Prairie / pelouse' },
 ];
-export const SOILS = [{ id: 'calcaire', label: 'Calcaire' }, { id: 'siliceux', label: 'Siliceux' }, { id: 'mixte', label: 'Mixte' }];
+export const SOILS = [{ id: 'calcaire', label: 'Calcaire' }, { id: 'siliceux', label: 'Siliceux (acide)' }, { id: 'mixte', label: 'Mixte' }];
 export const EXPOSURES = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
 export const QUANTITIES = [{ id: 'quelques', label: 'Quelques-uns' }, { id: 'panier', label: 'Un panier' }, { id: 'abondant', label: 'Abondant' }];
 export const CONDITIONS = [{ id: 'jeunes', label: 'Jeunes' }, { id: 'a-point', label: 'À point' }, { id: 'vieux', label: 'Vieux / véreux' }];

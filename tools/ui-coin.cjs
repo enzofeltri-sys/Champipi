@@ -38,8 +38,11 @@ const db = { spots: [{ id: S1, owner: ME, visibility: 'private', name: 'Pinède 
   await page.click('#nf-species [data-sp=cepe]'); await page.click('#nf-species [data-sp=girolle]');
   await page.selectOption('#nf-quantity', 'panier');
   await page.fill('#edit-name', 'Châtaigneraie nouvelle');
+  await page.waitForFunction(() => document.querySelector('#edit-soil').value || document.querySelector('#edit-soil-src').textContent, null, { timeout: 20000 }).catch(() => {});
+  console.log('terrain automatique :', await page.inputValue('#edit-soil'), await page.textContent('#edit-soil-src'));
   await page.screenshot({ path: `${OUT}/k1-formulaire.png` });
   await page.click('#edit-save'); await page.waitForTimeout(1200);
+  console.log('sol envoyé :', JSON.stringify(db.posts.find(([t]) => t === 'champi_spots')?.[1]?.soil));
   console.log('envoyé :', db.posts.map(([t, r]) => `${t.replace('champi_', '')}${r.species ? ' ' + JSON.stringify(r.species) : ''}${r.quantity ? ' ' + r.quantity : ''}`).join(' + '));
   console.log('message :', await page.textContent('#toast'), '| fiche ouverte :', await page.textContent('#spot-name'));
   console.log('fiche · rubrique :', (await page.locator('#dlg-spot h3').first().textContent()).trim(), '| trouvailles :', await page.locator('#find-list > li').count());
@@ -64,6 +67,8 @@ const db = { spots: [{ id: S1, owner: ME, visibility: 'private', name: 'Pinède 
   await page.screenshot({ path: `${OUT}/k3-proche.png` });
   await page.click('#near-yes'); await page.waitForTimeout(500);
   console.log('→ fiche :', await page.textContent('#spot-name'), '| « Nouvelle trouvaille » ouverte :', await page.evaluate(() => document.querySelector('#find-add').open), '| rien envoyé :', db.posts.length === n0);
+  await page.waitForFunction(() => /Terrain/.test(document.querySelector('#spot-details').textContent), null, { timeout: 20000 }).catch(() => {});
+  console.log('fiche · sol automatique :', (await page.textContent('#spot-details')).replace(/\s+/g, ' '));
   await page.click('#dlg-spot .js-close');
 
   // 3. « Rien aujourd'hui » : coin seul

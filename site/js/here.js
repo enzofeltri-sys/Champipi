@@ -2,7 +2,7 @@
 // diffusée par l'IGN), de l'altitude et du mois, liste les champignons du carnet qui ont leur milieu ici.
 // Règles simples et transparentes, pas d'IA. Indicatif : un milieu favorable ne garantit rien.
 import { SPECIES, seasonText, seasonOf } from './logic.js';
-import { GUIDE } from './advisor.js';
+import { GUIDE, SOIL_SOFT } from './advisor.js';
 import { speciesTrees } from './forests.js';
 
 const FEUILLUS = ['chene-blanc', 'chene-vert', 'chataignier', 'hetre'];
@@ -76,7 +76,7 @@ export function whatGrows({ trees, soil = null, alt = null, month }) {
       if (soil === g.soil) { score += 1; why.push({ ok: true, text: `sol ${soil}` }); }
       else if (soil) { score -= 3; why.push({ ok: false, text: `préfère un sol ${g.soil} (ici ${soil})` }); }
       else why.push({ ok: null, text: `préfère un sol ${g.soil} (sol non déterminé ici)` });
-    }
+    } else if (soil && SOIL_SOFT[sp.id] === soil) { score += 1; why.push({ ok: true, text: `sol ${soil === 'siliceux' ? 'acide' : soil} : favorable` }); }
     if (alt != null) {
       if (alt < g.alt[0] - 100 || alt > g.alt[1] + 100) { score -= 3; why.push({ ok: false, text: `rare à ${alt} m (plutôt ${g.alt[0]}–${g.alt[1]} m)` }); }
       else why.push({ ok: true, text: `altitude ${alt} m` });

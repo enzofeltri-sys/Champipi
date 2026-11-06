@@ -68,7 +68,7 @@ async function weatherFor(points: [number, number][]) {
 async function morningRun(cfg: any) {
   const [subs, spots, finds, shares, allowed, profiles, log] = await Promise.all([
     admin.from('champi_push_subscriptions').select('*'),
-    admin.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, trees, altitude, exposure'),
+    admin.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, trees, altitude, exposure, soil'),
     admin.from('champi_finds').select('spot_id, found_on, species'),
     admin.from('champi_spot_shares').select('spot_id, user_id'),
     admin.from('champi_allowed_emails').select('email'),
@@ -114,7 +114,7 @@ async function morningRun(cfg: any) {
   const verdict = new Map(list.filter((_: any, i: number) => daily[i]).map((s: any) => {
     const i = list.indexOf(s);
     const w = summarizeWeather(daily[i], day);
-    const a = assess(w, { month, species: spotSpecies(s, finds.data!), trees: s.trees ?? [], history: finds.data!.filter((f: any) => f.spot_id === s.id), alt: s.altitude ?? null, exposure: s.exposure ?? null });
+    const a = assess(w, { month, species: spotSpecies(s, finds.data!), trees: s.trees ?? [], history: finds.data!.filter((f: any) => f.spot_id === s.id), alt: s.altitude ?? null, exposure: s.exposure ?? null, soil: s.soil ?? null });
     return [s.id, { s, a }];
   }));
 

@@ -106,6 +106,24 @@ export async function soilAt(lat, lon) {
   return p;
 }
 
+// Acidité du sol des forêts : relevés de l'Inventaire forestier de l'IGN autour du point (rayon ~6 km).
+import { TROPH_LAYER, trophSummary } from './soil.js';
+const trophCache = new Map();
+export async function trophAt(lat, lon) {
+  const k = lat.toFixed(3) + ',' + lon.toFixed(3);
+  if (trophCache.has(k)) return trophCache.get(k);
+  const dy = 0.055, dx = 0.075;   // ~6 km
+  const url = 'https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature'
+    + `&TYPENAMES=${TROPH_LAYER}&OUTPUTFORMAT=application/json&COUNT=200&SRSNAME=EPSG:4326`
+    + `&BBOX=${lat - dy},${lon - dx},${lat + dy},${lon + dx},urn:ogc:def:crs:EPSG::4326`;
+  const j = await fetchJson(url, 2);
+  const pts = (j.features ?? []).filter((f) => f.geometry?.coordinates)
+    .map((f) => ({ lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], troph: Number(f.properties?.troph) }));
+  const v = trophSummary(pts, lat, lon);
+  trophCache.set(k, v);
+  return v;
+}
+
 // Altitude, pente et exposition d'un point (IGN RGE ALTI : le point et 4 voisins à 40 m, en une requête).
 import { slopeAspect, offsets } from './terrain.js';
 const terrainCache = new Map();

@@ -10,6 +10,11 @@ export const SOIL_T = {
   trompette: [8, 15], oronge: [16, 24], coulemelle: [12, 20], berigoule: [10, 18], morille: [8, 14],
   'saint-georges': [8, 14], 'chanterelle-grise': [4, 12],
 };
+// Préférences de sol « souples » (un plus quand le sol convient, jamais un refus) : le cèpe pousse aussi sur calcaire,
+// mais il est plus fréquent sur sol acide ; trompette, saint-georges et morille aiment les sols riches, calcaires ou neutres.
+// Les préférences nettes (girolle, oronge… : GUIDE[].soil) excluent l'autre type de sol.
+export const SOIL_SOFT = { cepe: 'siliceux', trompette: 'calcaire', 'saint-georges': 'calcaire', morille: 'calcaire' };
+
 export const GUIDE = {
   'lactaire-sanguin': { latin: 'Lactarius sanguifluus', trees: ['pin-alep', 'pin-sylvestre', 'pin-maritime'], soil: 'calcaire', alt: [0, 1200],
     habitat: 'Sous les pins (surtout pin d\'Alep), sols calcaires, pinèdes claires.',
@@ -133,7 +138,7 @@ export function nextSeason(id, month) {
  * @param w résumé météo (summarizeWeather) ou null
  * @param ctx { month, species: ids, trees: ids, history: [{ found_on, species[] }] }
  */
-export function assess(w, { month, species = [], trees = [], history = [], personal = null, alt = null, exposure = null }) {
+export function assess(w, { month, species = [], trees = [], history = [], personal = null, alt = null, exposure = null, soil = null }) {
   const known = species.filter((id) => SPECIES.some((s) => s.id === id && s.months.length));
   // Fin de saison (ex. cèpe en décembre en Provence) : seulement par temps doux, sans gel, à basse altitude.
   const mild = !!w && w.frost7 === 0 && w.tmin7 != null && w.tmin7 >= 4 && (alt == null || alt < LATE_MAX_ALT);
@@ -191,6 +196,13 @@ export function assess(w, { month, species = [], trees = [], history = [], perso
       const cool = w.soilT3 != null && st ? w.soilT3 < st[0] : (w.tmin7 != null && w.tmin7 < 5);
       if (dryish && !cool) { score += face === 'nord' ? 1 : -1; reasons.push(face === 'nord' ? 'versant nord : garde l\'humidité' : 'versant sud : sèche vite'); }
       else if (cool && !dryish) { score += face === 'sud' ? 1 : -1; reasons.push(face === 'sud' ? 'versant sud : plus chaud' : 'versant nord : plus froid'); }
+    }
+    // Sol (relevés de l'Inventaire forestier, carte des sols ou saisi à la main) : « mixte » ou inconnu → rien.
+    if (soil === 'calcaire' || soil === 'siliceux') {
+      const hard = g?.soil, soft = SOIL_SOFT[id], name = soil === 'siliceux' ? 'acide' : 'calcaire';
+      if (hard && hard === soil) { score += 1; reasons.push(`sol ${name} : celui qu'il préfère`); }
+      else if (hard) { score -= 2; reasons.push(`sol ${name} : il préfère un sol ${hard === 'siliceux' ? 'acide' : 'calcaire'}`); }
+      else if (soft === soil) { score += 1; reasons.push(`sol ${name} : favorable`); }
     }
     if (!sp.months.includes(month)) { score -= 1; reasons.push('fin de saison : possible car doux et sans gel'); }
     if (g?.trees.length && trees.length) {
