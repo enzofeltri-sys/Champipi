@@ -157,7 +157,7 @@ export function sortSpots(spots, finds) {
 }
 
 /**
- * Filtre : scope 'all' | 'mine' | 'family', species = id ou '' (toutes).
+ * Filtre : scope 'all' | 'mine' | 'family' (= tout sauf « Moi seul »), species = id ou '' (toutes).
  * Une espèce correspond si elle est notée au coin ou dans une de ses trouvailles.
  */
 export function filterSpots(spots, finds, { scope = 'all', species = '', me = null } = {}) {
@@ -169,7 +169,7 @@ export function filterSpots(spots, finds, { scope = 'all', species = '', me = nu
   }
   return spots.filter((s) => {
     if (scope === 'mine' && s.owner !== me) return false;
-    if (scope === 'family' && s.visibility !== 'family' && !s.sharedWithMe) return false;   // + coins partagés avec moi
+    if (scope === 'family' && s.visibility === 'private' && !s.sharedWithMe) return false;   // « Partagés » : famille, amis, partagés avec moi
     const want = Array.isArray(species) ? species : species ? [species] : [];   // un ou plusieurs champignons : l'un d'eux
     if (want.length && !want.some((sp) => (s.species ?? []).includes(sp) || fromFinds.get(s.id)?.has(sp))) return false;
     return true;

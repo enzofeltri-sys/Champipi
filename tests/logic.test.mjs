@@ -187,3 +187,8 @@ test('recherche rapide : nom, espèce, note, trouvaille, personne — sans accen
   assert.equal(hit.why, 'note : Parking après le pont');
   assert.match(searchHits(spots, finds, 'gros')[0].why, /^trouvaille du 3 octobre 2026 : sous le gros chêne/);
 });
+
+test('onglet « Partagés » : famille, amis et partagés avec moi ; pas « Moi seul »', () => {
+  const sp = [{ id: 'p', owner: 'me', visibility: 'private' }, { id: 'a', owner: 'x', visibility: 'friends' }, { id: 'f', owner: 'x', visibility: 'family' }, { id: 's', owner: 'x', visibility: 'private', sharedWithMe: true }];
+  assert.deepEqual(filterSpots(sp, [], { scope: 'family', me: 'me' }).map((x) => x.id), ['a', 'f', 's']);
+});

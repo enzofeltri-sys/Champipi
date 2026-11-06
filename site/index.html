@@ -221,7 +221,7 @@
       <div class="seg" id="scope-seg" role="radiogroup" aria-label="Quels coins">
         <button type="button" data-scope="all" class="on" role="radio" aria-checked="true">Tous</button>
         <button type="button" data-scope="mine" role="radio" aria-checked="false">À moi</button>
-        <button type="button" data-scope="family" role="radio" aria-checked="false">Famille</button>
+        <button type="button" data-scope="family" role="radio" aria-checked="false">Partagés</button>
       </div>
       <input id="search" type="search" placeholder="🔎 Rechercher un coin, une note, une espèce…" autocomplete="off" aria-label="Rechercher">
       <p class="small muted" id="list-count"></p>
@@ -266,6 +266,7 @@
       <div class="seg" id="edit-vis" role="radiogroup">
         <button type="button" data-vis="private" class="on vis-private">🔒 Moi seul</button>
         <button type="button" data-vis="family" class="vis-family">👪 Famille</button>
+        <button type="button" data-vis="friends" class="vis-friends">👥 Amis</button>
       </div>
       <label for="edit-note">Notes sur le coin</label>
       <textarea id="edit-note" rows="3" maxlength="2000" placeholder="Repères pour le retrouver, astuces…"></textarea>
@@ -469,7 +470,7 @@
           <li>Touche <b>« ＋ J'ai trouvé quelque chose »</b> : un viseur rouge apparaît au centre.</li>
           <li>Fais glisser la carte pour mettre le viseur sur l'endroit, ou touche <b>📍 Ma position</b> si tu y es, ou <b>📷 Photo</b> pour une photo prise sur place (l'appli lit sa position quand le téléphone l'a gardée).</li>
           <li>Touche <b>« ✓ C'est ici »</b>. <b>Si un de tes coins est à moins de 150 m</b>, l'appli te demande si c'est le même : « Oui » ajoute la trouvaille à ce coin.</li>
-          <li>Sinon, un seul formulaire : en haut <b>ce que tu as trouvé</b> (espèces, date, quantité, état, photos), en bas <b>le coin</b> (nom, 🔒 Moi seul ou 👪 Famille). Enregistrer crée les deux d'un coup.</li>
+          <li>Sinon, un seul formulaire : en haut <b>ce que tu as trouvé</b> (espèces, date, quantité, état, photos), en bas <b>le coin</b> (nom, 🔒 Moi seul, 👪 Famille ou 👥 Amis). Enregistrer crée les deux d'un coup.</li>
         </ol>
         <p>Pour repérer un endroit sans rien y avoir trouvé : coche <b>« Rien aujourd'hui : je repère juste l'endroit »</b>.</p>
         <p>« Détails de l'endroit » : arbres, terrain, exposition, accès. L'altitude, l'exposition et le type de forêt (IGN) se remplissent tout seuls.</p>
@@ -482,10 +483,12 @@
         <p>« 📍 Le coin : météo, bilan et détails » : pluie des derniers jours, avis du conseiller, bilan du coin (meilleurs mois), accès au massif, modifier, partager.</p>
       </details>
 
-      <details><summary>👪 Moi seul, Famille, partager</summary>
+      <details><summary>👪 Moi seul, Famille, Amis, partager</summary>
         <ul>
           <li><b>🔒 Moi seul</b> : personne d'autre ne voit le coin.</li>
-          <li><b>👪 Famille</b> : tous les membres le voient, avec son journal et ses photos.</li>
+          <li><b>👪 Famille</b> : seuls les membres de la famille le voient, avec son journal et ses photos. Les amis ne le voient jamais.</li>
+          <li><b>👥 Amis</b> : la famille <b>et</b> les amis le voient. Les amis ne peuvent choisir que 🔒 Moi seul ou 👥 Amis.</li>
+          <li>Dans la liste des coins, l'onglet <b>Partagés</b> montre tout ce qui n'est pas « Moi seul ».</li>
           <li><b>🤝 Partager…</b> (dans les détails d'un coin « Moi seul ») : choisis une ou plusieurs personnes précises. Elles peuvent y noter leurs trouvailles, et « Ne plus voir ce coin ».</li>
           <li>Seul le créateur d'un coin peut le modifier ou le supprimer. Chacun ne peut supprimer que ses propres trouvailles et photos.</li>
         </ul>
@@ -699,7 +702,7 @@
   <dialog id="dlg-admin" class="sheet">
     <div class="stack">
       <div class="sheet-head">
-        <h2>👑 Gérer la famille</h2>
+        <h2>👑 Gérer la famille et les amis</h2>
         <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
       </div>
       <h3>Demandes en attente</h3>
@@ -710,8 +713,12 @@
           <label>E-mail<input id="add-email" type="email" required inputmode="email" autocomplete="off" placeholder="prenom@exemple.fr"></label>
           <label>Prénom<input id="add-label" maxlength="40" placeholder="Prénom"></label>
         </div>
-        <button class="btn primary" type="submit">Ajouter à la famille</button>
-        <p class="small muted">La personne pourra ensuite se connecter avec cette adresse et verra directement les coins de la famille.</p>
+        <div class="seg" id="add-grp" role="radiogroup" aria-label="Groupe">
+          <button type="button" data-grp="famille" class="on vis-family">👪 Famille</button>
+          <button type="button" data-grp="ami" class="vis-friends">👥 Ami</button>
+        </div>
+        <button class="btn primary" type="submit">Ajouter</button>
+        <p class="small muted">La personne pourra ensuite se connecter avec cette adresse. Un <b>ami</b> ne voit que ses coins et les coins 👥 Amis, jamais ceux de la famille.</p>
       </form>
       <p id="admin-error" class="error" role="alert" hidden></p>
       <h3>Membres <span id="member-count" class="muted small"></span></h3>
