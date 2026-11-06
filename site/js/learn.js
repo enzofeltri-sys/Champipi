@@ -8,6 +8,11 @@ export const MIN_FINDS = 3;   // en dessous, on n'en tire pas de règle
 const median = (a) => { const s = [...a].sort((x, y) => x - y); const n = s.length; return n ? (n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2) : null; };
 const addDays = (iso, k) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + k); return d.toISOString().slice(0, 10); };
 
+/** Empreinte des trouvailles d'un coin : le profil n'est recalculé que si elle change (appli et alertes). */
+export function profileKey(finds) { return finds.map((f) => f.id + f.found_on).sort().join('|'); }
+/** Les 12 trouvailles les plus récentes : celles dont on va chercher la météo (une seule requête d'archive). */
+export function recentFinds(finds) { return [...finds].sort((a, b) => (a.found_on < b.found_on ? 1 : -1)).slice(0, 12); }
+
 /** Période d'historique à demander pour un coin : 15 jours avant la première trouvaille → la dernière. */
 export function historyRange(finds) {
   const dates = finds.map((f) => f.found_on).sort();

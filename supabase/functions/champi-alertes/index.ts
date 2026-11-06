@@ -8,7 +8,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import webpush from 'npm:web-push@3.6.7';
 // Règles du conseiller : copie générée depuis l'appli (node tools/build-alertes.mjs).
-import { summarizeWeather, assess, spotSpecies, SPECIES } from './rules.js';
+import { summarizeWeather, assess, spotSpecies, SPECIES, MIN_FINDS, profileKey, recentFinds, historyRange, findConditions, spotProfile, personalAdvice } from './rules.js';
 import { rainIndex, mergeRain } from './rain.js';
 
 const SITE = 'https://enzofeltri-sys.github.io/Champipi/';
@@ -65,11 +65,35 @@ async function weatherFor(points: [number, number][]) {
   return out;
 }
 
+// Expérience de chaque coin (même calcul que la fiche dans l'appli) : pluie et délai avant ses trouvailles.
+// Recalculée seulement quand ses trouvailles changent ; rangée dans champi_spot_profiles.
+async function learnedProfiles(list: any[], finds: any[]) {
+  const out = new Map<string, any>();
+  const { data: cache } = await admin.from('champi_spot_profiles').select('spot_id, key, profile');
+  const byId = new Map((cache ?? []).map((r: any) => [r.spot_id, r]));
+  for (const s of list) {
+    const fs = finds.filter((f: any) => f.spot_id === s.id);
+    if (fs.length < MIN_FINDS) continue;
+    const key = profileKey(fs);
+    const hit = byId.get(s.id);
+    if (hit?.key === key) { out.set(s.id, hit.profile); continue; }
+    try {
+      const recent = recentFinds(fs); const r = historyRange(recent);
+      const res = await fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${s.lat.toFixed(3)}&longitude=${s.lon.toFixed(3)}&start_date=${r.start}&end_date=${r.end}&daily=precipitation_sum,temperature_2m_max,temperature_2m_min&timezone=Europe%2FParis`);
+      if (!res.ok) continue;
+      const profile = spotProfile(fs, findConditions(recent, (await res.json()).daily));
+      await admin.from('champi_spot_profiles').upsert({ spot_id: s.id, key, profile, updated_at: new Date().toISOString() });
+      out.set(s.id, profile);
+    } catch { /* archive indisponible : règles générales seulement, on réessaiera demain */ }
+  }
+  return out;
+}
+
 async function morningRun(cfg: any) {
   const [subs, spots, finds, shares, allowed, profiles, log] = await Promise.all([
     admin.from('champi_push_subscriptions').select('*'),
     admin.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, trees, altitude, exposure, soil'),
-    admin.from('champi_finds').select('spot_id, found_on, species'),
+    admin.from('champi_finds').select('id, spot_id, found_on, species'),
     admin.from('champi_spot_shares').select('spot_id, user_id'),
     admin.from('champi_allowed_emails').select('email'),
     admin.from('champi_profiles').select('id, notify_pousse'),
@@ -111,10 +135,12 @@ async function morningRun(cfg: any) {
   }
   const idx = rainOk ? rainIndex(st.data, rows) : null;
   const daily = list.map((s: any, i: number) => mergeRain(om?.[i] ?? null, s.lat, s.lon, idx, day).daily);
+  const learned = await learnedProfiles(list, finds.data!).catch(() => new Map());
   const verdict = new Map(list.filter((_: any, i: number) => daily[i]).map((s: any) => {
     const i = list.indexOf(s);
     const w = summarizeWeather(daily[i], day);
-    const a = assess(w, { month, species: spotSpecies(s, finds.data!), trees: s.trees ?? [], history: finds.data!.filter((f: any) => f.spot_id === s.id), alt: s.altitude ?? null, exposure: s.exposure ?? null, soil: s.soil ?? null });
+    const a = assess(w, { month, species: spotSpecies(s, finds.data!), trees: s.trees ?? [], history: finds.data!.filter((f: any) => f.spot_id === s.id), alt: s.altitude ?? null, exposure: s.exposure ?? null, soil: s.soil ?? null,
+      personal: learned.has(s.id) ? personalAdvice(w, learned.get(s.id)) : null });
     return [s.id, { s, a }];
   }));
 
@@ -135,7 +161,7 @@ async function morningRun(cfg: any) {
     if (res.includes('ok')) await admin.from('champi_alert_log').insert(good.map((g: any) => ({ spot_id: g.s.id, user_id: uid, sent_on: day })));
     report.push({ uid, coins: good.length, envois: res });
   }
-  return { jour: day, abonnés: subs.data!.length, pluie_mesuree: idx ? idx.stations.length : 0, grille: grid.size, report };
+  return { jour: day, abonnés: subs.data!.length, pluie_mesuree: idx ? idx.stations.length : 0, grille: grid.size, coins_appris: learned.size, report };
 }
 
 async function familyEmails() {

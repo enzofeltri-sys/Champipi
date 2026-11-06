@@ -12,7 +12,7 @@ import { soilGuess, trophText } from './soil.js';
 import { ASPECT_TEXT } from './terrain.js';
 import { rainIndex, mergeRain, rainSource, distKm } from './rain.js';
 import { treesAt, soilKind, whatGrows, fix as cleanText } from './here.js';
-import { historyRange, findConditions, spotProfile, personalAdvice, profileSummary } from './learn.js';
+import { historyRange, findConditions, spotProfile, personalAdvice, profileSummary, profileKey, recentFinds } from './learn.js';
 import { massifAt, accessFor, inFireSeason, DEPT_PAGES, ACCESS_ICON } from './access.js';
 import { favorableColors, favorableColorsMany, favorableLabels, colorKeyMap } from './forests.js';
 import { habitatTable, gridStep, cellsFor, cellCodes, pixelCode, pxLat, pxLon, COLORS, ALPHA } from './moment-map.js';
@@ -1667,7 +1667,7 @@ function spotContext(s, w = null) {
 const profiles = new Map(), profilesInFlight = new Map();
 function spotProfileFor(s) {
   const finds = state.finds.filter((f) => f.spot_id === s.id && !f.pending);
-  const key = finds.map((f) => f.id + f.found_on).sort().join('|');
+  const key = profileKey(finds);
   const hit = profiles.get(s.id);
   if (hit?.key === key) return Promise.resolve(hit.profile);
   const fk = s.id + key;
@@ -1677,7 +1677,7 @@ function spotProfileFor(s) {
 async function computeProfile(s, finds, key) {
   let conditions = [];
   // Météo apprise sur les 12 trouvailles les plus récentes (une seule requête d'archive, de taille raisonnable).
-  const recent = [...finds].sort((a, b) => (a.found_on < b.found_on ? 1 : -1)).slice(0, 12);
+  const recent = recentFinds(finds);
   const r = historyRange(recent);
   if (r) {
     try { conditions = findConditions(recent, await historyFor(s.lat, s.lon, r.start, r.end)); } catch { /* sans réseau : bilan sans météo */ }
