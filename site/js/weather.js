@@ -94,12 +94,12 @@ const soilCache = new Map();
 export async function soilAt(lat, lon) {
   const k = lat.toFixed(4) + ',' + lon.toFixed(4);
   if (soilCache.has(k)) return soilCache.get(k);
-  const d = 0.0005;
-  const url = 'https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetFeatureInfo'
-    + '&LAYERS=INRAE_CARTE-SOLS&QUERY_LAYERS=INRAE_CARTE-SOLS&STYLES=&FORMAT=image/png'
-    + `&CRS=EPSG:4326&BBOX=${lat - d},${lon - d},${lat + d},${lon + d}&WIDTH=101&HEIGHT=101&I=50&J=50`
-    + '&INFO_FORMAT=application/json&FEATURE_COUNT=1';
-  // Le service répond parfois une erreur XML passagère : fetchJson réessaie.
+  // Service WFS de l'IGN (le « GetFeatureInfo » WMS de cette couche ne répond plus depuis fin 2026).
+  const d = 0.0002;
+  const url = 'https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature'
+    + '&TYPENAMES=INRAE_CARTE-SOLS:sols_dominants_france_metropolitaine&OUTPUTFORMAT=application/json&COUNT=1&SRSNAME=EPSG:4326'
+    + `&BBOX=${lat - d},${lon - d},${lat + d},${lon + d},urn:ogc:def:crs:EPSG::4326`
+    + '&PROPERTYNAME=nom_ucs,nom_sol_dominant,pourcent_sol_dominant';
   const j = await fetchJson(url, 2);
   const p = j.features?.[0]?.properties ?? null;
   soilCache.set(k, p);
