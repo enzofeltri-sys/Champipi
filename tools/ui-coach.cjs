@@ -24,7 +24,7 @@ const REF = 'vvegujltsjgwszeloyaz', ME = '11111111-1111-1111-1111-111111111111';
   await page.goto(SITE); await page.waitForSelector('#screen-app:not([hidden])');
   await page.waitForSelector('#coach:not([hidden])', { timeout: 5000 });
   const steps = [];
-  for (let i = 0; i < 13; i++) {
+  for (let i = 0; i < 14; i++) {
     await page.waitForTimeout(350);
     const info = await page.evaluate(() => {
       const bub = document.querySelector('#coach-bubble').getBoundingClientRect(), hole = document.querySelector('#coach-hole');

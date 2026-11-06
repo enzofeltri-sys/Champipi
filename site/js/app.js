@@ -3,7 +3,7 @@ import {
   SPECIES, speciesLabel, inSeason, seasonText, formatCoords, directionsUrl,
   sortSpots, filterSpots, spotSpecies, lastFinds, formatDate, todayIso, escapeHtml as esc, MONTHS,
   round6, MASSIFS, FORBIDDEN, TREES, SOILS, EXPOSURES, QUANTITIES, CONDITIONS, labelOf, exifGps,
-  exifDate, searchSpots, toGpx, toCsv, chipOrder, seasonOf, lateText,
+  exifDate, searchSpots, searchHits, toGpx, toCsv, chipOrder, seasonOf, lateText,
 } from './logic.js';
 import { createPhotoStore, thumbPath } from './photos.js';
 import { GUIDE, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown } from './advisor.js';
@@ -817,6 +817,36 @@ function exitHereMode() {
   $('#crosshair').hidden = true; $('#here-bar').hidden = true;
 }
 $('#rail-here').addEventListener('click', enterHereMode);
+
+// 🔎 Recherche rapide : tous les coins visibles (sans tenir compte des filtres), toucher un résultat y emmène.
+function renderQuickSearch() {
+  const q = $('#qs-input').value;
+  const me = state.user?.id;
+  const hits = searchHits(state.spots, state.finds, q, (s) => (s.owner === me ? 'moi' : nameOf(s.owner)));
+  $('#qs-count').textContent = !q.trim() ? `${state.spots.length} coin${state.spots.length > 1 ? 's' : ''} : tape un nom, une espèce (« cèpe »), un mot d'une note ou un prénom.`
+    : hits.length ? `${hits.length} coin${hits.length > 1 ? 's' : ''} trouvé${hits.length > 1 ? 's' : ''}` : 'Aucun coin ne correspond.';
+  $('#qs-list').innerHTML = hits.slice(0, 50).map(({ spot: s, why }) => `<li><button class="spot-item ${s.sharedWithMe ? 'shared' : s.visibility}" data-id="${s.id}" type="button">
+      ${avatarHtml(personOf(s.owner), 34)}
+      <span class="grow"><span class="title">${esc(s.name)}</span>
+        ${why ? `<span class="meta">${esc(why)}</span>` : ''}
+        <span class="meta">${s.owner === me ? 'à moi' : `par ${esc(nameOf(s.owner))}`}</span></span></button></li>`).join('');
+}
+$('#rail-search').addEventListener('click', () => {
+  $('#qs-input').value = '';
+  renderQuickSearch();
+  $('#dlg-search').showModal();
+  setTimeout(() => $('#qs-input').focus(), 50);
+});
+$('#qs-input').addEventListener('input', renderQuickSearch);
+$('#qs-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#qs-list .spot-item')?.click(); } });
+$('#qs-list').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-id]'); if (!b) return;
+  const s = state.spots.find((x) => x.id === b.dataset.id); if (!s) return;
+  $('#dlg-search').close();
+  map.setView([s.lat, s.lon], Math.max(map.getZoom(), 15));
+  openSpot(s.id);
+});
+$('#dlg-search .js-close').addEventListener('click', () => $('#dlg-search').close());
 $('#here-cancel').addEventListener('click', exitHereMode);
 $('#here-locate').addEventListener('click', () => locate((lat, lon) => { exitHereMode(); analyzeHere(lat, lon); }));
 $('#here-go').addEventListener('click', () => { const c = map.getCenter(); exitHereMode(); analyzeHere(c.lat, c.lng); });
@@ -1483,6 +1513,7 @@ const COACH = [
   ['#journal-btn', '📰 Le journal de la famille', 'Toutes les trouvailles de la famille et les alertes reçues, du plus récent au plus ancien. Le chiffre vert = les nouveautés. Les notifications ouvrent ce journal.', 'menu'],
   ['#alerts-btn', '🔔 Les alertes', 'Active-les sur ce téléphone : une notification le matin quand un coin devient favorable, et quand quelqu\'un de la famille note une trouvaille. Chaque sorte se coupe séparément.', 'menu'],
   ['#guide-btn', '📖 Le guide des espèces', 'Dans le menu : le calendrier de chaque espèce. Touche une espèce pour sa fiche complète : comment la reconnaître, où la chercher, ses sosies dangereux, et vos trouvailles.', 'menu'],
+  ['#rail-search', '🔎 Chercher', 'Retrouve un coin en tapant son nom, une espèce (« cèpe »), un mot de ses notes ou le prénom de la personne : un toucher et la carte t\'y emmène.'],
   ['#rail-spots', '⭐ Tes coins', 'Affiche ou masque les épingles. Touche une épingle pour voir ce que tu y as trouvé et y aller.'],
   ['#rail-rain', '🌧️ La pluie', 'La pluie tombée ces 10 derniers jours sur la région : plus c\'est bleu foncé, plus il a plu.'],
   ['#rail-base', '🛰️ Photo aérienne', 'Passe en photo aérienne pour voir les clairières et les chemins, puis revient au plan.'],

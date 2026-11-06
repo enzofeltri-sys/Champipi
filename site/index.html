@@ -137,6 +137,7 @@
       </div>
 
       <div class="rail" role="toolbar" aria-label="Affichage">
+        <button id="rail-search" class="rail-btn" type="button">🔎<span>Chercher</span></button>
         <button id="rail-spots" class="rail-btn" type="button" aria-pressed="true">⭐<span>Coins</span></button>
         <button id="rail-rain" class="rail-btn" type="button" aria-pressed="false">🌧️<span>Pluie</span></button>
         <button id="rail-base" class="rail-btn" type="button" aria-pressed="false">🛰️<span>Photo</span></button>
@@ -196,6 +197,18 @@
       </div>
       <p class="small muted">Tout ce que la famille a trouvé dans les coins que tu vois, et les alertes « conditions favorables » que tu as reçues. Les notifications ouvrent ce journal ; touche une ligne pour voir le coin.</p>
       <div id="journal-list" class="journal"></div>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-search" class="sheet search-sheet">
+    <div class="stack">
+      <div class="sheet-head">
+        <h2>🔎 Chercher un coin</h2>
+        <button class="icon-btn js-close" type="button" aria-label="Fermer">✕</button>
+      </div>
+      <input id="qs-input" autofocus type="search" placeholder="Nom, espèce, note, personne…" autocomplete="off" enterkeyhint="search" aria-label="Chercher un coin">
+      <p id="qs-count" class="small muted"></p>
+      <ul id="qs-list" class="spot-list"></ul>
     </div>
   </dialog>
 
@@ -416,6 +429,7 @@
       <details><summary>🗺️ La carte et les boutons</summary>
         <ul>
           <li><b>Deux doigts</b> pour zoomer la carte, un doigt pour la déplacer.</li>
+          <li><b>🔎 Chercher</b> : retrouve un coin par son nom, une espèce, un mot de ses notes ou le prénom de la personne ; touche le résultat pour y aller.</li>
           <li><b>⭐ Coins</b> : affiche ou masque les coins (les tiens et ceux de la famille).</li>
           <li><b>🌧️ Pluie</b> : pluie tombée ces 10 derniers jours sur la région (plus c'est bleu foncé, plus il a plu).</li>
           <li><b>🛰️ Photo</b> : passe en photo aérienne, et retour au plan.</li>

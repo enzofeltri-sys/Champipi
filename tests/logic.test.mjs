@@ -167,3 +167,23 @@ test('pastilles : cèpe, girolle, trompette, pied-de-mouton, chanterelle en prem
   assert.equal(ids[5], 'berigoule');            // ensuite, les espèces en saison (avril)
   assert.ok(!ids.includes('autre'));
 });
+
+import { searchHits } from '../site/js/logic.js';
+test('recherche rapide : nom, espèce, note, trouvaille, personne — sans accents ni majuscules', () => {
+  const spots = [
+    { id: 'a', name: 'Pinède du Vallon', note: 'Parking après le pont', species: [] },
+    { id: 'b', name: 'Châtaigneraie', note: '', species: ['girolle'], owner: 'm' },
+    { id: 'c', name: 'Vallon des cèpes', species: [] },
+  ];
+  const finds = [{ spot_id: 'a', found_on: '2026-10-03', species: ['cepe'], note: 'sous le gros chêne' }];
+  const names = (q) => searchHits(spots, finds, q, (s) => (s.owner === 'm' ? 'Mame' : 'moi')).map((h) => h.spot.name);
+  assert.deepEqual(names('vallon'), ['Vallon des cèpes', 'Pinède du Vallon']);   // le nom qui commence par la recherche d'abord
+  assert.deepEqual(names('CEPE'), ['Pinède du Vallon', 'Vallon des cèpes']);
+  assert.deepEqual(names('chataigneraie'), ['Châtaigneraie']);
+  assert.deepEqual(names('mame'), ['Châtaigneraie']);
+  assert.deepEqual(names('gros chene'), ['Pinède du Vallon']);
+  assert.deepEqual(names(''), []);
+  const hit = searchHits(spots, finds, 'pont')[0];
+  assert.equal(hit.why, 'note : Parking après le pont');
+  assert.match(searchHits(spots, finds, 'gros')[0].why, /^trouvaille du 3 octobre 2026 : sous le gros chêne/);
+});

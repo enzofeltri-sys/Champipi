@@ -1,5 +1,5 @@
 // Service worker : l'appli s'ouvre même sans réseau, et les cartes téléchargées (Plan IGN) restent disponibles hors ligne.
-const VERSION = 'champi-v36';
+const VERSION = 'champi-v37';
 const TILES = 'champi-tuiles-v1';           // cartes enregistrées par l'utilisateur (menu « Cartes hors ligne »)
 const SHELL = [
   './', 'index.html', 'css/app.css', 'js/app.js', 'js/logic.js', 'js/config.js', 'js/photos.js', 'js/advisor.js', 'js/weather.js',

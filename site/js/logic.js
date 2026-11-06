@@ -333,6 +333,33 @@ export function searchSpots(spots, finds, q) {
   });
 }
 
+/**
+ * Recherche rapide depuis la carte : tous les coins visibles, avec ce qui a fait mouche.
+ * @param authorOf (spot) => nom de la personne qui l'a noté
+ * @returns [{ spot, why }] — les noms qui commencent par la recherche d'abord, puis les autres par nom.
+ */
+export function searchHits(spots, finds, q, authorOf = () => '') {
+  const terms = fold(q).split(/\s+/).filter(Boolean);
+  if (!terms.length) return [];
+  const out = [];
+  for (const s of spots) {
+    const fs = finds.filter((f) => f.spot_id === s.id);
+    const fields = [
+      ['', s.name],
+      ['espèce', [...new Set([...(s.species ?? []), ...fs.flatMap((f) => f.species ?? [])])].map(speciesLabel).join(', ')],
+      ['note', s.note], ['accès', s.access], ['par', authorOf(s)], ['forêt', s.forest_type],
+      ...fs.map((f) => [`trouvaille du ${formatDate(f.found_on)}`, [f.note, f.weather].filter(Boolean).join(' · ')]),
+    ].filter(([, v]) => v);
+    const hay = fold(fields.map(([, v]) => v).join(' '));
+    if (!terms.every((t) => hay.includes(t))) continue;
+    const hit = fields.find(([, v]) => terms.some((t) => fold(v).includes(t)));
+    const why = !hit || hit[0] === '' || hit[0] === 'par' ? '' : `${hit[0]} : ${hit[1].length > 70 ? hit[1].slice(0, 69) + '…' : hit[1]}`;
+    out.push({ spot: s, why, starts: fold(s.name).startsWith(terms[0]) });
+  }
+  return out.sort((a, b) => Number(b.starts) - Number(a.starts) || a.spot.name.localeCompare(b.spot.name, 'fr'))
+    .map(({ spot, why }) => ({ spot, why }));
+}
+
 // ---------------------------------------------------------------------------
 // Exports.
 const xml = (s) => String(s ?? '').replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]));
