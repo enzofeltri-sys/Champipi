@@ -112,7 +112,8 @@ async function morningRun(cfg: any) {
   }
   const groups = new Map(allowed.data!.map((a: any) => [a.email, a.grp ?? 'famille']));
   const shared = (uid: string, s: any) => shares.data!.some((h: any) => h.spot_id === s.id && h.user_id === uid);
-  const visible = (uid: string, s: any) => canSee(groups.get(users.get(uid) ?? ''), uid, s, shared(uid, s));
+  const admins = await adminEmails();
+  const visible = (uid: string, s: any) => canSee(groups.get(users.get(uid) ?? ''), uid, s, shared(uid, s), admins.has(users.get(uid) ?? ''));
 
   const day = today();
   const month = Number(day.slice(5, 7));
@@ -164,11 +165,16 @@ async function morningRun(cfg: any) {
   return { jour: day, abonnés: subs.data!.length, pluie_mesuree: idx ? idx.stations.length : 0, grille: grid.size, coins_appris: learned.size, report };
 }
 
-// Mêmes règles que la base : membre (famille ou ami) ; un ami ne voit jamais les coins « Famille ».
-function canSee(grp: string | undefined, uid: string, s: any, isShared: boolean) {
+// Mêmes règles que la base.
+// Famille et amis séparés : 👪 pour la famille, 👥 pour les amis ; l'admin voit les deux.
+function canSee(grp: string | undefined, uid: string, s: any, isShared: boolean, isAdmin = false) {
   if (s.owner === uid) return true;
   if (!grp) return false;
-  return s.visibility === 'friends' || (s.visibility === 'family' && grp === 'famille') || isShared;
+  return (s.visibility === 'family' && grp === 'famille') || (s.visibility === 'friends' && (grp === 'ami' || isAdmin)) || isShared;
+}
+async function adminEmails() {
+  const { data } = await admin.from('champi_admins').select('email');
+  return new Set((data ?? []).map((a: any) => String(a.email).toLowerCase()));
 }
 
 async function familyGroups() {
@@ -181,7 +187,8 @@ async function familyGroups() {
     if (data.users.length < 200) break;
   }
   const groups = new Map(allowed.data!.map((a: any) => [a.email, a.grp ?? 'famille']));
-  return (uid: string) => groups.get(users.get(uid) ?? '') as string | undefined;
+  const admins = await adminEmails();
+  return { groupOf: (uid: string) => groups.get(users.get(uid) ?? '') as string | undefined, isAdmin: (uid: string) => admins.has(users.get(uid) ?? '') };
 }
 
 const label = (id: string) => SPECIES.find((s: any) => s.id === id)?.label ?? id;
@@ -207,9 +214,9 @@ async function announce(cfg: any, findId: string) {
     admin.from('champi_push_subscriptions').select('*'),
   ]);
   for (const r of [shares, profiles, subs]) if (r.error) throw r.error;
-  const groupOf = await familyGroups();
+  const { groupOf, isAdmin } = await familyGroups();
   const shared = new Set(shares.data!.map((h: any) => h.user_id));
-  const sees = (uid: string) => canSee(groupOf(uid), uid, s, shared.has(uid));
+  const sees = (uid: string) => canSee(groupOf(uid), uid, s, shared.has(uid), isAdmin(uid));
   const prof = new Map(profiles.data!.map((p: any) => [p.id, p]));
   const author = prof.get(f.user_id);
   const who = `${author?.avatar_emoji ?? '🍄'} ${author?.display_name ?? 'Quelqu\'un'}`;

@@ -1003,10 +1003,12 @@ for (const sel of ['#nf-species', '#find-species', '#edit-trees']) {
 let editVis = 'private';
 for (const b of $$('#edit-vis button')) b.addEventListener('click', () => { editVis = b.dataset.vis; syncVis(); });
 function syncVis() {
-  // Un ami ne peut pas créer de coin « Famille » (la base le refuserait aussi).
-  const ami = state.group === 'ami';
-  $('#edit-vis [data-vis="family"]').hidden = ami;
-  if (ami && editVis === 'family') editVis = 'friends';
+  // Famille et amis sont séparés : la famille choisit 👪, les amis 👥 ; seul l'admin a les deux (la base le vérifie aussi).
+  const ami = state.group === 'ami', both = state.isAdmin;
+  $('#edit-vis [data-vis="family"]').hidden = ami && !both;
+  $('#edit-vis [data-vis="friends"]').hidden = !ami && !both;
+  if (editVis === 'family' && ami && !both) editVis = 'friends';
+  if (editVis === 'friends' && !ami && !both) editVis = 'family';
   for (const b of $$('#edit-vis button')) b.classList.toggle('on', b.dataset.vis === editVis);
 }
 

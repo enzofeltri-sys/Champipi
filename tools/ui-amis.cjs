@@ -59,14 +59,22 @@ async function run(grp, admin) {
   console.log('AMI · ERREURS :', errors.length ? errors : 'aucune');
   await b.close();
 
+  // 1 bis. Un membre de la famille (pas admin)
+  ({ b, page, errors } = await run('famille', false));
+  await page.click('#btn-add'); await page.click('#add-here');
+  await page.waitForSelector('#dlg-edit[open], #dlg-near[open]'); if (await page.isVisible('#dlg-near')) await page.click('#near-no');
+  await page.waitForSelector('#dlg-edit[open]');
+  console.log('FAMILLE (pas admin) · choix :', await vis());
+  console.log('FAMILLE (pas admin) · ERREURS :', errors.length ? errors : 'aucune');
+  await b.close();
+
   // 2. La famille (admin)
-  ({ b, page, errors } = await run('famille', true));
-  const r2 = await run('famille', true); await b.close(); ({ b, page, errors } = r2);
+  const r2 = await run('famille', true); ({ b, page, errors } = r2);
   const db = r2.db;
   await page.click('#btn-add'); await page.click('#add-here');
   await page.waitForSelector('#dlg-edit[open], #dlg-near[open]'); if (await page.isVisible('#dlg-near')) await page.click('#near-no');
   await page.waitForSelector('#dlg-edit[open]');
-  console.log('FAMILLE · choix :', await vis());
+  console.log('ADMIN · choix :', await vis());
   await page.keyboard.press('Escape'); await page.waitForTimeout(200);
   await page.click('#menu-btn'); await page.click('#admin-btn'); await page.waitForSelector('#dlg-admin[open]'); await page.waitForTimeout(400);
   console.log('ADMIN · membres :', await page.textContent('#member-count'), (await page.locator('#member-list li .head').allTextContents()).map((x) => x.replace(/\s+/g, ' ').trim()));
