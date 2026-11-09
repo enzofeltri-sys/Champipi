@@ -72,7 +72,7 @@ async function learnedProfiles(list: any[], finds: any[]) {
   const { data: cache } = await admin.from('champi_spot_profiles').select('spot_id, key, profile');
   const byId = new Map((cache ?? []).map((r: any) => [r.spot_id, r]));
   for (const s of list) {
-    const fs = finds.filter((f: any) => f.spot_id === s.id);
+    const fs = finds.filter((f: any) => f.spot_id === s.id && !f.empty);   // les sorties bredouilles n'apprennent rien
     if (fs.length < MIN_FINDS) continue;
     const key = profileKey(fs);
     const hit = byId.get(s.id);
@@ -93,7 +93,7 @@ async function morningRun(cfg: any) {
   const [subs, spots, finds, shares, allowed, profiles, log] = await Promise.all([
     admin.from('champi_push_subscriptions').select('*'),
     admin.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, trees, altitude, exposure, soil'),
-    admin.from('champi_finds').select('id, spot_id, found_on, species'),
+    admin.from('champi_finds').select('id, spot_id, found_on, species, empty'),
     admin.from('champi_spot_shares').select('spot_id, user_id'),
     admin.from('champi_allowed_emails').select('email, grp'),
     admin.from('champi_profiles').select('id, notify_pousse'),
@@ -140,7 +140,7 @@ async function morningRun(cfg: any) {
   const verdict = new Map(list.filter((_: any, i: number) => daily[i]).map((s: any) => {
     const i = list.indexOf(s);
     const w = summarizeWeather(daily[i], day);
-    const a = assess(w, { month, species: spotSpecies(s, finds.data!), trees: s.trees ?? [], history: finds.data!.filter((f: any) => f.spot_id === s.id), alt: s.altitude ?? null, exposure: s.exposure ?? null, soil: s.soil ?? null,
+    const a = assess(w, { month, species: spotSpecies(s, finds.data!), trees: s.trees ?? [], history: finds.data!.filter((f: any) => f.spot_id === s.id), alt: s.altitude ?? null, exposure: s.exposure ?? null, soil: s.soil ?? null, today: day,
       personal: learned.has(s.id) ? personalAdvice(w, learned.get(s.id)) : null });
     return [s.id, { s, a }];
   }));

@@ -148,3 +148,18 @@ test('exposition : nord par temps sec, sud quand il fait frais', () => {
   assert.ok(sud.reasons.includes('versant sud : plus chaud'));
   assert.equal(assess(frais, { month: 11, species: ['cepe'], exposure: 'plat' }).perSpecies[0].reasons.some((r) => r.startsWith('versant')), false);
 });
+
+import { lastEmptyVisit } from '../site/js/advisor.js';
+test('« Passé, rien trouvé » : avis plus prudent quelques jours, puis plus rien', () => {
+  const w = { rain10: 30, bigRainAgo: 7, bigRainMm: 25, frost7: 0, tmin7: 9, tmax7: 18, soilT3: null, soilM3: null };
+  const base = assess(w, { month: 10, species: ['cepe'], today: '2026-10-20' });
+  const at = (d) => assess(w, { month: 10, species: ['cepe'], today: '2026-10-20', history: [{ spot_id: 's', found_on: d, species: [], empty: true }] });
+  assert.equal(at('2026-10-19').score, base.score - 2);
+  assert.ok(at('2026-10-19').reasons.includes('Passé il y a 1 j sans rien trouver'));
+  assert.equal(at('2026-10-20').reasons.includes('Passé aujourd\'hui sans rien trouver'), true);
+  assert.equal(at('2026-10-15').score, base.score - 1);
+  assert.equal(at('2026-10-10').score, base.score);
+  // une vraie trouvaille après la sortie bredouille l'annule
+  assert.equal(lastEmptyVisit([{ found_on: '2026-10-18', empty: true }, { found_on: '2026-10-19', species: ['cepe'] }], '2026-10-20'), null);
+  assert.equal(lastEmptyVisit([{ found_on: '2026-10-18', empty: true }], null), null);
+});

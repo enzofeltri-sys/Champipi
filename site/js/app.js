@@ -364,7 +364,7 @@ async function loadData() {
   }
   const [spots, finds, shares, people, pics, alertLog] = await Promise.all([
     sb.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, note, trees, soil, exposure, access, altitude, forest_type, created_at, updated_at, author:champi_profiles!champi_spots_owner_fkey(display_name)'),
-    sb.from('champi_finds').select('id, spot_id, user_id, found_on, species, note, quantity, condition, weather, created_at, author:champi_profiles!champi_finds_user_id_fkey(display_name)')
+    sb.from('champi_finds').select('id, spot_id, user_id, found_on, species, note, quantity, condition, weather, empty, created_at, author:champi_profiles!champi_finds_user_id_fkey(display_name)')
       .order('found_on', { ascending: false }).order('created_at', { ascending: false }),
     sb.from('champi_spot_shares').select('spot_id, user_id'),
     sb.from('champi_profiles').select('id, display_name, avatar_emoji, avatar_color').order('display_name'),
@@ -1315,7 +1315,7 @@ function renderSpot(id) {
   $('#find-list').innerHTML = finds.length ? finds.map((f) => `<li>
       <div class="head"><span>${formatDate(f.found_on)}${f.pending ? ` <span class="pending-tag">⏳ en attente d'envoi${f.pendingPhotos ? ` (${f.pendingPhotos} photo${f.pendingPhotos > 1 ? 's' : ''})` : ''}</span>` : ''}</span>
         ${f.user_id === me && !f.pending ? `<button class="del" type="button" data-find="${f.id}">Supprimer</button>` : ''}</div>
-      <div class="small muted by">${byHtml(f.user_id)}${f.species?.length ? ' · ' + esc(f.species.map(speciesLabel).join(', ')) : ''}</div>
+      <div class="small muted by">${byHtml(f.user_id)}${f.empty ? ' · <b>🚶 passé, rien trouvé</b>' : f.species?.length ? ' · ' + esc(f.species.map(speciesLabel).join(', ')) : ''}</div>
       ${findDetails(f)}
       ${f.note ? `<div class="note">${esc(f.note)}</div>` : ''}
       <div class="photos">${thumbs(state.photos.filter((p) => p.find_id === f.id))}</div>
@@ -1465,6 +1465,25 @@ $('#find-form').addEventListener('submit', async (e) => {
   await loadData();
 });
 
+// « 🚶 Passé, rien trouvé » : un toucher, aujourd'hui, sur ce coin (gardé sur le téléphone sans réseau).
+$('#visit-empty').addEventListener('click', async () => {
+  const spotId = state.openSpotId; if (!spotId) return;
+  const row = { id: crypto.randomUUID(), spot_id: spotId, found_on: todayIso(), species: [], empty: true, note: null, quantity: null, condition: null, weather: null };
+  const btn = $('#visit-empty'); busy(btn, true);
+  const spotPending = state.spots.find((s) => s.id === spotId)?.pending;
+  const { error } = spotPending ? { error: { message: 'Failed to fetch (coin pas encore envoyé)' } } : await sb.from('champi_finds').insert(row);
+  busy(btn, false);
+  if (error && isNetworkError(error)) {
+    await queue.add({ kind: 'find', row, files: [] });
+    toast('📴 Pas de réseau : passage gardé sur le téléphone.', 5000);
+    await applyPending(); render(); updateOfflineBar(); renderSpot(spotId);
+    return;
+  }
+  if (error) { toast(`Impossible de noter le passage : ${frError(error)}`, 6000); return; }
+  toast('🚶 Passage noté : le conseiller en tiendra compte quelques jours.', 5000);
+  await loadData();
+});
+
 $('#find-list').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-find]'); if (!b) return;
   if (!confirm('Supprimer cette trouvaille et ses photos ?')) return;
@@ -1505,7 +1524,7 @@ $('#export-csv').addEventListener('click', () => {
   const rows = state.finds.map((f) => ({ f, s: byId.get(f.spot_id) }));
   download(`journal-champignons-${todayIso()}.csv`, toCsv(rows, [
     ['Date', (r) => r.f.found_on], ['Coin', (r) => r.s?.name], ['Latitude', (r) => r.s?.lat], ['Longitude', (r) => r.s?.lon],
-    ['Espèces', (r) => (r.f.species ?? []).map(speciesLabel).join(', ')], ['Quantité', (r) => r.f.quantity && labelOf(QUANTITIES, r.f.quantity)],
+    ['Espèces', (r) => (r.f.empty ? 'passé, rien trouvé' : (r.f.species ?? []).map(speciesLabel).join(', '))], ['Quantité', (r) => r.f.quantity && labelOf(QUANTITIES, r.f.quantity)],
     ['État', (r) => r.f.condition && labelOf(CONDITIONS, r.f.condition)], ['Météo', (r) => r.f.weather], ['Note', (r) => r.f.note],
     ['Par', (r) => r.f.author?.display_name],
   ]), 'text/csv;charset=utf-8');
@@ -1670,7 +1689,7 @@ async function autoSoilFor(s) {
 
 function spotContext(s, w = null) {
   const prof = profiles.get(s.id)?.profile;
-  return { month: month(), species: spotSpecies(s, state.finds), trees: s.trees ?? [], history: state.finds.filter((f) => f.spot_id === s.id), alt: s.altitude ?? null, exposure: s.exposure ?? null, soil: spotSoil(s),
+  return { month: month(), species: spotSpecies(s, state.finds), trees: s.trees ?? [], history: state.finds.filter((f) => f.spot_id === s.id), alt: s.altitude ?? null, exposure: s.exposure ?? null, soil: spotSoil(s), today: todayIso(),
     personal: w && prof ? personalAdvice(w, prof) : null };
 }
 
@@ -2187,11 +2206,12 @@ function renderJournal(focus = null) {
     if (it.type === 'find') {
       const f = it.find;
       const what = f.species?.length ? f.species.map((x) => speciesLabel(x).replace(/ \(.*\)$/, '')).join(', ') : 'rien de noté';
+      const verb = f.empty ? 'est passé·e, <b>rien trouvé</b>' : f.species?.length ? `trouvé <b>${esc(what)}</b>` : 'noté une trouvaille';
       const pics = state.photos.filter((p) => p.find_id === f.id);
       const extra = [f.quantity && labelOf(QUANTITIES, f.quantity), f.condition && labelOf(CONDITIONS, f.condition)].filter(Boolean).map(esc).join(' · ');
       html += `<div class="${cls}" data-key="${it.key}" data-spot="${it.spot.id}">
         <div class="j-who">${avatarHtml(personOf(f.user_id), 34)}</div>
-        <div class="j-body"><div>${f.user_id === state.user?.id ? '<b>Tu</b> as ' : `<b>${esc(nameOf(f.user_id))}</b> a `}${f.species?.length ? `trouvé <b>${esc(what)}</b>` : 'noté une trouvaille'}${tag}</div>
+        <div class="j-body"><div>${f.empty ? (f.user_id === state.user?.id ? '<b>Tu</b> es passé·e, <b>rien trouvé</b>' : `<b>${esc(nameOf(f.user_id))}</b> ${verb}`) : `${f.user_id === state.user?.id ? '<b>Tu</b> as ' : `<b>${esc(nameOf(f.user_id))}</b> a `}${f.species?.length ? `trouvé <b>${esc(what)}</b>` : 'noté une trouvaille'}`}${tag}</div>
           <div class="small muted">📍 ${esc(it.spot.name)}${extra ? ' · ' + extra : ''}</div>
           ${f.note ? `<div class="small j-note">${esc(f.note)}</div>` : ''}
           ${pics.length ? `<div class="photos strip">${thumbs(pics)}</div>` : ''}</div></div>`;

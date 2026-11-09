@@ -138,7 +138,20 @@ export function nextSeason(id, month) {
  * @param w résumé météo (summarizeWeather) ou null
  * @param ctx { month, species: ids, trees: ids, history: [{ found_on, species[] }] }
  */
-export function assess(w, { month, species = [], trees = [], history = [], personal = null, alt = null, exposure = null, soil = null }) {
+/** Jours depuis la dernière sortie bredouille, si elle est plus récente que la dernière vraie trouvaille (sinon null). */
+export function lastEmptyVisit(history, today) {
+  if (!today) return null;
+  let lastReal = '', lastEmpty = '';
+  for (const f of history) {
+    if (!f.found_on || f.found_on > today) continue;
+    if (f.empty) { if (f.found_on > lastEmpty) lastEmpty = f.found_on; }
+    else if (f.found_on > lastReal) lastReal = f.found_on;
+  }
+  if (!lastEmpty || lastEmpty < lastReal) return null;
+  return Math.round((Date.parse(today) - Date.parse(lastEmpty)) / 86400000);
+}
+
+export function assess(w, { month, species = [], trees = [], history = [], personal = null, alt = null, exposure = null, soil = null, today = null }) {
   const known = species.filter((id) => SPECIES.some((s) => s.id === id && s.months.length));
   // Fin de saison (ex. cèpe en décembre en Provence) : seulement par temps doux, sans gel, à basse altitude.
   const mild = !!w && w.frost7 === 0 && w.tmin7 != null && w.tmin7 >= 4 && (alt == null || alt < LATE_MAX_ALT);
@@ -176,6 +189,11 @@ export function assess(w, { month, species = [], trees = [], history = [], perso
     }
     if (w.shockAgo != null && w.shockAgo >= 3 && w.shockAgo <= 14) { base += 1; common.push(`Choc thermique il y a ${w.shockAgo} j (nuits plus fraîches de ${w.shockDrop} °C) : souvent un déclencheur`); }
   }
+
+  // Sortie récente sans rien trouver (« Passé, rien trouvé »), plus récente que la dernière vraie trouvaille.
+  const emptyAgo = lastEmptyVisit(history, today);
+  if (emptyAgo != null && emptyAgo <= 3) { base -= 2; common.push(emptyAgo === 0 ? 'Passé aujourd\'hui sans rien trouver' : `Passé il y a ${emptyAgo} j sans rien trouver`); }
+  else if (emptyAgo != null && emptyAgo <= 7) { base -= 1; common.push(`Passé il y a ${emptyAgo} j sans rien trouver`); }
 
   const perSpecies = inSeason.map((id) => {
     const sp = SPECIES.find((s) => s.id === id);

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { historyRange, findConditions, spotProfile, personalAdvice, profileSummary } from '../site/js/learn.js';
+import { historyRange, findConditions, spotProfile, personalAdvice, profileSummary, profileKey } from '../site/js/learn.js';
 import { summarizeWeather, assess } from '../site/js/advisor.js';
 
 // Météo fictive de l'automne 2025 : grosses pluies le 1er oct., le 20 oct. et le 9 nov.
@@ -57,4 +57,11 @@ test('conseil personnel intégré à l\'évaluation', () => {
   assert.ok(tooEarly.reasons.some((r) => r.startsWith('encore 5 j')));
   const dry = personalAdvice({ rain14: 5, bigRainAgo: null }, p);
   assert.equal(dry.bonus, -1);
+});
+
+test('les sorties bredouilles ne comptent pas dans l\'apprentissage', () => {
+  const finds = [{ id: 'a', found_on: '2026-10-01', species: ['cepe'] }, { id: 'b', found_on: '2026-10-05', species: [], empty: true }];
+  const p = spotProfile(finds, []);
+  assert.equal(p.n, 1);
+  assert.equal(profileKey(finds), profileKey([finds[0]]));
 });

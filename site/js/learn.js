@@ -9,9 +9,11 @@ const median = (a) => { const s = [...a].sort((x, y) => x - y); const n = s.leng
 const addDays = (iso, k) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + k); return d.toISOString().slice(0, 10); };
 
 /** Empreinte des trouvailles d'un coin : le profil n'est recalculé que si elle change (appli et alertes). */
-export function profileKey(finds) { return finds.map((f) => f.id + f.found_on).sort().join('|'); }
+/** Les vraies trouvailles (les sorties « Passé, rien trouvé » ne servent pas à apprendre la pluie et le délai). */
+export const realFinds = (finds) => finds.filter((f) => !f.empty);
+export function profileKey(finds) { return realFinds(finds).map((f) => f.id + f.found_on).sort().join('|'); }
 /** Les 12 trouvailles les plus récentes : celles dont on va chercher la météo (une seule requête d'archive). */
-export function recentFinds(finds) { return [...finds].sort((a, b) => (a.found_on < b.found_on ? 1 : -1)).slice(0, 12); }
+export function recentFinds(finds) { return [...realFinds(finds)].sort((a, b) => (a.found_on < b.found_on ? 1 : -1)).slice(0, 12); }
 
 /** Période d'historique à demander pour un coin : 15 jours avant la première trouvaille → la dernière. */
 export function historyRange(finds) {
@@ -26,7 +28,8 @@ export function findConditions(finds, daily) {
 }
 
 /** Profil d'un coin à partir de ses trouvailles (avec ou sans météo). */
-export function spotProfile(finds, conditions = []) {
+export function spotProfile(allFinds, conditions = []) {
+  const finds = realFinds(allFinds);
   const months = Array(12).fill(0), years = {}, species = {};
   for (const f of finds) {
     months[Number(f.found_on.slice(5, 7)) - 1]++;

@@ -140,6 +140,7 @@ export function directionsUrl(lat, lon) {
 export function lastFinds(finds) {
   const last = new Map();
   for (const f of finds) {
+    if (f.empty) continue;   // « Passé, rien trouvé » n'est pas une trouvaille
     const cur = last.get(f.spot_id);
     if (!cur || f.found_on > cur) last.set(f.spot_id, f.found_on);
   }
