@@ -35,3 +35,20 @@ test('coordonnées des pixels (Web Mercator)', () => {
   assert.ok(Math.abs(pxLon(256 * 2 ** 9 * (5.5 + 180) / 360, 9) - 5.5) < 1e-9);
   assert.ok(Math.abs(pxLat(256 * 2 ** 3 / 2, 3)) < 1e-9);
 });
+
+import { cellCodes as cc2, pixelCode as pc2, soilOfCell, BAD_SOIL } from '../site/js/moment-map.js';
+import { assess as as2 } from '../site/js/advisor.js';
+test('carte du moment : le sol de la case compte (girolle jamais coloriée sur calcaire)', () => {
+  const grid = { cells: { '436:50': 8, '432:63': 3.5, '433:57': 6.5 } };
+  assert.equal(soilOfCell(grid, 43.61, 5.06), 'calcaire');      // Grans
+  assert.equal(soilOfCell(grid, 43.27, 6.35), 'siliceux');      // Maures
+  assert.equal(soilOfCell(grid, 43.35, 5.75), null);            // neutre
+  assert.equal(soilOfCell(grid, 44.9, 6.9), null);              // pas de relevés
+  const w = { rain10: 30, bigRainAgo: 7, bigRainMm: 25, frost7: 0, tmin7: 9, tmax7: 18, soilT3: null, soilM3: null };
+  const [gir, cep] = cc2(['girolle', 'cepe'], 11, w, as2, 'calcaire');
+  assert.equal(gir, BAD_SOIL);
+  assert.ok(cep > 0);                                            // le cèpe reste possible sur calcaire
+  assert.ok(cc2(['girolle'], 11, w, as2, 'siliceux')[0] > 0);
+  assert.equal(pc2(0b01, [BAD_SOIL, 3]), BAD_SOIL);              // pixel où seule la girolle est concernée
+  assert.equal(pc2(0b11, [BAD_SOIL, 2]), 2);                     // forêt aussi bonne pour le cèpe : couleur du cèpe
+});

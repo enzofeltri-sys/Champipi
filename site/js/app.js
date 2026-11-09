@@ -15,7 +15,7 @@ import { treesAt, soilKind, whatGrows, fix as cleanText } from './here.js';
 import { historyRange, findConditions, spotProfile, personalAdvice, profileSummary, profileKey, recentFinds } from './learn.js';
 import { massifAt, accessFor, inFireSeason, DEPT_PAGES, ACCESS_ICON } from './access.js';
 import { favorableColors, favorableColorsMany, favorableLabels, colorKeyMap } from './forests.js';
-import { habitatTable, gridStep, cellsFor, cellCodes, pixelCode, pxLat, pxLon, COLORS, ALPHA } from './moment-map.js';
+import { habitatTable, gridStep, cellsFor, cellCodes, pixelCode, pxLat, pxLon, COLORS, ALPHA, BAD_SOIL, soilOfCell } from './moment-map.js';
 import { buildJournal, unreadCount, dayTitle } from './journal.js';
 import { INFO, DANGER } from './species-info.js';
 import { avatarOf, avatarHtml, AVATAR_EMOJIS, AVATAR_COLORS } from './avatars.js';
@@ -563,20 +563,28 @@ $('#species-bar').addEventListener('click', (e) => {
   setSpecies(state.species.includes(id) ? state.species.filter((x) => x !== id) : [...state.species, id]);
 });
 
+// Sol des forêts par case de 0,1° (relevés de l'Inventaire forestier, calculés une fois : data/soil-grid.json).
+let soilGridP = null;
+const soilGrid = () => (soilGridP ??= fetch('data/soil-grid.json').then((r) => (r.ok ? r.json() : null)).catch(() => null));
 // « Bon moment ? » : avis du conseiller (pluie, températures, saison) au centre de la carte, pour chaque espèce.
 let momentTimer = null, momentCell = '';
 function scheduleMoment() { clearTimeout(momentTimer); momentTimer = setTimeout(() => { updateMoment(); updateHabitatWeather(); }, 700); }
 async function updateMoment() {
   const c = map.getCenter();
   const lat = Math.round(c.lat * 4) / 4, lon = Math.round(c.lng * 4) / 4;   // grille de 0,25° : peu d'appels
-  const cell = `${lat},${lon}`;
+  const soil = soilOfCell(await soilGrid(), c.lat, c.lng);   // sol des forêts au centre de la carte (cases de 0,1°)
+  const cell = `${lat},${lon},${soil}`;
   if (cell === momentCell) return;
   try {
     const [daily] = await dailyFor([[lat, lon]]);
     const w = summarizeWeather(daily, todayIso());
-    const m = month(); const next = new Map();
-    for (const s of SPECIES) if (seasonOf(s.id, m) !== 'off') next.set(s.id, assess(w, { month: m, species: [s.id] }).level);
-    state.moment = next; state.momentRain = w.rain10; momentCell = cell;
+    const m = month(); const next = new Map(), bad = new Set();
+    for (const s of SPECIES) {
+      if (seasonOf(s.id, m) === 'off') continue;
+      if (soil && GUIDE[s.id]?.soil && GUIDE[s.id].soil !== soil) { bad.add(s.id); next.set(s.id, 'faible'); continue; }   // pas son sol ici
+      next.set(s.id, assess(w, { month: m, species: [s.id], soil }).level);
+    }
+    state.moment = next; state.momentBadSoil = bad; state.momentSoil = soil; state.momentRain = w.rain10; momentCell = cell;
   } catch { state.moment = new Map(); }   // météo indisponible : on n'affiche que la saison
   renderSpeciesBar();
   if (state.species.length) renderBanner();
@@ -601,7 +609,8 @@ function paintTile(c) {
       const p = y * 256 + x, w = c._w[p];
       if (!w) continue;
       if (cols[x] !== lastJ) { lastJ = cols[x]; codes = habitat.codes.get(`${row}:${lastJ}`) ?? null; }
-      const code = habitat.allOff ? 0 : codes ? pixelCode(c._m[p], codes) : -1;
+      const code = codes ? pixelCode(c._m[p], codes) : habitat.allOff ? 0 : -1;
+      if (code === BAD_SOIL) continue;   // sol qui ne convient pas : forêt laissée sans couleur
       const col = COLORS[code];
       const i = p * 4; px[i] = col[0]; px[i + 1] = col[1]; px[i + 2] = col[2]; px[i + 3] = ALPHA[w];
     }
@@ -643,16 +652,21 @@ async function updateHabitatWeather() {
   if (!habitat.ids.length || !habitatLayer || !map.hasLayer(habitatLayer)) return;
   const m = month();
   habitat.allOff = !habitat.ids.some((id) => seasonOf(id, m) !== 'off');
-  if (habitat.allOff) { repaintHabitat(); return; }
   const b0 = map.getBounds().pad(0.2);
   const b = { south: b0.getSouth(), north: b0.getNorth(), west: b0.getWest(), east: b0.getEast() };
   const step = gridStep(b), cells = cellsFor(b, step);
   const seq = ++habitatSeq;
+  const grid = await soilGrid();
+  if (habitat.allOff) {   // hors saison : forêts en gris, mais toujours sans celles dont le sol ne convient pas
+    if (seq !== habitatSeq) return;
+    habitat.step = step; habitat.codes = new Map(cells.map((c) => [c.key, cellCodes(habitat.ids, m, null, assess, soilOfCell(grid, c.lat, c.lon)).map((x) => (x === -1 ? 0 : x))]));
+    repaintHabitat(); return;
+  }
   try {
     const all = await dailyFor(cells.map((c) => [c.lat, c.lon]));
     if (seq !== habitatSeq) return;
     const today = todayIso(), codes = new Map();
-    cells.forEach((c, i) => codes.set(c.key, cellCodes(habitat.ids, m, all[i] ? summarizeWeather(all[i], today) : null, assess)));
+    cells.forEach((c, i) => codes.set(c.key, cellCodes(habitat.ids, m, all[i] ? summarizeWeather(all[i], today) : null, assess, soilOfCell(grid, c.lat, c.lon))));
     habitat.step = step; habitat.codes = codes;
   } catch {
     if (seq !== habitatSeq) return;
@@ -686,6 +700,7 @@ function momentLine(id) {
   if (so === 'late') return lv && lv !== 'hors-saison' ? `${LEVELS[lv].icon} fin de saison : ${esc(MOMENT[lv].short)} (doux, sans gel)` : `⚪ fin de saison : possible seulement s'il fait doux et sans gel`;
   if (!s.months.includes(m)) return `⚪ hors saison (saison : ${esc(seasonText(id))})`;
   const peak = (s.peak ?? []).includes(m) ? ' · mois de pic' : '';
+  if (state.momentBadSoil?.has(id)) return `🪨 sol ${state.momentSoil === 'calcaire' ? 'calcaire' : 'acide'} ici : pas son terrain`;
   const mo = state.moment.get(id);
   if (!mo) return `🟡 en saison${peak}`;
   return `${LEVELS[mo].icon} ${esc(MOMENT[mo].short)}${peak}`;
@@ -705,7 +720,7 @@ function renderBanner() {
     $('#species-banner').innerHTML = `<div class="head"><b>${esc(s.label)}</b>${tools}</div>
       <div class="small">${momentLine(id)}${rain}</div>
       <div class="small opt">${forests.length
-        ? `🌲 ${esc(forests.slice(0, 4).join(', '))}${forests.length > 4 ? '…' : ''}`
+        ? `🌲 ${esc(forests.slice(0, 4).join(', '))}${forests.length > 4 ? '…' : ''}${g.soil ? ` · 🪨 sols ${g.soil === 'siliceux' ? 'acides' : 'calcaires'} seulement` : ''}`
         : `🌿 ${esc(g.habitat ?? 'Pas de forêt type.')}`}</div>${forests.length ? HABITAT_LEGEND : ''}
       <div class="small opt">${mine ? `⭐ ${mine} de tes coins` : 'Aucun de tes coins'}${warn ? ` · <span class="warn">⚠️ sosie : ${esc(warn)}</span>` : ''} · <a class="tel" href="tel:+33491752525">antipoison</a></div>`;
     return;
