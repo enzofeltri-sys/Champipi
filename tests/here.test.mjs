@@ -33,14 +33,19 @@ test('pinède d\'Alep calcaire en novembre : lactaire sanguin en tête', () => {
   assert.ok(!r.some((x) => x.id === 'morille'));          // milieu non décrit par des arbres
 });
 
-test('sol contraire ou altitude hors plage : écarté', () => {
+test('sol contraire ou altitude hors plage : écarté (sol : seulement les espèces strictes)', () => {
   const chataigniers = treesAt('Forêt fermée de châtaignier pur');
-  const sil = whatGrows({ trees: chataigniers, soil: 'siliceux', alt: 400, month: 10 }).map((x) => x.id);
-  assert.ok(sil.includes('girolle') && sil.includes('oronge') && sil.includes('cepe'));
-  const calc = whatGrows({ trees: chataigniers, soil: 'calcaire', alt: 400, month: 10 }).map((x) => x.id);
-  assert.ok(!calc.includes('girolle') && calc.includes('cepe'));
+  const sil = whatGrows({ trees: chataigniers, soil: 'siliceux', alt: 400, month: 10 });
+  assert.ok(['girolle', 'oronge', 'cepe'].every((id) => sil.some((x) => x.id === id)));
+  const calc = whatGrows({ trees: chataigniers, soil: 'calcaire', alt: 400, month: 10 });
+  const gc = calc.find((x) => x.id === 'girolle'), gs = sil.find((x) => x.id === 'girolle');
+  assert.ok(gc && calc.some((x) => x.id === 'cepe'));                     // girolle possible sur calcaire…
+  assert.equal(gs.score - gc.score, 2);                                   // …mais moins (+1 acide, −1 calcaire)
+  assert.ok(gc.why.some((w) => /moins fréquent/.test(w.text)));
+  const pins = treesAt("Forêt fermée de pin d'Alep pur");
+  assert.ok(!whatGrows({ trees: pins, soil: 'siliceux', alt: 200, month: 10 }).some((x) => x.id === 'lactaire-sanguin'));   // strict
   const unk = whatGrows({ trees: chataigniers, soil: null, alt: 400, month: 10 }).find((x) => x.id === 'girolle');
-  assert.equal(unk.why.find((w) => w.ok === null).text, 'préfère un sol siliceux (sol non déterminé ici)');
+  assert.equal(unk.why.find((w) => w.ok === null).text, 'préfère un sol acide (sol non déterminé ici)');
   const haut = whatGrows({ trees: chataigniers, soil: 'siliceux', alt: 2000, month: 10 }).map((x) => x.id);
   assert.ok(!haut.includes('oronge'));
 });
@@ -84,14 +89,17 @@ test('sol dans « Ici ? » : bonus souple pour le cèpe sur sol acide, jamais de
   const acid = whatGrows({ trees, soil: 'siliceux', alt: 400, month: 10 }).find((r) => r.id === 'cepe');
   const calc = whatGrows({ trees, soil: 'calcaire', alt: 400, month: 10 }).find((r) => r.id === 'cepe');
   assert.ok(acid && calc); assert.equal(acid.score, calc.score + 1);
-  assert.ok(!whatGrows({ trees, soil: 'calcaire', alt: 400, month: 10 }).some((r) => r.id === 'girolle'));
 });
 
-test('conseiller : le sol compte (girolle sur acide +1, sur calcaire −2 ; cèpe acide +1)', () => {
+test('conseiller : le sol compte (girolle acide +1, calcaire −1 sauf si déjà trouvée ici ; lactaire strict −2 ; cèpe acide +1)', () => {
   const w = { rain10: 30, bigRainAgo: 7, bigRainMm: 25, frost7: 0, tmin7: 9, tmax7: 18, soilT3: null, soilM3: null };
   const s = (id, soil) => assess(w, { month: 10, species: [id], soil }).perSpecies[0].score;
   assert.equal(s('girolle', 'siliceux') - s('girolle', null), 1);
-  assert.equal(s('girolle', 'calcaire') - s('girolle', null), -2);
+  assert.equal(s('girolle', 'calcaire') - s('girolle', null), -1);
+  assert.equal(s('lactaire-sanguin', 'siliceux') - s('lactaire-sanguin', null), -2);
+  const found = assess(w, { month: 10, species: ['girolle'], soil: 'calcaire', history: [{ found_on: '2026-11-05', species: ['girolle'] }] }).perSpecies[0];
+  const none = assess(w, { month: 10, species: ['girolle'], history: [{ found_on: '2026-11-05', species: ['girolle'] }] }).perSpecies[0];
+  assert.equal(found.score, none.score); assert.ok(found.reasons.includes('sol calcaire, mais déjà trouvé ici'));
   assert.equal(s('cepe', 'siliceux') - s('cepe', null), 1);
   assert.equal(s('cepe', 'calcaire') - s('cepe', null), 0);
   assert.equal(s('cepe', 'mixte') - s('cepe', null), 0);

@@ -6,7 +6,7 @@ import {
   exifDate, searchSpots, searchHits, toGpx, toCsv, chipOrder, seasonOf, lateText,
 } from './logic.js';
 import { createPhotoStore, thumbPath } from './photos.js';
-import { GUIDE, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown } from './advisor.js';
+import { GUIDE, SOIL_STRICT, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown } from './advisor.js';
 import { dailyFor as openMeteoFor, forestAt, soilAt, historyFor, terrainAt, trophAt } from './weather.js';
 import { soilGuess, trophText } from './soil.js';
 import { ASPECT_TEXT } from './terrain.js';
@@ -581,7 +581,7 @@ async function updateMoment() {
     const m = month(); const next = new Map(), bad = new Set();
     for (const s of SPECIES) {
       if (seasonOf(s.id, m) === 'off') continue;
-      if (soil && GUIDE[s.id]?.soil && GUIDE[s.id].soil !== soil) { bad.add(s.id); next.set(s.id, 'faible'); continue; }   // pas son sol ici
+      if (soil && SOIL_STRICT.has(s.id) && GUIDE[s.id]?.soil && GUIDE[s.id].soil !== soil) { bad.add(s.id); next.set(s.id, 'faible'); continue; }   // pas son sol ici
       next.set(s.id, assess(w, { month: m, species: [s.id], soil }).level);
     }
     state.moment = next; state.momentBadSoil = bad; state.momentSoil = soil; state.momentRain = w.rain10; momentCell = cell;
@@ -720,7 +720,7 @@ function renderBanner() {
     $('#species-banner').innerHTML = `<div class="head"><b>${esc(s.label)}</b>${tools}</div>
       <div class="small">${momentLine(id)}${rain}</div>
       <div class="small opt">${forests.length
-        ? `🌲 ${esc(forests.slice(0, 4).join(', '))}${forests.length > 4 ? '…' : ''}${g.soil ? ` · 🪨 sols ${g.soil === 'siliceux' ? 'acides' : 'calcaires'} seulement` : ''}`
+        ? `🌲 ${esc(forests.slice(0, 4).join(', '))}${forests.length > 4 ? '…' : ''}${g.soil ? ` · 🪨 sols ${g.soil === 'siliceux' ? 'acides' : 'calcaires'} ${SOIL_STRICT.has(id) ? 'seulement' : 'de préférence'}` : ''}`
         : `🌿 ${esc(g.habitat ?? 'Pas de forêt type.')}`}</div>${forests.length ? HABITAT_LEGEND : ''}
       <div class="small opt">${mine ? `⭐ ${mine} de tes coins` : 'Aucun de tes coins'}${warn ? ` · <span class="warn">⚠️ sosie : ${esc(warn)}</span>` : ''} · <a class="tel" href="tel:+33491752525">antipoison</a></div>`;
     return;

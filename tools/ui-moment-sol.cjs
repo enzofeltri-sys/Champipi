@@ -1,5 +1,5 @@
-// Carte « bon moment » et sol : la girolle (sol acide) ne doit pas colorier les chênaies calcaires de Grans,
-// mais bien celles des Maures ; le cèpe reste colorié à Grans. Météo simulée : bien arrosée partout.
+// Carte « bon moment » et sol : à Grans (calcaire) la girolle reste affichée mais pas en vert (une couleur en dessous),
+// dans les Maures (acide) elle est en vert ; le lactaire sanguin n'apparaît pas dans les Maures. Météo simulée : bien arrosée partout.
 const { chromium, devices } = require('playwright');
 const [, , SITE, OUT] = process.argv;
 const REF = 'vvegujltsjgwszeloyaz', ME = '11111111-1111-1111-1111-111111111111';
@@ -24,13 +24,18 @@ const REF = 'vvegujltsjgwszeloyaz', ME = '11111111-1111-1111-1111-111111111111';
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(obj ? body[0] ?? null : body) });
   });
   const count = () => page.evaluate(() => {
-    const out = { colorie: 0 };
+    const out = { vert: 0, jaune: 0, rouge: 0, autre: 0 };
     for (const c of document.querySelectorAll('.leaflet-tile-container canvas')) {
       const r = c.getBoundingClientRect(); if (r.bottom < 0 || r.top > window.innerHeight) continue;
       const d = c.getContext('2d').getImageData(0, 0, 256, 256).data;
-      for (let i = 3; i < d.length; i += 4) if (d[i] > 0) out.colorie++;
+      for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 0) {
+        const ref = { vert: [22, 163, 74], jaune: [234, 179, 8], rouge: [220, 38, 38], gris: [100, 116, 139], attente: [148, 163, 184] };
+        let best = 'autre', bd = 1e9;
+        for (const [n, c] of Object.entries(ref)) { const dd = Math.abs(d[i] - c[0]) + Math.abs(d[i + 1] - c[1]) + Math.abs(d[i + 2] - c[2]); if (dd < bd) { bd = dd; best = n; } }
+        out[best] = (out[best] ?? 0) + 1;
+      }
     }
-    return out.colorie;
+    return out;
   });
   async function look(lat, lon, chip, label) {
     await page.evaluate(([la, lo]) => localStorage.setItem('champi-view', JSON.stringify({ lat: la, lon: lo, zoom: 12 })), [lat, lon]);
@@ -38,7 +43,7 @@ const REF = 'vvegujltsjgwszeloyaz', ME = '11111111-1111-1111-1111-111111111111';
     await page.locator('.sp-chip', { hasText: chip }).first().click();
     await page.waitForTimeout(7000);
     const n = await count();
-    console.log(`${label} · ${chip} : ${n} pixels de forêt coloriés`);
+    console.log(`${label} · ${chip} :`, JSON.stringify(n));
     await page.screenshot({ path: `${OUT}/s-${label.split(' ')[0].toLowerCase()}-${chip.toLowerCase()}.png` });
     await page.locator('.sp-chip.on').first().click(); await page.waitForTimeout(300);
     return n;
@@ -49,9 +54,9 @@ const REF = 'vvegujltsjgwszeloyaz', ME = '11111111-1111-1111-1111-111111111111';
   }, [REF, ME]);
   await page.goto(SITE);
   const g1 = await look(43.64, 5.10, 'Girolle', 'Grans (calcaire)');
-  const c1 = await look(43.64, 5.10, 'Cèpe', 'Grans (calcaire)');
   const g2 = await look(43.27, 6.30, 'Girolle', 'Maures (acide)');
-  console.log('résultat : girolle Grans', g1 === 0 ? 'absente ✔' : 'PRÉSENTE ✘', '| cèpe Grans', c1 > 0 ? 'présent ✔' : 'absent ✘', '| girolle Maures', g2 > 0 ? 'présente ✔' : 'absente ✘');
+  const l2 = await look(43.15, 6.30, 'Lactaire', 'Maures-sud (acide)');
+  console.log('résultat : girolle Grans', g1.vert === 0 && g1.jaune > 0 ? 'jaune, pas de vert ✔' : '✘', '| girolle Maures', g2.vert > 0 ? 'verte ✔' : '✘', '| lactaire Maures', l2.vert + l2.jaune + l2.rouge === 0 ? 'absent ✔' : '✘ ' + JSON.stringify(l2));
   console.log('ERREURS :', errors.length ? errors : 'aucune');
   await b.close();
 })();

@@ -2,7 +2,7 @@
 // diffusée par l'IGN), de l'altitude et du mois, liste les champignons du carnet qui ont leur milieu ici.
 // Règles simples et transparentes, pas d'IA. Indicatif : un milieu favorable ne garantit rien.
 import { SPECIES, seasonText, seasonOf } from './logic.js';
-import { GUIDE, SOIL_SOFT } from './advisor.js';
+import { GUIDE, SOIL_SOFT, SOIL_STRICT, soilEffect } from './advisor.js';
 import { speciesTrees } from './forests.js';
 
 const FEUILLUS = ['chene-blanc', 'chene-vert', 'chataignier', 'hetre'];
@@ -72,11 +72,10 @@ export function whatGrows({ trees, soil = null, alt = null, month }) {
     if (!tree) continue;
     const why = [{ ok: true, text: tree === 2 ? `arbres typiques (${TREE_LABEL[treeName] ?? treeName})` : 'arbres possibles dans le mélange' }];
     let score = tree * 2;
-    if (g.soil) {
-      if (soil === g.soil) { score += 1; why.push({ ok: true, text: `sol ${soil}` }); }
-      else if (soil) { score -= 3; why.push({ ok: false, text: `préfère un sol ${g.soil} (ici ${soil})` }); }
-      else why.push({ ok: null, text: `préfère un sol ${g.soil} (sol non déterminé ici)` });
-    } else if (soil && SOIL_SOFT[sp.id] === soil) { score += 1; why.push({ ok: true, text: `sol ${soil === 'siliceux' ? 'acide' : soil} : favorable` }); }
+    const se = soilEffect(sp.id, soil);
+    if (se.bad) { score -= 3; why.push({ ok: false, text: se.text }); }                 // lactaire sanguin sur sol acide…
+    else if (se.text) { score += se.delta; why.push({ ok: se.delta > 0 ? true : null, text: se.text }); }
+    else if (g.soil && !soil) why.push({ ok: null, text: `préfère un sol ${g.soil === 'siliceux' ? 'acide' : 'calcaire'} (sol non déterminé ici)` });
     if (alt != null) {
       if (alt < g.alt[0] - 100 || alt > g.alt[1] + 100) { score -= 3; why.push({ ok: false, text: `rare à ${alt} m (plutôt ${g.alt[0]}–${g.alt[1]} m)` }); }
       else why.push({ ok: true, text: `altitude ${alt} m` });

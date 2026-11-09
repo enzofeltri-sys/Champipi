@@ -3,7 +3,7 @@
 // rouge = pas le moment, gris = hors saison (ou météo pas encore chargée).
 import { seasonOf } from './logic.js';
 import { favorableColors } from './forests.js';
-import { GUIDE } from './advisor.js';
+import { GUIDE, SOIL_STRICT, soilEffect } from './advisor.js';
 import { trophClass } from './soil.js';
 
 /** Clé couleur RVB → { w: 2 (forêt pure) | 1 (mélange), mask: bits des espèces choisies concernées }. */
@@ -56,11 +56,14 @@ export function soilOfCell(grid, lat, lon) {
 /** Avis pour une case : un code par espèce choisie (0 si hors saison, BAD_SOIL si le sol ne lui convient pas). */
 export function cellCodes(ids, month, w, assess, soil = null) {
   return ids.map((id) => {
-    if (soil && GUIDE[id]?.soil && GUIDE[id].soil !== soil) return BAD_SOIL;   // girolle sur calcaire, lactaire sur sol acide…
+    if (soil && SOIL_STRICT.has(id) && GUIDE[id]?.soil && GUIDE[id].soil !== soil) return BAD_SOIL;   // lactaire sanguin sur sol acide…
     if (seasonOf(id, month) === 'off') return 0;
     if (!w) return -1;
-    const lv = assess(w, { month, species: [id], soil }).level;
-    return lv === 'hors-saison' ? 0 : CODE[lv] ?? -1;
+    // Sol qu'elle n'aime pas (girolle sur calcaire) : affichée, mais exactement une couleur en dessous (vert → jaune, jaune → rouge).
+    const worse = soilEffect(id, soil).delta < 0;
+    const lv = assess(w, { month, species: [id], soil: worse ? null : soil }).level;
+    const code = lv === 'hors-saison' ? 0 : CODE[lv] ?? -1;
+    return worse && code > 1 ? code - 1 : code;
   });
 }
 

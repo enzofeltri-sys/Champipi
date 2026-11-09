@@ -14,6 +14,24 @@ export const SOIL_T = {
 // mais il est plus fréquent sur sol acide ; trompette, saint-georges et morille aiment les sols riches, calcaires ou neutres.
 // Les préférences nettes (girolle, oronge… : GUIDE[].soil) excluent l'autre type de sol.
 export const SOIL_SOFT = { cepe: 'siliceux', trompette: 'calcaire', 'saint-georges': 'calcaire', morille: 'calcaire' };
+// Préférences strictes : l'espèce ne pousse quasiment pas sur l'autre sol (exclue de la carte et de « Ici ? »).
+// Girolle, oronge et chanterelle grise préfèrent les sols acides mais se trouvent aussi sur calcaire en Provence
+// (girolles des chênes dans des poches décalcifiées : trouvées par la famille à Ricard, sol calcaire) : seulement moins probables.
+export const SOIL_STRICT = new Set(['lactaire-sanguin', 'berigoule']);
+/** Effet du sol pour une espèce : { delta, text } (texte vide = rien à dire). found = déjà trouvée à cet endroit. */
+export function soilEffect(id, soil, found = false) {
+  if (soil !== 'calcaire' && soil !== 'siliceux') return { delta: 0, text: '', bad: false };
+  const pref = GUIDE[id]?.soil ?? null, soft = SOIL_SOFT[id] ?? null, name = soil === 'siliceux' ? 'acide' : 'calcaire';
+  const want = (p) => (p === 'siliceux' ? 'acide' : 'calcaire');
+  if (pref === soil) return { delta: 1, text: `sol ${name} : celui qu'il préfère`, bad: false };
+  if (pref) {
+    if (found) return { delta: 0, text: `sol ${name}, mais déjà trouvé ici`, bad: false };   // l'expérience passe avant la règle
+    if (SOIL_STRICT.has(id)) return { delta: -2, text: `sol ${name} : il lui faut un sol ${want(pref)}`, bad: true };
+    return { delta: -1, text: `sol ${name} : moins fréquent (préfère un sol ${want(pref)})`, bad: false };
+  }
+  if (soft === soil) return { delta: 1, text: `sol ${name} : favorable`, bad: false };
+  return { delta: 0, text: '', bad: false };
+}
 
 export const GUIDE = {
   'lactaire-sanguin': { latin: 'Lactarius sanguifluus', trees: ['pin-alep', 'pin-sylvestre', 'pin-maritime'], soil: 'calcaire', alt: [0, 1200],
@@ -216,12 +234,8 @@ export function assess(w, { month, species = [], trees = [], history = [], perso
       else if (cool && !dryish) { score += face === 'sud' ? 1 : -1; reasons.push(face === 'sud' ? 'versant sud : plus chaud' : 'versant nord : plus froid'); }
     }
     // Sol (relevés de l'Inventaire forestier, carte des sols ou saisi à la main) : « mixte » ou inconnu → rien.
-    if (soil === 'calcaire' || soil === 'siliceux') {
-      const hard = g?.soil, soft = SOIL_SOFT[id], name = soil === 'siliceux' ? 'acide' : 'calcaire';
-      if (hard && hard === soil) { score += 1; reasons.push(`sol ${name} : celui qu'il préfère`); }
-      else if (hard) { score -= 2; reasons.push(`sol ${name} : il préfère un sol ${hard === 'siliceux' ? 'acide' : 'calcaire'}`); }
-      else if (soft === soil) { score += 1; reasons.push(`sol ${name} : favorable`); }
-    }
+    const se = soilEffect(id, soil, history.some((f) => !f.empty && (f.species ?? []).includes(id)));
+    if (se.text) { score += se.delta; reasons.push(se.text); }
     if (!sp.months.includes(month)) { score -= 1; reasons.push('fin de saison : possible car doux et sans gel'); }
     if (g?.trees.length && trees.length) {
       if (trees.some((t) => g.trees.includes(t))) { score += 1; reasons.push('milieu typique'); }
