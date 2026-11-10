@@ -22,7 +22,8 @@ def stereo(lat, lon, lat_ts, lon0):
 def georef(im):
     tag = im.tag_v2
     keys = tag[34735]; dbl = tag.get(34736, ())
-    geo = {keys[i]: (keys[i + 3] if keys[i + 1] == 0 else dbl[keys[i + 3]]) for i in range(4, len(keys), 4)}
+    # Clés GeoTIFF : valeur directe (emplacement 0), dans la table des doubles (34736) ou du texte (34737, ignoré).
+    geo = {keys[i]: (keys[i + 3] if keys[i + 1] == 0 else dbl[keys[i + 3]] if keys[i + 1] == 34736 else None) for i in range(4, len(keys), 4)}
     assert geo.get(3075) == 15, f'projection inattendue {geo}'   # 15 = stéréographique polaire
     sx, sy = tag[33550][:2]; tie = tag[33922]
     return {'x0': tie[3] - tie[0] * sx, 'y0': tie[4] + tie[1] * sy, 'sx': sx, 'sy': sy,
