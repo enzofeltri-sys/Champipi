@@ -121,7 +121,12 @@ export function zonesText(zones) {
   const coeur = pn.find((z) => /c(œ|oe)ur/i.test(z.zone ?? '') || !/adh/i.test(z.nom_site ?? ''));
   if (coeur) out.push({ level: 'stop', text: `Cœur du parc national ${coeur.nom_site} : cueillette encadrée par la réglementation du parc, à vérifier avant de ramasser`, url: coeur.url_fiche });
   else if (pn.length) out.push({ level: 'info', text: `Aire d'adhésion du parc national ${pn[0].nom_site.replace(/\s*\[.*\]/, '')} : règles ordinaires, sauf arrêté local`, url: pn[0].url_fiche });
-  for (const z of [...one('rnn'), ...one('rnr')]) out.push({ level: 'stop', text: `Réserve naturelle ${z.nom_site} : la cueillette y est souvent interdite, voir son règlement`, url: z.url_fiche });
+  for (const z of [...one('rnn'), ...one('rnr')]) {
+    const name = (z.nom_site ?? '').replace(/\s+/g, ' ').trim();
+    // Réserve géologique (fossiles, roches) ou simple périmètre de protection : les champignons ne sont pas visés.
+    if (/g[ée]olog|p[ée]rim[èe]tre/i.test(name) || z.p4_geologi === 'T') out.push({ level: 'info', text: `${/p[ée]rim[èe]tre/i.test(name) ? 'Périmètre de protection d\'une réserve' : 'Réserve naturelle géologique'} (${name}) : protège les fossiles et les roches ; la cueillette des champignons n'y est pas visée`, url: z.url_fiche });
+    else out.push({ level: 'stop', text: `Réserve naturelle ${name} : la cueillette y est souvent interdite, voir son règlement`, url: z.url_fiche });
+  }
   for (const z of one('rb')) out.push({ level: 'stop', text: `Réserve biologique ${z.nom_site} : cueillette en général interdite ou très limitée`, url: z.url_fiche });
   for (const z of one('apb')) out.push({ level: 'warn', text: `Arrêté de protection de biotope ${z.nom_site} : règles propres au site, à vérifier`, url: z.url_fiche });
   for (const z of one('pnr')) out.push({ level: 'info', text: `Parc naturel régional ${z.nom_site} : pas d'interdiction générale, des règles locales sont possibles`, url: z.url_fiche });

@@ -33,3 +33,10 @@ test('zones protégées : le plus contraignant d\'abord, forêt publique ou priv
   assert.ok(oldForestText('foret recente').includes('Forêt récente'));
   assert.equal(oldForestText(null), null);
 });
+
+test('réserve géologique : les champignons ne sont pas visés', () => {
+  const z = zonesText([{ kind: 'rnn', nom_site: 'Lubéron', p4_geologi: 'T' }, { kind: 'rnn', nom_site: 'Périmètre De Protection De La Réserve Naturelle Géologique De Luberon' }, { kind: 'rnn', nom_site: 'Sainte-Victoire' }]);
+  assert.ok(z.some((x) => x.level === 'info' && x.text.startsWith('Réserve naturelle géologique (Lubéron)')));
+  assert.ok(z.some((x) => x.level === 'info' && x.text.startsWith('Périmètre de protection d\'une réserve')));
+  assert.ok(z.some((x) => x.level === 'stop' && x.text.startsWith('Réserve naturelle Sainte-Victoire')));
+});
