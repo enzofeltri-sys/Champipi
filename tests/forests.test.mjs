@@ -32,11 +32,11 @@ test('lactaire sanguin : pinèdes, dont mélanges de pins et pins noirs', () => 
   assert.ok(speciesTrees('lactaire-sanguin').includes('pin-autre'));
 });
 
-test('coulemelle : prairies (et landes, possible) ; morille : aucune forêt type', () => {
+test('coulemelle : prairies (et landes, possible) ; morille : chênes verts et pins d\'Alep', () => {
   const m = favorableColors('coulemelle');
   assert.equal(m.get(hex('Prairies, pelouses')), 2);
   assert.equal(m.get(hex('Landes')), 1);
-  assert.equal(favorableColors('morille').size, 0);
+  assert.ok(favorableColors('morille').size > 0);
   assert.deepEqual(favorableLabels('trompette'), ['Chênes blancs', 'Châtaigniers', 'Hêtres']);
 });
 

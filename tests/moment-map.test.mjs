@@ -46,9 +46,10 @@ test('carte du moment : le sol de la case compte (lactaire jamais sur sol acide 
   assert.equal(soilOfCell(grid, 44.9, 6.9), null);              // pas de relevés
   const w = { rain10: 30, bigRainAgo: 7, bigRainMm: 25, frost7: 0, tmin7: 9, tmax7: 18, soilT3: null, soilM3: null };
   const [gir, cep] = cc2(['girolle', 'cepe'], 11, w, as2, 'calcaire');
-  assert.equal(gir, cc2(['girolle'], 11, w, as2, null)[0] - 1);   // girolle affichée sur calcaire, une couleur en dessous
+  assert.equal(gir, cc2(['girolle'], 11, w, as2, null)[0]);   // girolle des chênes : pas pénalisée sur calcaire (arbres inconnus sur la carte)
   assert.ok(cep > 0);                                            // le cèpe reste possible sur calcaire
-  assert.equal(cc2(['lactaire-sanguin'], 11, w, as2, 'siliceux')[0], BAD_SOIL);
+  const lac = cc2(['lactaire-sanguin'], 11, w, as2, 'siliceux')[0];
+  assert.ok(lac !== BAD_SOIL && lac < cc2(['lactaire-sanguin'], 11, w, as2, 'calcaire')[0]);   // affiché, mais une couleur en dessous
   assert.equal(pc2(0b01, [BAD_SOIL, 3]), BAD_SOIL);              // pixel où seule la girolle est concernée
   assert.equal(pc2(0b11, [BAD_SOIL, 2]), 2);                     // forêt aussi bonne pour le cèpe : couleur du cèpe
 });

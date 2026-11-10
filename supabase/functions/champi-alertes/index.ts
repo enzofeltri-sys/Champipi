@@ -54,7 +54,7 @@ async function weatherFor(points: [number, number][]) {
   const out: any[] = [];
   for (let k = 0; k < points.length; k += 100) {
     const p = points.slice(k, k + 100);
-    const q = `https://api.open-meteo.com/v1/forecast?latitude=${p.map((x) => x[0].toFixed(3)).join(',')}&longitude=${p.map((x) => x[1].toFixed(3)).join(',')}&daily=precipitation_sum,temperature_2m_max,temperature_2m_min&past_days=14&forecast_days=3&timezone=Europe%2FParis`;
+    const q = `https://api.open-meteo.com/v1/forecast?latitude=${p.map((x) => x[0].toFixed(3)).join(',')}&longitude=${p.map((x) => x[1].toFixed(3)).join(',')}&daily=precipitation_sum,temperature_2m_max,temperature_2m_min&past_days=31&forecast_days=3&timezone=Europe%2FParis`;
     // Modèles Météo-France (AROME, ARPEGE) via Open-Meteo ; en secours, le mélange habituel.
     let r = await fetch(`${q}&models=meteofrance_seamless`);
     if (!r.ok) r = await fetch(q);

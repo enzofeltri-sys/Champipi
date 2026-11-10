@@ -47,7 +47,7 @@ async function fetchJson(url, tries = 2) {
 }
 
 /**
- * Données quotidiennes (14 jours passés + 3 jours de prévision) pour une liste de points [[lat, lon], …].
+ * Données quotidiennes (31 jours passés pour la réserve d’eau + 3 jours de prévision) pour une liste de points [[lat, lon], …].
  * Renvoie un tableau de « daily » dans le même ordre. Un seul appel pour 100 points maximum.
  */
 export async function dailyFor(points) {
@@ -59,7 +59,7 @@ export async function dailyFor(points) {
     const lats = idx.map((i) => points[i][0].toFixed(3)).join(',');
     const lons = idx.map((i) => points[i][1].toFixed(3)).join(',');
     // Modèles de Météo-France (AROME, ARPEGE) servis par Open-Meteo ; en secours, le mélange habituel d'Open-Meteo.
-    const q = `${OPEN_METEO}?latitude=${lats}&longitude=${lons}&daily=${DAILY}&past_days=14&forecast_days=3&timezone=Europe%2FParis`;
+    const q = `${OPEN_METEO}?latitude=${lats}&longitude=${lons}&daily=${DAILY}&past_days=31&forecast_days=3&timezone=Europe%2FParis`;
     let j;
     try { j = await fetchJson(`${q}&models=meteofrance_seamless`, 1); } catch { j = await fetchJson(q); }
     const arr = Array.isArray(j) ? j : [j];

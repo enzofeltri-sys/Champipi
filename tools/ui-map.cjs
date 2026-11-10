@@ -51,12 +51,12 @@ const finds = [
   await page.screenshot({ path: `${OUT}/a2-cepe.png` });
 
   // Plusieurs espèces : Cèpe + Lactaire → les deux coins
-  await page.locator('.sp-chip', { hasText: 'Lactaire' }).click(); await page.waitForTimeout(800);
+  await page.locator('.sp-chip', { hasText: 'Lactaire sanguin' }).click(); await page.waitForTimeout(800);
   console.log('CÈPE + LACTAIRE · épingles :', await pins(), '| pastilles cochées :', (await page.locator('.sp-chip.on').allTextContents()).join(' | '));
   console.log('bandeau :', (await page.textContent('#species-banner')).replace(/\s+/g, ' ').trim().slice(0, 260));
   await page.screenshot({ path: `${OUT}/a2b-plusieurs.png` });
   // On retire le lactaire : retour au cèpe seul, toucher l'épingle
-  await page.locator('.sp-chip', { hasText: 'Lactaire' }).click(); await page.waitForTimeout(500);
+  await page.locator('.sp-chip', { hasText: 'Lactaire sanguin' }).click(); await page.waitForTimeout(500);
   console.log('CÈPE seul · épingles :', await pins());
   await page.locator('.leaflet-marker-icon').first().click();
   await page.waitForSelector('#dlg-spot[open]');

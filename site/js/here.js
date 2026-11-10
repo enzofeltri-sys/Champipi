@@ -2,7 +2,7 @@
 // diffusée par l'IGN), de l'altitude et du mois, liste les champignons du carnet qui ont leur milieu ici.
 // Règles simples et transparentes, pas d'IA. Indicatif : un milieu favorable ne garantit rien.
 import { SPECIES, seasonText, seasonOf } from './logic.js';
-import { GUIDE, SOIL_SOFT, SOIL_STRICT, soilEffect } from './advisor.js';
+import { GUIDE, SOIL_SOFT, SOIL_STRICT, soilEffect, seasonAt, HIGH_ALT } from './advisor.js';
 import { speciesTrees } from './forests.js';
 
 const FEUILLUS = ['chene-blanc', 'chene-vert', 'chataignier', 'hetre'];
@@ -72,7 +72,7 @@ export function whatGrows({ trees, soil = null, alt = null, month }) {
     if (!tree) continue;
     const why = [{ ok: true, text: tree === 2 ? `arbres typiques (${TREE_LABEL[treeName] ?? treeName})` : 'arbres possibles dans le mélange' }];
     let score = tree * 2;
-    const se = soilEffect(sp.id, soil);
+    const se = soilEffect(sp.id, soil, false, [...trees.keys()]);
     if (se.bad) { score -= 3; why.push({ ok: false, text: se.text }); }                 // lactaire sanguin sur sol acide…
     else if (se.text) { score += se.delta; why.push({ ok: se.delta > 0 ? true : null, text: se.text }); }
     else if (g.soil && !soil) why.push({ ok: null, text: `préfère un sol ${g.soil === 'siliceux' ? 'acide' : 'calcaire'} (sol non déterminé ici)` });
@@ -81,9 +81,11 @@ export function whatGrows({ trees, soil = null, alt = null, month }) {
       else why.push({ ok: true, text: `altitude ${alt} m` });
     }
     if (why.some((w) => w.ok === false)) continue;   // une contrainte nette n'est pas remplie : on ne le propose pas
-    const inSeason = sp.months.includes(month), late = seasonOf(sp.id, month) === 'late';
+    const ss = seasonAt(sp.id, alt);   // en altitude, certaines espèces sortent plus tôt (juillet–octobre)
+    const inSeason = ss.months.includes(month), late = ss.late.includes(month);
+    const high = alt != null && alt >= HIGH_ALT && ss !== seasonAt(sp.id, null) && ss.months.join() !== seasonAt(sp.id, null).months.join();
     out.push({
-      id: sp.id, label: sp.label, score, inSeason, late, peak: (sp.peak ?? []).includes(month), season: seasonText(sp.id),
+      id: sp.id, label: sp.label, score, inSeason, late, peak: ss.peak.includes(month), season: high ? `${seasonText(sp.id)} (en altitude : juil.–oct.)` : seasonText(sp.id),
       level: tree === 2 ? 'probable' : 'possible', why,
     });
   }

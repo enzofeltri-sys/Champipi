@@ -8,25 +8,36 @@ export const SOIL_WET = 0.33, SOIL_DRY = 0.26;   // humidité du sol (m³/m³), 
 export const SOIL_T = {
   'lactaire-sanguin': [8, 16], 'petit-gris': [5, 12], cepe: [12, 18], girolle: [12, 18], 'pied-de-mouton': [6, 14],
   trompette: [8, 15], oronge: [16, 24], coulemelle: [12, 20], berigoule: [10, 18], morille: [8, 14],
-  'saint-georges': [8, 14], 'chanterelle-grise': [4, 12],
+  'saint-georges': [8, 14], 'chanterelle-grise': [4, 12], 'lactaire-delicieux': [8, 16],
 };
 // Préférences de sol « souples » (un plus quand le sol convient, jamais un refus) : le cèpe pousse aussi sur calcaire,
 // mais il est plus fréquent sur sol acide ; trompette, saint-georges et morille aiment les sols riches, calcaires ou neutres.
 // Les préférences nettes (girolle, oronge… : GUIDE[].soil) excluent l'autre type de sol.
 export const SOIL_SOFT = { cepe: 'siliceux', trompette: 'calcaire', 'saint-georges': 'calcaire', morille: 'calcaire' };
-// Préférences strictes : l'espèce ne pousse quasiment pas sur l'autre sol (exclue de la carte et de « Ici ? »).
-// Girolle, oronge et chanterelle grise préfèrent les sols acides mais se trouvent aussi sur calcaire en Provence
-// (girolles des chênes dans des poches décalcifiées : trouvées par la famille à Ricard, sol calcaire) : seulement moins probables.
-export const SOIL_STRICT = new Set(['lactaire-sanguin', 'berigoule']);
-/** Effet du sol pour une espèce : { delta, text } (texte vide = rien à dire). found = déjà trouvée à cet endroit. */
-export function soilEffect(id, soil, found = false) {
+// Préférences strictes (espèce exclue de la carte sur l'autre sol) : aucune pour l'instant. Les sources décrivent
+// des préférences, pas des exclusions, et la carte du sol (~1 km) ne voit pas les poches locales : le lactaire sanguin
+// garde −2 sur sol acide mais reste affiché ; la bérigoule dépend surtout du panicaut (rapport de recherche, nov. 2026).
+export const SOIL_STRICT = new Set();
+// Forte préférence (−2 sur l'autre sol, mais toujours affiché) : le lactaire sanguin, calcicole marqué.
+export const SOIL_STRONG = new Set(['lactaire-sanguin']);
+// Girolles de Provence : deux profils (Olariaga et al. 2017, Fungal Diversity) — sous chêne vert ou chêne pubescent sur
+// calcaire, Cantharellus alborufescens, calcicole ; ailleurs (chêne-liège, châtaignier, pin maritime) girolles des sols acides.
+const LIMESTONE_OAKS = ['chene-vert', 'chene-blanc'];
+/** Effet du sol pour une espèce : { delta, text } (texte vide = rien à dire). found = déjà trouvée à cet endroit ; trees = arbres du lieu. */
+export function soilEffect(id, soil, found = false, trees = []) {
   if (soil !== 'calcaire' && soil !== 'siliceux') return { delta: 0, text: '', bad: false };
   const pref = GUIDE[id]?.soil ?? null, soft = SOIL_SOFT[id] ?? null, name = soil === 'siliceux' ? 'acide' : 'calcaire';
   const want = (p) => (p === 'siliceux' ? 'acide' : 'calcaire');
+  if (id === 'girolle' && soil === 'calcaire') {
+    if (trees.some((t) => LIMESTONE_OAKS.includes(t))) return { delta: 1, text: 'sol calcaire sous chênes : la girolle des chênes de Provence (C. alborufescens) l\'aime', bad: false };
+    if (!trees.length || found) return { delta: 0, text: '', bad: false };   // arbres inconnus : on ne juge pas
+    return { delta: -1, text: 'sol calcaire sans chênes : moins fréquent (girolles des sols acides)', bad: false };
+  }
   if (pref === soil) return { delta: 1, text: `sol ${name} : celui qu'il préfère`, bad: false };
   if (pref) {
     if (found) return { delta: 0, text: `sol ${name}, mais déjà trouvé ici`, bad: false };   // l'expérience passe avant la règle
     if (SOIL_STRICT.has(id)) return { delta: -2, text: `sol ${name} : il lui faut un sol ${want(pref)}`, bad: true };
+    if (SOIL_STRONG.has(id)) return { delta: -2, text: `sol ${name} : rare (il préfère nettement un sol ${want(pref)})`, bad: false };
     return { delta: -1, text: `sol ${name} : moins fréquent (préfère un sol ${want(pref)})`, bad: false };
   }
   if (soft === soil) return { delta: 1, text: `sol ${name} : favorable`, bad: false };
@@ -37,14 +48,17 @@ export const GUIDE = {
   'lactaire-sanguin': { latin: 'Lactarius sanguifluus', trees: ['pin-alep', 'pin-sylvestre', 'pin-maritime'], soil: 'calcaire', alt: [0, 1200],
     habitat: 'Sous les pins (surtout pin d\'Alep), sols calcaires, pinèdes claires.',
     lookalikes: 'Autres lactaires (lait blanc ou âcre). Le lactaire sanguin a un lait rouge vineux.' },
+  'lactaire-delicieux': { latin: 'Lactarius deliciosus', trees: ['pin-alep', 'pin-sylvestre', 'pin-maritime'], soil: null, alt: [0, 1800],
+    habitat: 'Sous les pins, sur tous les sols (là où le lactaire sanguin manque, sur silice).',
+    lookalikes: 'Autres lactaires : lait orange carotte ici (rouge vineux chez le sanguin, blanc et âcre chez les toxiques).' },
   'petit-gris': { latin: 'Tricholoma terreum', trees: ['pin-alep', 'pin-sylvestre', 'pin-maritime'], soil: null, alt: [0, 1500],
     habitat: 'Sous les pins, souvent en troupes, sur aiguilles.',
     lookalikes: '⚠️ Tricholome tigré (Tricholoma pardinum), toxique : chapeau plus grand, écailles marquées.' },
-  cepe: { latin: 'Boletus edulis, aereus, aestivalis…', trees: ['chene-blanc', 'chene-vert', 'chataignier', 'hetre', 'pin-sylvestre', 'pin-maritime'], soil: null, alt: [200, 1600],
-    habitat: 'Chênaies, châtaigneraies, hêtraies et pinèdes ; lisières et sous-bois clairs.',
+  cepe: { latin: 'Boletus edulis, aereus, aestivalis…', trees: ['chene-blanc', 'chene-vert', 'chene-liege', 'chataignier', 'hetre', 'pin-sylvestre', 'pin-maritime'], soil: null, alt: [0, 1600],
+    habitat: 'Chênaies (chêne-liège et chêne vert pour le cèpe bronzé en basse Provence, avec cistes, arbousiers, bruyères), châtaigneraies, hêtraies et pinèdes ; lisières et sous-bois clairs.',
     lookalikes: '⚠️ Bolet de Satan (pores rouges, pied réticulé rouge), toxique. Bolet amer : immangeable.' },
-  girolle: { latin: 'Cantharellus cibarius', trees: ['chene-vert', 'chene-liege', 'chene-blanc', 'chataignier', 'hetre', 'pin-maritime'], soil: 'siliceux', alt: [0, 1500],
-    habitat: 'Chênes, châtaigniers, hêtres, sur sols plutôt acides (Maures, Estérel).',
+  girolle: { latin: 'Cantharellus alborufescens, pallens, cibarius…', trees: ['chene-vert', 'chene-liege', 'chene-blanc', 'chataignier', 'hetre', 'pin-maritime'], soil: 'siliceux', alt: [0, 1500],
+    habitat: 'Deux girolles en Provence : sous chêne vert et chêne pubescent sur calcaire (C. alborufescens), et sous chêne-liège, châtaignier ou pin maritime sur sol acide (Maures, Estérel).',
     lookalikes: '⚠️ Clitocybe de l\'olivier (Omphalotus olearius), toxique et très courant en Provence : vraies lamelles, pousse en touffes sur souches. Fausse girolle (Hygrophoropsis).' },
   'pied-de-mouton': { latin: 'Hydnum repandum', trees: ['chene-blanc', 'chene-vert', 'hetre', 'chataignier', 'pin-sylvestre'], soil: null, alt: [0, 1600],
     habitat: 'Feuillus et conifères, souvent en cercles ou en lignes.',
@@ -52,8 +66,8 @@ export const GUIDE = {
   trompette: { latin: 'Craterellus cornucopioides', trees: ['chene-blanc', 'hetre', 'chataignier'], soil: null, alt: [200, 1500],
     habitat: 'Feuillus (hêtres, chênes, châtaigniers), sols frais, mousses et feuilles mortes.',
     lookalikes: 'Peu de confusion dangereuse, mais difficile à voir.' },
-  oronge: { latin: 'Amanita caesarea', trees: ['chene-blanc', 'chene-vert', 'chene-liege', 'chataignier'], soil: 'siliceux', alt: [0, 1000],
-    habitat: 'Chênaies et châtaigneraies chaudes, sols siliceux (Var, Maures).',
+  oronge: { latin: 'Amanita caesarea', trees: ['chene-blanc', 'chene-vert', 'chene-liege', 'chataignier'], soil: null, alt: [0, 1000],
+    habitat: 'Chênaies et châtaigneraies chaudes et claires, sur calcaire comme sur silice (Var, Maures) ; souvent après les orages d\'été.',
     lookalikes: '⚠️⚠️ Au stade « œuf », confusion possible avec l\'amanite phalloïde, MORTELLE. Amanite tue-mouches (toxique).' },
   coulemelle: { latin: 'Macrolepiota procera', trees: ['prairie'], soil: null, alt: [0, 1800],
     habitat: 'Lisières, clairières, prairies et bords de chemins.',
@@ -61,8 +75,8 @@ export const GUIDE = {
   berigoule: { latin: 'Pleurotus eryngii', trees: ['prairie'], soil: 'calcaire', alt: [0, 1000],
     habitat: 'Friches et pelouses sèches calcaires, sur les racines du panicaut champêtre.',
     lookalikes: 'Peu de confusion dangereuse dans ce milieu ; vérifier la présence du panicaut.' },
-  morille: { latin: 'Morchella spp.', trees: [], soil: null, alt: [0, 1800],
-    habitat: 'Frênes, ormes, bords de rivières (ripisylves), zones brûlées, vergers.',
+  morille: { latin: 'Morchella spp. (dont M. dunalii, méditerranéenne)', trees: ['chene-vert', 'pin-alep'], soil: null, alt: [0, 1800],
+    habitat: 'Chênaies vertes et pinèdes de pin d\'Alep sur calcaire au printemps (morille méditerranéenne, M. dunalii), frênes et bords de rivières, zones brûlées, vergers.',
     lookalikes: '⚠️⚠️ Gyromitre (cerveau plissé, pas d\'alvéoles creuses), MORTEL. Toujours bien cuire les morilles.' },
   'saint-georges': { latin: 'Calocybe gambosa', trees: ['prairie'], soil: null, alt: [0, 1800],
     habitat: 'Prairies, haies, lisières ; pousse en ronds au printemps.',
@@ -126,6 +140,10 @@ export function summarizeWeather(daily, today) {
     rain10: sum(last10),
     rain3: sum(past.slice(-3)),
     rain14: sum(past.slice(-14)),
+    // Réserve : les études méditerranéennes jugent la saison sur la pluie d'un mois et plus (et le nombre de jours de pluie).
+    rain30: past.length >= 28 ? sum(past.slice(-30)) : null,
+    rainDays30: past.length >= 28 ? past.slice(-30).filter((r) => (r.rain || 0) >= 1).length : null,
+    elevation: daily.elevation ?? null,
     rainNext: sum(future),
     bigRainAgo, bigRainMm, lastRainAgo,
     tmin7: avg(last7, 'tmin'),
@@ -169,12 +187,27 @@ export function lastEmptyVisit(history, today) {
   return Math.round((Date.parse(today) - Date.parse(lastEmpty)) / 86400000);
 }
 
-export function assess(w, { month, species = [], trees = [], history = [], personal = null, alt = null, exposure = null, soil = null, today = null }) {
+// Au-dessus de 1 000 m, cèpe, girolle, trompette, pied-de-mouton et chanterelle grise sortent en juillet–octobre,
+// avec un pic en août–septembre, et presque plus rien en novembre (observations GBIF / iNaturalist, PACA).
+export const HIGH_ALT = 1000;
+const HIGH_SEASON = { months: [7, 8, 9, 10], peak: [8, 9], late: [] };
+const HIGH_SHIFT = new Set(['cepe', 'girolle', 'trompette', 'pied-de-mouton', 'chanterelle-grise']);
+/** Saison d'une espèce à une altitude donnée : { months, peak, late }. */
+export function seasonAt(id, alt) {
+  const sp = SPECIES.find((s) => s.id === id);
+  if (!sp) return { months: [], peak: [], late: [] };
+  if (alt != null && alt >= HIGH_ALT && HIGH_SHIFT.has(id)) return HIGH_SEASON;
+  if (alt != null && alt >= HIGH_ALT && id === 'morille') return { months: [4, 5, 6], peak: [5, 6], late: [] };
+  return { months: sp.months, peak: sp.peak ?? [], late: sp.late ?? [] };
+}
+
+export function assess(w, { month, species = [], trees = [], history = [], personal = null, alt: alt0 = null, exposure = null, soil = null, today = null }) {
+  const alt = alt0 ?? w?.elevation ?? null;   // altitude du coin, sinon celle du point météo
   const known = species.filter((id) => SPECIES.some((s) => s.id === id && s.months.length));
   // Fin de saison (ex. cèpe en décembre en Provence) : seulement par temps doux, sans gel, à basse altitude.
   const mild = !!w && w.frost7 === 0 && w.tmin7 != null && w.tmin7 >= 4 && (alt == null || alt < LATE_MAX_ALT);
-  const isLate = (id) => (SPECIES.find((s) => s.id === id).late ?? []).includes(month);
-  const inSeason = known.filter((id) => SPECIES.find((s) => s.id === id).months.includes(month) || (mild && isLate(id)));
+  const isLate = (id) => seasonAt(id, alt).late.includes(month);
+  const inSeason = known.filter((id) => seasonAt(id, alt).months.includes(month) || (mild && isLate(id)));
   if (!known.length) return { level: null, score: 0, reasons: ['Aucune espèce du calendrier notée à ce coin.'], perSpecies: [] };
   if (!inSeason.length) {
     const next = known.map((id) => [id, nextSeason(id, month)]).filter(([, m]) => m)
@@ -193,11 +226,11 @@ export function assess(w, { month, species = [], trees = [], history = [], perso
     if (w.bigRainAgo != null && w.bigRainAgo >= 5 && w.bigRainAgo <= 15) { base += 2; common.push(`Grosse pluie (${w.bigRainMm} mm) il y a ${w.bigRainAgo} j : bonne fenêtre de pousse`); }
     else if (w.bigRainAgo != null && w.bigRainAgo < 5) common.push(`Grosse pluie (${w.bigRainMm} mm) il y a ${w.bigRainAgo} j : les pousses arrivent en général 5 à 10 jours après`);
 
+    // Températures : en début de saison (août–octobre) la chaleur freine la pousse, en fin de saison (novembre–janvier)
+    // c'est le froid ; des nuits douces la prolongent (études catalanes : Karavani 2018, Morera 2021).
     if (w.frost7 >= 3 || (w.tmin7 != null && w.tmin7 < 1)) { base -= 2; common.push(`Froid : ${w.frost7} nuit(s) de gel cette semaine`); }
-    else if (w.soilT3 == null) {   // sans température du sol : on juge sur l'air
-      if (w.tmax7 != null && w.tmax7 > 26) { base -= 1; common.push(`Chaud : ${w.tmax7} °C de max en moyenne`); }
-      else if (w.tmin7 != null) { base += 1; common.push(`Températures douces (${w.tmin7}–${w.tmax7} °C)`); }
-    }
+    else if ([8, 9, 10].includes(month) && w.tmax7 != null && w.tmax7 > 26) { base -= 1; common.push(`Chaud : ${w.tmax7} °C de max en moyenne (la chaleur freine la pousse)`); }
+    else if ([11, 12, 1].includes(month) && w.tmin7 != null && w.tmin7 >= 6) { base += 1; common.push(`Nuits douces (${w.tmin7} °C) : la saison se prolonge`); }
     // Humidité du sol (modèle, couche 0–7 cm, m³/m³) : la pluie compte, mais surtout ce que le sol a gardé.
     // Seuils réglés sur la Provence (près d'Aix : ~0,27 après deux semaines sèches, ~0,40 après une bonne pluie).
     if (w.soilM3 != null) {
@@ -205,6 +238,9 @@ export function assess(w, { month, species = [], trees = [], history = [], perso
       else if (w.soilM3 < SOIL_DRY) { base -= 1; common.push(`Sol sec (${Math.round(w.soilM3 * 100)} %)`); }
       else common.push(`Sol moyennement humide (${Math.round(w.soilM3 * 100)} %)`);
     }
+    // Réserve d'eau : un sol méditerranéen doit d'abord se recharger ; la pluie récente ne fait que choisir le moment.
+    // Seuils provisoires (30 / 80 mm sur 30 jours), à caler sur les trouvailles de la famille.
+    if (w.rain30 != null && w.rain30 >= 80) { base += 1; common.push(`Bonne réserve d'eau : ${w.rain30} mm sur 30 jours (${w.rainDays30} jours de pluie)`); }
     if (w.shockAgo != null && w.shockAgo >= 3 && w.shockAgo <= 14) { base += 1; common.push(`Choc thermique il y a ${w.shockAgo} j (nuits plus fraîches de ${w.shockDrop} °C) : souvent un déclencheur`); }
   }
 
@@ -217,7 +253,8 @@ export function assess(w, { month, species = [], trees = [], history = [], perso
     const sp = SPECIES.find((s) => s.id === id);
     const g = GUIDE[id];
     let score = base; const reasons = [];
-    if ((sp.peak ?? []).includes(month)) { score += 1; reasons.push('mois de pic'); }
+    const season = seasonAt(id, alt);
+    if (season.peak.includes(month)) { score += 1; reasons.push(alt != null && alt >= HIGH_ALT && HIGH_SHIFT.has(id) ? 'mois de pic en altitude' : 'mois de pic'); }
     const st = SOIL_T[id];
     if (w?.soilT3 != null && st && !(w.frost7 >= 3)) {
       if (w.soilT3 >= st[0] && w.soilT3 <= st[1]) { score += 1; reasons.push(`sol à ${w.soilT3} °C : idéal (${st[0]}–${st[1]} °C)`); }
@@ -234,9 +271,9 @@ export function assess(w, { month, species = [], trees = [], history = [], perso
       else if (cool && !dryish) { score += face === 'sud' ? 1 : -1; reasons.push(face === 'sud' ? 'versant sud : plus chaud' : 'versant nord : plus froid'); }
     }
     // Sol (relevés de l'Inventaire forestier, carte des sols ou saisi à la main) : « mixte » ou inconnu → rien.
-    const se = soilEffect(id, soil, history.some((f) => !f.empty && (f.species ?? []).includes(id)));
+    const se = soilEffect(id, soil, history.some((f) => !f.empty && (f.species ?? []).includes(id)), trees);
     if (se.text) { score += se.delta; reasons.push(se.text); }
-    if (!sp.months.includes(month)) { score -= 1; reasons.push('fin de saison : possible car doux et sans gel'); }
+    if (!season.months.includes(month)) { score -= 1; reasons.push('fin de saison : possible car doux et sans gel'); }
     if (g?.trees.length && trees.length) {
       if (trees.some((t) => g.trees.includes(t))) { score += 1; reasons.push('milieu typique'); }
       else { score -= 1; reasons.push('milieu peu typique'); }
@@ -257,6 +294,8 @@ export function assess(w, { month, species = [], trees = [], history = [], perso
   // Pluie toute récente sur un sol sec avant : trop tôt, les pousses ne sont pas encore sorties.
   const early = w && w.bigRainAgo != null && w.bigRainAgo < 5 && (w.rain10 - w.bigRainMm) < 10;
   let level = !w ? 'moyen' : dry ? 'faible' : best >= 6 ? 'bon' : best >= 3 ? 'moyen' : 'faible';
+  // Réserve trop faible (sol pas encore rechargé) : pas plus que « moyen ».
+  if (w && w.rain30 != null && w.rain30 < 30 && level === 'bon') { level = 'moyen'; common.push(`Réserve d'eau faible : ${w.rain30} mm sur 30 jours, le sol n'est pas encore rechargé`); }
   if (early && level === 'bon') level = 'moyen';
   if (early) common.push('Trop tôt : sol sec avant cette pluie, repasse dans 5 à 10 jours');
   if (w && w.rainNext >= 15) common.push(`Pluie annoncée : ${w.rainNext} mm dans les prochains jours → à surveiller d'ici une semaine`);

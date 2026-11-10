@@ -171,34 +171,41 @@ export function gridCells() {
   }
   return out;
 }
-async function om(points: { lat: number; lon: number }[], vars: string, model: string | null) {
-  const q = `https://api.open-meteo.com/v1/forecast?latitude=${points.map((p) => p.lat).join(',')}&longitude=${points.map((p) => p.lon).join(',')}&daily=${vars}&past_days=14&forecast_days=3&timezone=Europe%2FParis${model ? `&models=${model}` : ''}`;
+async function om(points: { lat: number; lon: number }[], vars: string, model: string | null, past = 14) {
+  const q = `https://api.open-meteo.com/v1/forecast?latitude=${points.map((p) => p.lat).join(',')}&longitude=${points.map((p) => p.lon).join(',')}&daily=${vars}&past_days=${past}&forecast_days=3&timezone=Europe%2FParis${model ? `&models=${model}` : ''}`;
   const r = await fetch(q);
   if (!r.ok) throw new Error(`Open-Meteo ${r.status} ${(await r.text()).slice(0, 120)}`);
   const j = await r.json();
   return Array.isArray(j) ? j : [j];
 }
-// Open-Meteo limite aussi le nombre d'appels par minute : chaque passage traite au plus 150 cases (les plus
-// anciennes), en lots de 75 ; le planificateur fait 3 passages espacés de 2 minutes.
+// Open-Meteo limite aussi le nombre d'appels par minute (et compte plus cher au-delà de 14 jours) : chaque passage
+// traite au plus 120 cases (les plus anciennes), en lots de 60 ; le planificateur fait 4 passages espacés de 2 minutes.
+// Pluie et températures : 31 jours passés (réserve d'eau du mois) ; sol : 14 jours, complétés au début par des vides
+// pour rester alignés sur les dates.
+const MAIN_PAST = 31, SOIL_PAST = 14;
+const pad = (a: unknown[] | null | undefined, n: number) => (Array.isArray(a) ? [...new Array(Math.max(0, n - a.length)).fill(null), ...a] : null);
 async function grid() {
   const cells = gridCells();
   const { data: have } = await admin.from('champi_meteo_grid').select('key, updated_at');
   const age = new Map((have ?? []).map((r: any) => [r.key, Date.parse(r.updated_at)]));
   const todo = cells.filter((c) => !age.has(c.key) || Date.now() - age.get(c.key)! > 3 * 3600 * 1000)
-    .sort((a, b) => (age.get(a.key) ?? 0) - (age.get(b.key) ?? 0)).slice(0, 150);
+    .sort((a, b) => (age.get(a.key) ?? 0) - (age.get(b.key) ?? 0)).slice(0, 120);
   let rows = 0; const errors: string[] = [];
-  for (let k = 0; k < todo.length; k += 75) {
-    const part = todo.slice(k, k + 75);
+  for (let k = 0; k < todo.length; k += 60) {
+    const part = todo.slice(k, k + 60);
     try {
       let main;
-      try { main = await om(part, 'precipitation_sum,temperature_2m_max,temperature_2m_min', 'meteofrance_seamless'); }
-      catch { main = await om(part, 'precipitation_sum,temperature_2m_max,temperature_2m_min', null); }
+      try { main = await om(part, 'precipitation_sum,temperature_2m_max,temperature_2m_min', 'meteofrance_seamless', MAIN_PAST); }
+      catch { main = await om(part, 'precipitation_sum,temperature_2m_max,temperature_2m_min', null, MAIN_PAST); }
       let soil: any[] = [];
-      try { soil = await om(part, 'soil_temperature_0_to_7cm_mean,soil_moisture_0_to_7cm_mean', null); } catch (e) { errors.push('sol ' + String(e).slice(0, 80)); }
-      const up = part.map((c, i) => ({
-        key: c.key, lat: c.lat, lon: c.lon, elevation: main[i]?.elevation ?? null, updated_at: new Date().toISOString(),
-        daily: { ...main[i].daily, soil_temperature_0_to_7cm_mean: soil[i]?.daily?.soil_temperature_0_to_7cm_mean ?? null, soil_moisture_0_to_7cm_mean: soil[i]?.daily?.soil_moisture_0_to_7cm_mean ?? null },
-      }));
+      try { soil = await om(part, 'soil_temperature_0_to_7cm_mean,soil_moisture_0_to_7cm_mean', null, SOIL_PAST); } catch (e) { errors.push('sol ' + String(e).slice(0, 80)); }
+      const up = part.map((c, i) => {
+        const n = main[i].daily.time.length;
+        return {
+          key: c.key, lat: c.lat, lon: c.lon, elevation: main[i]?.elevation ?? null, updated_at: new Date().toISOString(),
+          daily: { ...main[i].daily, soil_temperature_0_to_7cm_mean: pad(soil[i]?.daily?.soil_temperature_0_to_7cm_mean, n), soil_moisture_0_to_7cm_mean: pad(soil[i]?.daily?.soil_moisture_0_to_7cm_mean, n) },
+        };
+      });
       const { error } = await admin.from('champi_meteo_grid').upsert(up, { onConflict: 'key' });
       if (error) throw error;
       rows += up.length;

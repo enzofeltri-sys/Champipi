@@ -5,17 +5,18 @@
 // (site/data/phenology-paca.json) quand il y en avait assez (plus de 20) ; sinon, connaissances générales.
 export const SPECIES = [
   { id: 'lactaire-sanguin', label: 'Lactaire sanguin', months: [9, 10, 11, 12, 1], peak: [10, 11] },
-  { id: 'petit-gris', label: 'Petit-gris', months: [10, 11, 12, 1], peak: [10, 11] },
+  { id: 'lactaire-delicieux', label: 'Lactaire délicieux', months: [9, 10, 11, 12], peak: [10, 11] },
+  { id: 'petit-gris', label: 'Petit-gris', months: [10, 11, 12, 1], peak: [10, 11, 12] },
   { id: 'cepe', label: 'Cèpe', months: [6, 7, 8, 9, 10, 11], peak: [10], late: [12] },
-  { id: 'girolle', label: 'Girolle', months: [6, 8, 9, 10, 11, 12], peak: [10, 11] },
-  { id: 'pied-de-mouton', label: 'Pied-de-mouton', months: [10, 11, 12, 1], peak: [11], late: [2] },
-  { id: 'trompette', label: 'Trompette-de-la-mort', months: [10, 11, 12], late: [1] },
+  { id: 'girolle', label: 'Girolle', months: [6, 7, 8, 9, 10, 11, 12], peak: [10, 11] },
+  { id: 'pied-de-mouton', label: 'Pied-de-mouton', months: [9, 10, 11, 12, 1], peak: [11] },
+  { id: 'trompette', label: 'Trompette-de-la-mort', months: [9, 10, 11, 12], late: [1] },
   { id: 'oronge', label: 'Oronge', months: [8, 9, 10, 11], peak: [9, 10] },
   { id: 'coulemelle', label: 'Coulemelle', months: [8, 9, 10, 11, 12], peak: [10] },
-  { id: 'berigoule', label: 'Bérigoule (pleurote du panicaut)', months: [3, 4, 5, 10, 11, 12] },
-  { id: 'morille', label: 'Morille', months: [3, 4, 5], peak: [4, 5] },
+  { id: 'berigoule', label: 'Bérigoule (pleurote du panicaut)', months: [3, 4, 5, 9, 10, 11, 12] },
+  { id: 'morille', label: 'Morille', months: [3, 4, 5, 6], peak: [4, 5] },
   { id: 'saint-georges', label: 'Tricholome de la Saint-Georges', months: [4, 5, 6], peak: [5] },
-  { id: 'chanterelle-grise', label: 'Chanterelle grise', months: [10, 11, 12], late: [1] },
+  { id: 'chanterelle-grise', label: 'Chanterelle grise', months: [9, 10, 11, 12], late: [1] },
   { id: 'autre', label: 'Autre', months: [] },
 ];
 const BY_ID = new Map(SPECIES.map((s) => [s.id, s]));

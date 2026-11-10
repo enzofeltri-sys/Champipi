@@ -9,8 +9,10 @@ test('calendrier : chaque espèce demandée a ses mois', () => {
   const months = Object.fromEntries(SPECIES.map((s) => [s.id, s.months]));
   assert.deepEqual(months['lactaire-sanguin'], [9, 10, 11, 12, 1]);   // réglé sur iNaturalist PACA
   assert.deepEqual(months.cepe, [6, 7, 8, 9, 10, 11]);
-  assert.deepEqual(months.girolle, [6, 8, 9, 10, 11, 12]);
-  assert.deepEqual(months.berigoule, [3, 4, 5, 10, 11, 12]);
+  assert.deepEqual(months.girolle, [6, 7, 8, 9, 10, 11, 12]);          // plus de « trou » en juillet (iNaturalist PACA)
+  assert.deepEqual(months.berigoule, [3, 4, 5, 9, 10, 11, 12]);         // automne dès septembre
+  assert.deepEqual(months.morille, [3, 4, 5, 6]);
+  assert.deepEqual(months['lactaire-delicieux'], [9, 10, 11, 12]);
   assert.deepEqual(months.autre, []);
 });
 
@@ -30,7 +32,7 @@ test('en saison : janvier pour le lactaire, pas en mars pour le cèpe', () => {
 test('texte des saisons, avec passage de l\'année', () => {
   assert.equal(seasonText('cepe'), 'juin–nov.');
   assert.equal(seasonText('lactaire-sanguin'), 'sept.–janv.');
-  assert.equal(seasonText('girolle'), 'juin, août–déc.');
+  assert.equal(seasonText('girolle'), 'juin–déc.');
   assert.equal(seasonText('autre'), '');
 });
 

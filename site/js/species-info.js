@@ -19,6 +19,23 @@ export const INFO = {
     ],
     wiki: 'Lactarius_sanguifluus',
   },
+  'lactaire-delicieux': {
+    look: [
+      ['Chapeau', '5 à 12 cm, orange carotte, souvent creusé au centre, avec des cercles plus foncés ; taches vertes en vieillissant.'],
+      ['Dessous', 'Lames serrées, orange.'],
+      ['Lait', 'À la cassure, un lait orange carotte (pas rouge vineux comme le sanguin) : c\'est le signe principal.'],
+      ['Pied', 'Court, creux, orange, souvent marqué de fossettes plus foncées.'],
+      ['Chair', 'Ferme, cassante ; verdit où elle est abîmée.'],
+    ],
+    where: 'Sous les pins (pin sylvestre, pin maritime, pin d\'Alep), sur sol acide comme calcaire, souvent dans les jeunes pinèdes et les bords de pistes ; jusqu\'en montagne.',
+    tips: 'Moins réputé que le sanguin en Provence, mais bon comestible. Couper au pied et vérifier les vers.',
+    cook: 'Grillé ou à la plancha, ou en poêlée avec ail et persil.',
+    looks: [
+      [2, 'Lactaires à lait blanc (lactaire à toison…)', 'Lait blanc et âcre, chapeau parfois « barbu » : toxiques ou immangeables.'],
+      [1, 'Lactaire sanguin', 'Lait rouge vineux : comestible aussi, plus recherché.'],
+    ],
+    wiki: 'Lactarius_deliciosus',
+  },
   'petit-gris': {
     look: [
       ['Chapeau', '3 à 7 cm, gris souris, feutré, souvent avec un petit mamelon.'],
