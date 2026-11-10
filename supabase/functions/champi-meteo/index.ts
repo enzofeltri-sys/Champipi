@@ -196,15 +196,17 @@ async function grid() {
     const part = todo.slice(k, k + 60);
     try {
       let main;
-      try { main = await om(part, 'precipitation_sum,temperature_2m_max,temperature_2m_min', 'meteofrance_seamless', MAIN_PAST); }
-      catch { main = await om(part, 'precipitation_sum,temperature_2m_max,temperature_2m_min', null, MAIN_PAST); }
+      const MAIN = 'precipitation_sum,temperature_2m_max,temperature_2m_min,et0_fao_evapotranspiration';   // + évaporation (bilan d'eau)
+      try { main = await om(part, MAIN, 'meteofrance_seamless', MAIN_PAST); }
+      catch { main = await om(part, MAIN, null, MAIN_PAST); }
       let soil: any[] = [];
-      try { soil = await om(part, 'soil_temperature_0_to_7cm_mean,soil_moisture_0_to_7cm_mean', null, soilPast()); } catch (e) { errors.push('sol ' + String(e).slice(0, 80)); }
+      try { soil = await om(part, 'soil_temperature_0_to_7cm_mean,soil_moisture_0_to_7cm_mean,soil_moisture_7_to_28cm_mean', null, soilPast()); } catch (e) { errors.push('sol ' + String(e).slice(0, 80)); }
       const up = part.map((c, i) => {
         const n = main[i].daily.time.length;
         return {
           key: c.key, lat: c.lat, lon: c.lon, elevation: main[i]?.elevation ?? null, updated_at: new Date().toISOString(),
-          daily: { ...main[i].daily, soil_temperature_0_to_7cm_mean: pad(soil[i]?.daily?.soil_temperature_0_to_7cm_mean, n), soil_moisture_0_to_7cm_mean: pad(soil[i]?.daily?.soil_moisture_0_to_7cm_mean, n) },
+          daily: { ...main[i].daily, soil_temperature_0_to_7cm_mean: pad(soil[i]?.daily?.soil_temperature_0_to_7cm_mean, n), soil_moisture_0_to_7cm_mean: pad(soil[i]?.daily?.soil_moisture_0_to_7cm_mean, n),
+            soil_moisture_7_to_28cm_mean: pad(soil[i]?.daily?.soil_moisture_7_to_28cm_mean, n) },
         };
       });
       const { error } = await admin.from('champi_meteo_grid').upsert(up, { onConflict: 'key' });
@@ -215,21 +217,23 @@ async function grid() {
   return { cases: cells.length, a_faire: todo.length, enregistrees: rows, erreurs: errors };
 }
 
-// Humidité habituelle du sol (déciles par mois, saisons des 4 dernières années, même modèle que la grille) pour les
+// Humidité habituelle du sol à 7–28 cm (déciles par mois, 4 dernières années, même modèle que la grille : la réanalyse
+// ERA5-Land sur 30 ans s'écarte de ce modèle jusqu'à 0,05 m³/m³ en période sèche, on ne les mélange donc pas) pour les
 // cases de 0,1° qui ont des coins : une case par appel de nuit (≈ 100 appels Open-Meteo chacune), refaite chaque année.
-async function soilClim() {
+// force = clé d'une case précise (« i:j »).
+async function soilClim(force?: string) {
   const [{ data: spots }, { data: have }] = await Promise.all([admin.from('champi_spots').select('lat, lon'), admin.from('champi_soil_clim').select('key, updated_at')]);
   const done = new Map((have ?? []).map((r: any) => [r.key, Date.parse(r.updated_at)]));
   const keys = [...new Set((spots ?? []).map((s: any) => `${Math.floor(s.lat * 10)}:${Math.floor(s.lon * 10)}`))];
-  const todo = keys.find((k) => !done.has(k) || Date.now() - done.get(k)! > 365 * 86400000);
+  const todo = force ?? keys.find((k) => !done.has(k) || Date.now() - done.get(k)! > 365 * 86400000);
   if (!todo) return 'à jour';
   const [i, j] = todo.split(':').map(Number);
   const y = Number(today().slice(0, 4));
-  const r = await fetch(`https://historical-forecast-api.open-meteo.com/v1/forecast?latitude=${((i + 0.5) / 10).toFixed(2)}&longitude=${((j + 0.5) / 10).toFixed(2)}&start_date=${y - 4}-01-01&end_date=${y - 1}-12-31&daily=soil_moisture_0_to_7cm_mean&timezone=Europe%2FParis`);
+  const r = await fetch(`https://historical-forecast-api.open-meteo.com/v1/forecast?latitude=${((i + 0.5) / 10).toFixed(2)}&longitude=${((j + 0.5) / 10).toFixed(2)}&start_date=${y - 4}-01-01&end_date=${y - 1}-12-31&daily=soil_moisture_7_to_28cm_mean&timezone=Europe%2FParis`);
   if (!r.ok) return `Open-Meteo ${r.status}`;
   const d = (await r.json()).daily;
   const byMonth: Record<string, number[]> = {};
-  d.time.forEach((t: string, k: number) => { const v = d.soil_moisture_0_to_7cm_mean[k]; if (v != null) (byMonth[String(Number(t.slice(5, 7)))] ??= []).push(v); });
+  d.time.forEach((t: string, k: number) => { const v = d.soil_moisture_7_to_28cm_mean[k]; if (v != null) (byMonth[String(Number(t.slice(5, 7)))] ??= []).push(v); });
   const months: Record<string, number[]> = {};
   for (const [m, v] of Object.entries(byMonth)) {
     if (v.length < 30) continue;
@@ -239,6 +243,28 @@ async function soilClim() {
   const { error } = await admin.from('champi_soil_clim').upsert({ key: todo, months, updated_at: new Date().toISOString() });
   if (error) throw error;
   return todo;
+}
+
+// Indice d'humidité des sols de Météo-France (SIM, mailles ~8 km), situation de la veille sur la PACA, depuis le service
+// WFS public « données SIM » (Licence Ouverte) : réserve sur ~2 m rapportée à la réserve utile, et sa normale 1991–2020.
+const SIM = 'https://geobretagne.fr/geoserver/dreal_b/wfs?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=dreal_b:qry_sorties_sim&OUTPUTFORMAT=application/json';
+async function swi() {
+  const last = await (await fetch(`${SIM}&COUNT=1&SORTBY=date%20D&PROPERTYNAME=date`)).json();
+  const date = String(last.features?.[0]?.properties?.date ?? '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { erreur: 'date introuvable' };
+  const q = encodeURIComponent(`date='${date}' AND BBOX(geometry,4.1,42.9,7.9,45.3,'EPSG:4326')`);
+  const j = await (await fetch(`${SIM}&SRSNAME=EPSG:4326&PROPERTYNAME=geometry,id_maille_historique,swi_courant,swi_moyen,cumul_precipitations_15j&CQL_FILTER=${q}`)).json();
+  const rows = (j.features ?? []).filter((f: any) => f.geometry).map((f: any) => {
+    const pts = (f.geometry.type === 'MultiPolygon' ? f.geometry.coordinates.flat(2) : f.geometry.coordinates.flat(1)) as number[][];
+    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    const p = f.properties;
+    return { key: String(p.id_maille_historique), w: Math.min(...xs), e: Math.max(...xs), s: Math.min(...ys), n: Math.max(...ys),
+      swi: p.swi_courant, normal: p.swi_moyen, rain15: p.cumul_precipitations_15j, date, updated_at: new Date().toISOString() };
+  });
+  if (!rows.length) return { date, mailles: 0 };
+  const { error } = await admin.from('champi_swi').upsert(rows, { onConflict: 'key' });
+  if (error) throw error;
+  return { date, mailles: rows.length };
 }
 
 // Diagnostic : API ouvertes par la clé (lues dans le jeton, jamais renvoyé) et réponse de chacune.
@@ -279,7 +305,8 @@ Deno.serve(async (req) => {
     if (req.headers.get('x-champi-token') !== cfg?.cron_token) return json({ error: 'jeton invalide' }, 401);
     const body = await req.json().catch(() => ({}));
     if (body.action === 'run') return json({ ...(await run()), sol_habituel: await soilClim().catch((e) => String(e).slice(0, 80)) });
-    if (body.action === 'soilclim') return json({ sol_habituel: await soilClim() });
+    if (body.action === 'soilclim') return json({ sol_habituel: await soilClim(body.key ? String(body.key) : undefined) });
+    if (body.action === 'swi') return json(await swi());
     if (body.action === 'hourly') return json(await hourly());
     if (body.action === 'grid') return json(await grid());
     if (body.action === 'probe') return json(await probe());

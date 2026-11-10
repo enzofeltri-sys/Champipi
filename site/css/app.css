@@ -226,6 +226,13 @@ dialog.viewer img { width: 100%; height: calc(100dvh - 64px); object-fit: contai
 .cta-row { margin: 12px 0 4px; }
 .meteo:empty { display: none; }
 .meteo h3 { margin-top: 6px; }
+.lieu:empty { display: none; }
+.lieu h3 { margin-top: 6px; }
+.lieu > div, .here-lieu > div { margin: 3px 0; }
+.lieu-rules { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: var(--card-2, rgba(0,0,0,.04)); }
+.lieu-rules > div { margin: 2px 0; }
+.here-lieu { margin: 10px 0; }
+.here-lieu summary { cursor: pointer; font-weight: 600; }
 .verdict { font-weight: 700; padding: 6px 10px; border-radius: 10px; background: var(--surface-2); width: fit-content; }
 .verdict.lvl-bon { background: color-mix(in srgb, var(--season) 22%, transparent); }
 .verdict.lvl-faible { background: color-mix(in srgb, var(--danger) 18%, transparent); }

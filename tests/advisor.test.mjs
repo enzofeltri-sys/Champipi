@@ -220,3 +220,36 @@ test('morille : chaleur cumulée sur 20 j, zone brûlée', () => {
   assert.equal(m(doux, { burned }).score - m(doux).score, 1);
   assert.ok(m(doux, { burned }).reasons.some((r) => r.startsWith('zone brûlée (feu de août 2025')));
 });
+
+test('humidité à 7–28 cm quand elle existe ; bilan pluie − évaporation sur 30 jours', () => {
+  const time = [], rr = [], et = [], top = [], deep = [];
+  for (let i = -31; i <= 2; i++) { time.push(new Date(Date.parse('2026-10-15') + i * 86400000).toISOString().slice(0, 10)); rr.push(i === -10 ? 60 : 0); et.push(2); top.push(0.2); deep.push(0.3); }
+  const base = { time, precipitation_sum: rr, temperature_2m_max: time.map(() => 20), temperature_2m_min: time.map(() => 10), soil_temperature_0_to_7cm_mean: time.map(() => 14), soil_moisture_0_to_7cm_mean: top };
+  const w = summarizeWeather({ ...base, soil_moisture_7_to_28cm_mean: deep, et0_fao_evapotranspiration: et }, '2026-10-15');
+  assert.equal(w.soilM3, 0.3); assert.equal(w.soilTop3, 0.2); assert.equal(w.soilDepth, '7–28 cm');
+  assert.equal(w.balance30, 0);   // 60 mm de pluie − 30 × 2 mm d'évaporation
+  const a = assess(w, { month: 10, species: ['cepe'] });
+  assert.ok(a.reasons.some((r) => r.startsWith('Bonne réserve d\'eau : pluie − évaporation = +0 mm')));
+  const sec = summarizeWeather({ ...base, precipitation_sum: rr.map(() => 0), et0_fao_evapotranspiration: et.map(() => 3) }, '2026-10-15');
+  assert.equal(sec.soilDepth, '0–7 cm'); assert.equal(sec.balance30, -90);
+  // sans évaporation connue : l'ancienne règle de la pluie seule
+  assert.equal(summarizeWeather(base, '2026-10-15').balance30, null);
+});
+test('sol en déficit : jamais « bon »', () => {
+  const w = { rain10: 45, bigRainAgo: 8, bigRainMm: 40, frost7: 0, tmin7: 8, tmax7: 18, rainNext: 0, rain30: 45, balance30: -70, soilM3: 0.36, soilT3: 14 };
+  const a = assess(w, { month: 10, species: ['cepe'], trees: ['chataignier'] });
+  assert.equal(a.level, 'moyen');
+  assert.ok(a.reasons.some((r) => r.startsWith('Sol en déficit : pluie − évaporation = -70 mm')));
+});
+test('indice d\'humidité des sols Météo-France : un seul point de réserve, plafond si sol profond sec', () => {
+  const w = { rain10: 25, bigRainAgo: 8, bigRainMm: 20, frost7: 0, tmin7: 8, tmax7: 18, rainNext: 0, rain30: 50, balance30: -20, soilM3: 0.3, soilT3: 14 };
+  const sans = assess(w, { month: 10, species: ['cepe'] }).perSpecies[0].score;
+  const humide = assess(w, { month: 10, species: ['cepe'], swi: { swi: 0.8, normal: 0.5 } });
+  assert.equal(humide.perSpecies[0].score, sans + 1);
+  assert.ok(humide.reasons.includes('Bonne réserve d\'eau : réserve profonde du sol (Météo-France) : 80 %, normale 50 %'));
+  const deux = assess({ ...w, balance30: 10 }, { month: 10, species: ['cepe'], swi: { swi: 0.8, normal: 0.5 } });
+  assert.equal(deux.perSpecies[0].score, sans + 1);   // bilan positif ET indice humide : toujours +1
+  const sec = assess({ ...w, rain10: 45, balance30: 0 }, { month: 10, species: ['cepe'], trees: ['chataignier'], swi: { swi: 0.2, normal: 0.5 } });
+  assert.equal(sec.level, 'moyen');
+  assert.ok(sec.reasons.some((r) => r.startsWith('Sol profond encore sec : réserve à 20 %')));
+});

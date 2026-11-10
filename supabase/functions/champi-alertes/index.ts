@@ -8,7 +8,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import webpush from 'npm:web-push@3.6.7';
 // Règles du conseiller : copie générée depuis l'appli (node tools/build-alertes.mjs).
-import { summarizeWeather, assess, burnedAt, outingConditions, spotSpecies, SPECIES, MIN_FINDS, profileKey, recentFinds, historyRange, findConditions, spotProfile, personalAdvice } from './rules.js';
+import { summarizeWeather, assess, burnedAt, outingConditions, swiAt, spotSpecies, SPECIES, MIN_FINDS, profileKey, recentFinds, historyRange, findConditions, spotProfile, personalAdvice } from './rules.js';
 import { rainIndex, mergeRain } from './rain.js';
 
 const SITE = 'https://enzofeltri-sys.github.io/Champipi/';
@@ -142,12 +142,13 @@ async function morningRun(cfg: any) {
   const clim = new Map((climRows ?? []).map((r: any) => [r.key, r.months]));
   const burnedData = await fetch(`${SITE}data/burned.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
   const cellOf = (s: any) => `${Math.floor(s.lat * 10)}:${Math.floor(s.lon * 10)}`;
+  const { data: swiRows } = await admin.from('champi_swi').select('w, s, e, n, swi, normal, rain15, date').range(0, 1999);
   const verdict = new Map(list.filter((_: any, i: number) => daily[i]).map((s: any) => {
     const i = list.indexOf(s);
     const w = summarizeWeather(daily[i], day);
     const a = assess(w, { month, species: spotSpecies(s, finds.data!), trees: s.trees ?? [], history: finds.data!.filter((f: any) => f.spot_id === s.id), alt: s.altitude ?? null, exposure: s.exposure ?? null, soil: s.soil ?? null, today: day,
       personal: learned.has(s.id) ? personalAdvice(w, learned.get(s.id)) : null,
-      soilClim: clim.get(cellOf(s)) ?? null, burned: burnedData ? burnedAt(burnedData, s.lat, s.lon) : null });
+      soilClim: clim.get(cellOf(s)) ?? null, burned: burnedData ? burnedAt(burnedData, s.lat, s.lon) : null, swi: swiAt(swiRows ?? [], s.lat, s.lon) });
     return [s.id, { s, a }];
   }));
 
@@ -157,7 +158,7 @@ async function morningRun(cfg: any) {
   for (const f of finds.data!.filter((f: any) => !f.conditions && f.found_on >= since3 && f.found_on <= day)) {
     const i = list.findIndex((s: any) => s.id === f.spot_id);
     if (i < 0 || !daily[i]) continue;
-    const c = outingConditions(summarizeWeather(daily[i], f.found_on), clim.get(cellOf(list[i])) ?? null, Number(f.found_on.slice(5, 7)));
+    const c = outingConditions(summarizeWeather(daily[i], f.found_on), clim.get(cellOf(list[i])) ?? null, Number(f.found_on.slice(5, 7)), swiAt(swiRows ?? [], list[i].lat, list[i].lon));
     const { error } = await admin.from('champi_finds').update({ conditions: { ...c, noted_on: day } }).eq('id', f.id);
     if (!error) noted++;
   }

@@ -1,6 +1,6 @@
 // Météo (Open-Meteo, gratuit, sans clé, licence CC BY 4.0 ; modèles Météo-France) et type de forêt (IGN BD Forêt V2).
 const OPEN_METEO = 'https://api.open-meteo.com/v1/forecast';
-const DAILY = 'precipitation_sum,temperature_2m_max,temperature_2m_min';
+const DAILY = 'precipitation_sum,temperature_2m_max,temperature_2m_min,et0_fao_evapotranspiration';
 const TTL = 60 * 60 * 1000;   // 1 h
 
 const mem = new Map();

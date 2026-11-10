@@ -106,7 +106,10 @@ export function summarizeWeather(daily, today) {
     tmax: daily.temperature_2m_max?.[i] ?? null,
     tmin: daily.temperature_2m_min?.[i] ?? null,
     soilT: daily.soil_temperature_0_to_7cm_mean?.[i] ?? null,
-    soilM: daily.soil_moisture_0_to_7cm_mean?.[i] ?? null,
+    // Humidité : couche 7–28 cm quand on l'a (là où vivent les mycéliums, et plus stable) ; sinon la surface 0–7 cm.
+    soilM: daily.soil_moisture_7_to_28cm_mean?.[i] ?? daily.soil_moisture_0_to_7cm_mean?.[i] ?? null,
+    soilTop: daily.soil_moisture_0_to_7cm_mean?.[i] ?? null,
+    et0: daily.et0_fao_evapotranspiration?.[i] ?? null,
   }));
   const past = rows.filter((r) => r.date < today);
   const last10 = past.slice(-10);
@@ -128,7 +131,11 @@ export function summarizeWeather(daily, today) {
 
   // Sol (modèle) : moyenne des 3 derniers jours, aujourd'hui compris.
   const recent = [...past.slice(-2), ...rows.filter((r) => r.date === today)];
-  const soilT3 = avg(recent, 'soilT'), soilM3 = avg2(recent, 'soilM');
+  const soilT3 = avg(recent, 'soilT'), soilM3 = avg2(recent, 'soilM'), soilTop3 = avg2(recent, 'soilTop');
+  const soilDepth = daily.soil_moisture_7_to_28cm_mean?.some((x) => x != null) ? '7–28 cm' : '0–7 cm';
+  // Bilan d'eau sur 30 jours : pluie moins évaporation potentielle (FAO) — ce que le sol a réellement pu garder.
+  const p30e = past.slice(-30).filter((r) => r.et0 != null);
+  const balance30 = past.length >= 28 && p30e.length >= 28 ? Math.round(sum(past.slice(-30)) - p30e.reduce((s, r) => s + r.et0, 0) * 30 / p30e.length) : null;
   // Choc thermique : les nuits (moyenne sur 3 jours) chutent d'au moins 4 °C par rapport aux 3 jours d'avant.
   let shockAgo = null, shockDrop = 0;
   const p = past.slice(-17);
@@ -185,19 +192,33 @@ export function summarizeWeather(daily, today) {
     frost7: last7.filter((r) => r.tmin != null && r.tmin < 0).length,
     soilT3, soilM3, shockAgo, shockDrop,
     bigRains, episode10: Math.round(episode10), heatEndAgo, degreeDays20, ddSource,
+    soilTop3, soilDepth, balance30,
   };
 }
 
 /** Conditions d'une sortie (trouvaille ou bredouille), gardées avec elle pour caler les seuils plus tard. */
-export function outingConditions(w, soilClim = null, month = null) {
+export function outingConditions(w, soilClim = null, month = null, swi = null) {
   if (!w) return null;
   return {
+    swi: swi?.swi ?? null, swiNormal: swi?.normal ?? null,
     rain10: w.rain10, rain14: w.rain14, rain30: w.rain30, rainDays30: w.rainDays30,
     bigRainAgo: w.bigRainAgo, bigRainMm: w.bigRainMm, bigRains: (w.bigRains ?? []).map((b) => b.ago),
     episode10: w.episode10, tmin7: w.tmin7, tmax7: w.tmax7, frost7: w.frost7, heatEndAgo: w.heatEndAgo,
-    soilM3: w.soilM3, soilT3: w.soilT3, soilRank: month ? soilRank(soilClim, month, w.soilM3) : null,
+    soilM3: w.soilM3, soilDepth: w.soilDepth, soilTop3: w.soilTop3, soilT3: w.soilT3, balance30: w.balance30,
+    soilRank: month ? soilRank(soilClim, month, w.soilM3) : null,
     degreeDays20: w.degreeDays20, ddSource: w.ddSource,
   };
+}
+
+/** Maille SIM (Météo-France, ~8 km) qui contient le point : { swi, normal, rain15, date } ou null. */
+export function swiAt(rows, lat, lon) {
+  let best = null, bd = Infinity;
+  for (const r of rows ?? []) {
+    if (lon < r.w || lon > r.e || lat < r.s || lat > r.n) continue;
+    const d = (lon - (r.w + r.e) / 2) ** 2 + (lat - (r.s + r.n) / 2) ** 2;
+    if (d < bd) { bd = d; best = r; }
+  }
+  return best ? { swi: best.swi, normal: best.normal, rain15: best.rain15, date: best.date } : null;
 }
 
 /** Rang de l'humidité du jour parmi les jours de ce mois ici (déciles de champi_soil_clim) : 0 … 0,9, ou null. */
@@ -280,7 +301,7 @@ export function seasonAt(id, alt) {
   return { months: sp.months, peak: sp.peak ?? [], late: sp.late ?? [] };
 }
 
-export function assess(w, { month, species = [], trees = [], history = [], personal = null, alt: alt0 = null, exposure = null, soil = null, today = null, soilClim = null, burned = null }) {
+export function assess(w, { month, species = [], trees = [], history = [], personal = null, alt: alt0 = null, exposure = null, soil = null, today = null, soilClim = null, burned = null, swi = null }) {
   const alt = alt0 ?? w?.elevation ?? null;   // altitude du coin, sinon celle du point météo
   const known = species.filter((id) => SPECIES.some((s) => s.id === id && s.months.length));
   // Fin de saison (ex. cèpe en décembre en Provence) : seulement par temps doux, sans gel, à basse altitude.
@@ -329,7 +350,15 @@ export function assess(w, { month, species = [], trees = [], history = [], perso
     }
     // Réserve d'eau : un sol méditerranéen doit d'abord se recharger ; la pluie récente ne fait que choisir le moment.
     // Seuils provisoires (30 / 80 mm sur 30 jours), à caler sur les trouvailles de la famille.
-    if (w.rain30 != null && w.rain30 >= 80) { base += 1; common.push(`Bonne réserve d'eau : ${w.rain30} mm sur 30 jours (${w.rainDays30} jours de pluie)`); }
+    // Avec l'évaporation connue : bilan pluie − évaporation (forme des modèles catalans) ; sinon la pluie seule.
+    // Second avis : indice d'humidité des sols de Météo-France (réserve sur ~2 m, comparée à sa normale 1991–2020).
+    // Un seul point de « réserve », quel que soit le nombre d'indices qui le confirment.
+    const swiTxt = swi?.swi != null ? `réserve profonde du sol (Météo-France) : ${Math.round(swi.swi * 100)} %, normale ${Math.round(swi.normal * 100)} %` : null;
+    const swiWet = swi?.swi != null && swi.normal != null && swi.swi >= swi.normal;
+    if (w.balance30 != null && w.balance30 >= 0) { base += 1; common.push(`Bonne réserve d'eau : pluie − évaporation = +${w.balance30} mm sur 30 jours (${w.rain30} mm de pluie)${swiTxt ? ` ; ${swiTxt}` : ''}`); }
+    else if (swiWet) { base += 1; common.push(`Bonne réserve d'eau : ${swiTxt}`); }
+    else if (w.balance30 == null && w.rain30 != null && w.rain30 >= 80) { base += 1; common.push(`Bonne réserve d'eau : ${w.rain30} mm sur 30 jours (${w.rainDays30} jours de pluie)`); }
+    else if (swiTxt) common.push(`Réserve en dessous de la normale : ${swiTxt}`);
     // « Fin des chaleurs » plutôt que « choc thermique » (non testé par les études) : les maxi sont redescendus.
     if ([9, 10, 11].includes(month) && w.heatEndAgo != null && w.heatEndAgo >= 3 && w.heatEndAgo <= 21) { base += 1; common.push(`Fin des chaleurs il y a ${w.heatEndAgo} j (maxi redescendus à ${w.tmax7} °C) : la pousse peut démarrer`); }
   }
@@ -404,7 +433,11 @@ export function assess(w, { month, species = [], trees = [], history = [], perso
   const early = w && w.bigRainAgo != null && w.bigRainAgo < 5 && (w.rain10 - w.bigRainMm) < 10;
   let level = !w ? 'moyen' : dry ? 'faible' : best >= 6 ? 'bon' : best >= 3 ? 'moyen' : 'faible';
   // Réserve trop faible (sol pas encore rechargé) : pas plus que « moyen ».
-  if (w && w.rain30 != null && w.rain30 < 30 && level === 'bon') { level = 'moyen'; common.push(`Réserve d'eau faible : ${w.rain30} mm sur 30 jours, le sol n'est pas encore rechargé`); }
+  if (w && w.balance30 != null && w.balance30 <= -60 && level === 'bon') {
+    level = 'moyen'; common.push(`Sol en déficit : pluie − évaporation = ${w.balance30} mm sur 30 jours, il n'est pas encore rechargé`);
+  } else if (w && swi?.swi != null && swi.swi < 0.3 && level === 'bon') {
+    level = 'moyen'; common.push(`Sol profond encore sec : réserve à ${Math.round(swi.swi * 100)} % (Météo-France), il n'est pas encore rechargé`);
+  } else if (w && w.balance30 == null && w.rain30 != null && w.rain30 < 30 && level === 'bon') { level = 'moyen'; common.push(`Réserve d'eau faible : ${w.rain30} mm sur 30 jours, le sol n'est pas encore rechargé`); }
   if (early && level === 'bon') level = 'moyen';
   if (early) common.push('Trop tôt : sol sec avant cette pluie, repasse dans 5 à 10 jours');
   if (w && w.rainNext >= 15) common.push(`Pluie annoncée : ${w.rainNext} mm dans les prochains jours → à surveiller d'ici une semaine`);

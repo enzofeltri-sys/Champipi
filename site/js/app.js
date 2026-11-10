@@ -6,10 +6,11 @@ import {
   exifDate, searchSpots, searchHits, toGpx, toCsv, chipOrder, seasonOf, lateText,
 } from './logic.js';
 import { createPhotoStore, thumbPath } from './photos.js';
-import { GUIDE, SOIL_STRICT, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown, burnedAt } from './advisor.js';
+import { GUIDE, SOIL_STRICT, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown, burnedAt, swiAt } from './advisor.js';
 import { dailyFor as openMeteoFor, forestAt, soilAt, historyFor, terrainAt, trophAt } from './weather.js';
 import { soilGuess, trophText } from './soil.js';
 import { ASPECT_TEXT } from './terrain.js';
+import { lidarAt, terrainText, oldForestAt, oldForestText, zonesAt, zonesText } from './lieu.js';
 import { rainIndex, mergeRain, rainSource, distKm } from './rain.js';
 import { treesAt, soilKind, whatGrows, fix as cleanText } from './here.js';
 import { historyRange, findConditions, spotProfile, personalAdvice, profileSummary, profileKey, recentFinds } from './learn.js';
@@ -573,6 +574,10 @@ const loadBurned = () => (burnedP ??= fetch('data/burned.json').then((r) => (r.o
 let soilClim = new Map(), soilClimP = null;
 const loadSoilClim = () => (soilClimP ??= sb.from('champi_soil_clim').select('key, months')
   .then(({ data }) => { soilClim = new Map((data ?? []).map((r) => [r.key, r.months])); return soilClim; }).catch(() => soilClim));
+// Indice d'humidité des sols de Météo-France (mailles de ~8 km, comparé à sa normale), relevé chaque matin.
+let swiRows = [], swiP = null;
+const loadSwi = () => (swiP ??= sb.from('champi_swi').select('w, s, e, n, swi, normal, rain15, date').range(0, 1999)
+  .then(({ data }) => (swiRows = data ?? [])).catch(() => swiRows));
 // « Bon moment ? » : avis du conseiller (pluie, températures, saison) au centre de la carte, pour chaque espèce.
 let momentTimer = null, momentCell = '';
 function scheduleMoment() { clearTimeout(momentTimer); momentTimer = setTimeout(() => { updateMoment(); updateHabitatWeather(); }, 700); }
@@ -919,7 +924,7 @@ async function analyzeHere(lat, lon) {
       : `${sk.kind ? `<b>${SOIL_TEXT[sk.kind]}</b>` : '<span class="muted">calcaire ou siliceux : non déterminé</span>'}${sk.name ? ` · <span class="small muted">${esc(sk.name.toLowerCase())}</span>` : ''}
         ${sk.text ? `<details class="small"><summary>Description du terrain</summary>${esc(sk.text)}</details>` : ''}`}</div>
     <div>⛰️ ${z != null ? `<b>${z} m</b>` : '<span class="muted">altitude inconnue</span>'}${expo ? ` · 🧭 ${expo === 'plat' ? 'terrain plat' : `versant <b>${esc(ASPECT_TEXT[expo])}</b>, pente ${ter.slope}°`}` : ''} · 📅 ${esc(MONTHS[m - 1])}</div>
-    ${w?.soilT3 != null ? `<div>🌡️ Sol : <b>${w.soilT3} °C</b> · humidité <b>${Math.round(w.soilM3 * 100)} %</b> <span class="small muted">(modèle, 0–7 cm)</span></div>` : ''}
+    ${w?.soilT3 != null ? `<div>🌡️ Sol : <b>${w.soilT3} °C</b> · humidité <b>${Math.round(w.soilM3 * 100)} %</b> <span class="small muted">(modèle, ${w.soilDepth})</span></div>` : ''}
     <div>🌧️ ${w ? `<b>${w.rain10} mm</b> sur 10 jours${w.bigRainAgo != null ? ` · grosse pluie il y a ${w.bigRainAgo} j` : ''}<br><span class="small muted">${esc(sourceOf(daily.value))}</span>` : '<span class="muted">météo indisponible</span>'}</div>
   </div>`;
 
@@ -937,8 +942,13 @@ async function analyzeHere(lat, lon) {
   }).join('');
   const empty = !list.length ? `<p>${tfv ? 'Aucun champignon du carnet n\'a son milieu typique ici.' : 'Pas de forêt cartographiée à cet endroit : essaie au cœur d\'un bois.'}</p>` : '';
   $('#here-body').innerHTML = `${place}
+    <details class="here-lieu" id="here-lieu"><summary>🔎 Le point vu de près (arbres, relief, zones protégées)</summary><p class="small muted">Lecture des relevés de l'IGN…</p></details>
     <h3 class="here-h">${list.length ? `Champignons dont c'est le milieu (${list.length})` : 'Champignons'}</h3>${empty}${items}
     <div class="row end"><button class="btn" type="button" data-here-add>＋ Noter un coin ici</button></div>`;
+  lieuFor(lat, lon).then((r) => {
+    const box = $('#here-lieu');
+    if (box && herePoint?.lat === round6(lat) && herePoint?.lon === round6(lon)) box.innerHTML = `<summary>🔎 Le point vu de près (arbres, relief, zones protégées)</summary>${lieuHtml(r)}`;
+  });
 }
 $('#here-body').addEventListener('click', (e) => {
   const sp = e.target.closest('[data-here-sp]');
@@ -1329,6 +1339,7 @@ function renderSpot(id) {
   $('#spot-photos').innerHTML = thumbs(state.photos.filter((p) => p.spot_id === id && !p.find_id));
   $('#spot-photo-add').hidden = !mine || !!s.pending;
   renderMeteo(s);
+  renderLieu(s).catch(() => {});
   autoSoilFor(s).then((changed) => { if (changed && state.openSpotId === s.id) { renderDetails(s); renderMeteo(s); } }).catch(() => {});
   renderAccess(s);
   renderBilan(s);
@@ -1718,7 +1729,7 @@ function spotContext(s, w = null) {
   const prof = profiles.get(s.id)?.profile;
   return { month: month(), species: spotSpecies(s, state.finds), trees: s.trees ?? [], history: state.finds.filter((f) => f.spot_id === s.id), alt: s.altitude ?? null, exposure: s.exposure ?? null, soil: spotSoil(s), today: todayIso(),
     personal: w && prof ? personalAdvice(w, prof) : null,
-    soilClim: soilClim.get(`${Math.floor(s.lat * 10)}:${Math.floor(s.lon * 10)}`) ?? null, burned: burnedData ? burnedAt(burnedData, s.lat, s.lon) : null };
+    soilClim: soilClim.get(`${Math.floor(s.lat * 10)}:${Math.floor(s.lon * 10)}`) ?? null, burned: burnedData ? burnedAt(burnedData, s.lat, s.lon) : null, swi: swiAt(swiRows, s.lat, s.lon) };
 }
 
 // Profil appris de chaque coin (mémorisé tant que ses trouvailles ne changent pas).
@@ -1770,14 +1781,38 @@ function meteoHtml(w, a, src = '') {
     <div class="rainbars" aria-label="Pluie jour par jour">${rows.map((r) => `<div class="d${r.date === today ? ' today' : ''}${r.date > today ? ' future' : ''}" title="${formatDate(r.date)} : ${r.rain} mm">
       <span class="mm">${r.rain >= 1 ? Math.round(r.rain) : ''}</span><span class="b" style="height:${Math.round(((r.rain || 0) / max) * 64)}px"></span><span>${r.date === today ? 'auj.' : shortDay(r.date)}</span></div>`).join('')}</div>
     <div class="temps">${rows.map((r) => `<span>${r.tmax != null ? Math.round(r.tmax) + '°' : ''}</span>`).join('')}</div>
-    <p class="small muted">Pluie sur 10 jours : <b>${w.rain10} mm</b> · températures sur 7 jours : ${w.tmin7 ?? '?'}–${w.tmax7 ?? '?'} °C${w.soilT3 != null ? ` · <b>sol ${w.soilT3} °C, humidité ${Math.round(w.soilM3 * 100)} %</b> (modèle)` : ''} · hachuré = prévision.<br>${esc(src || 'Pluie : Open-Meteo (modèle)')} · prévisions et données manquantes : modèles Météo-France via Open-Meteo.</p>`;
+    <p class="small muted">Pluie sur 10 jours : <b>${w.rain10} mm</b> · températures sur 7 jours : ${w.tmin7 ?? '?'}–${w.tmax7 ?? '?'} °C${w.soilT3 != null ? ` · <b>sol ${w.soilT3} °C, humidité ${Math.round(w.soilM3 * 100)} % à ${w.soilDepth}</b> (modèle)${w.balance30 != null ? ` · pluie − évaporation sur 30 j : <b>${w.balance30 > 0 ? '+' : ''}${w.balance30} mm</b>` : ''}` : ''} · hachuré = prévision.<br>${esc(src || 'Pluie : Open-Meteo (modèle)')} · prévisions et données manquantes : modèles Météo-France via Open-Meteo.</p>`;
+}
+
+// Le coin vu de près (LiDAR, forêt ancienne, zones protégées) : une fois par coin et par session.
+const lieuCache = new Map();
+function lieuFor(lat, lon) {
+  const k = `${lat.toFixed(5)},${lon.toFixed(5)}`;
+  if (!lieuCache.has(k)) lieuCache.set(k, Promise.allSettled([lidarAt(lat, lon), oldForestAt(lat, lon), zonesAt(lat, lon)]));
+  return lieuCache.get(k);
+}
+function lieuHtml([lidar, old, zones]) {
+  const lines = [...(lidar.status === 'fulfilled' ? terrainText(lidar.value) : []),
+    ...(old.status === 'fulfilled' && oldForestText(old.value) ? [oldForestText(old.value)] : [])];
+  const rules = zones.status === 'fulfilled' ? zonesText(zones.value) : [];
+  const icon = { stop: '⛔', warn: '⚠️', info: 'ℹ️' };
+  return `${lines.length ? lines.map((l) => `<div>${l}</div>`).join('') : '<div class="muted small">Pas de relevé laser (LiDAR) ici pour l\'instant.</div>'}
+    ${rules.length ? `<div class="lieu-rules">${rules.map((r) => `<div class="small">${icon[r.level]} ${esc(r.text)}${r.url ? ` · <a href="${esc(r.url)}" target="_blank" rel="noopener">fiche</a>` : ''}</div>`).join('')}</div>` : ''}
+    <p class="small muted">Relevés laser et cartes de l'IGN, zones protégées de l'INPN : pour choisir et comprendre le coin ; ça ne change pas l'avis météo.</p>`;
+}
+async function renderLieu(s) {
+  const box = $('#spot-lieu');
+  box.innerHTML = '<h3>Le coin vu de près</h3><p class="small muted">Lecture des relevés de l\'IGN…</p>';
+  const r = await lieuFor(s.lat, s.lon);
+  if (state.openSpotId !== s.id) return;
+  box.innerHTML = `<h3>Le coin vu de près</h3>${lieuHtml(r)}`;
 }
 
 async function renderMeteo(s) {
   const box = $('#spot-meteo');
   box.innerHTML = '<h3>Météo et conditions</h3><p class="small muted">Chargement de la météo…</p>';
   try {
-    const [[daily]] = await Promise.all([dailyFor([[s.lat, s.lon]]), loadSoilClim(), loadBurned()]);
+    const [[daily]] = await Promise.all([dailyFor([[s.lat, s.lon]]), loadSoilClim(), loadBurned(), loadSwi()]);
     if (state.openSpotId !== s.id) return;
     const w = summarizeWeather(daily, todayIso());
     await spotProfileFor(s).catch(() => null);
@@ -1878,7 +1913,7 @@ async function openAdvisor() {
   try {
     const grid = pacaGrid();
     const spots = state.spots.slice(0, 100);
-    const [all] = await Promise.all([dailyFor([...grid, ...spots.map((s) => [s.lat, s.lon])]), loadSoilClim(), loadBurned()]);
+    const [all] = await Promise.all([dailyFor([...grid, ...spots.map((s) => [s.lat, s.lon])]), loadSoilClim(), loadBurned(), loadSwi()]);
     const ws = all.map((d) => (d ? summarizeWeather(d, todayIso()) : null));
     const g = ws.slice(0, grid.length).filter(Boolean);
     if (!g.length) throw new Error('météo indisponible');
