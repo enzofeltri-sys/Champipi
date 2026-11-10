@@ -365,7 +365,7 @@ async function loadData() {
   }
   const [spots, finds, shares, people, pics, alertLog] = await Promise.all([
     sb.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, note, trees, soil, exposure, access, altitude, forest_type, created_at, updated_at, author:champi_profiles!champi_spots_owner_fkey(display_name)'),
-    sb.from('champi_finds').select('id, spot_id, user_id, found_on, species, note, quantity, condition, weather, empty, created_at, author:champi_profiles!champi_finds_user_id_fkey(display_name)')
+    sb.from('champi_finds').select('id, spot_id, user_id, found_on, species, note, quantity, condition, weather, empty, conditions, created_at, author:champi_profiles!champi_finds_user_id_fkey(display_name)')
       .order('found_on', { ascending: false }).order('created_at', { ascending: false }),
     sb.from('champi_spot_shares').select('spot_id, user_id'),
     sb.from('champi_profiles').select('id, display_name, avatar_emoji, avatar_color').order('display_name'),
@@ -1355,6 +1355,7 @@ function renderSpot(id) {
         ${f.user_id === me && !f.pending ? `<button class="del" type="button" data-find="${f.id}">Supprimer</button>` : ''}</div>
       <div class="small muted by">${byHtml(f.user_id)}${f.empty ? ' · <b>🚶 passé, rien trouvé</b>' : f.species?.length ? ' · ' + esc(f.species.map(speciesLabel).join(', ')) : ''}</div>
       ${findDetails(f)}
+      ${conditionsLine(f)}
       ${f.note ? `<div class="note">${esc(f.note)}</div>` : ''}
       <div class="photos">${thumbs(state.photos.filter((p) => p.find_id === f.id))}</div>
     </li>`).join('') : '<li class="muted small">Pas encore de trouvaille notée.</li>';
@@ -1806,6 +1807,19 @@ async function renderLieu(s) {
   const r = await lieuFor(s.lat, s.lon);
   if (state.openSpotId !== s.id) return;
   box.innerHTML = `<h3>Le coin vu de près</h3>${lieuHtml(r)}`;
+}
+
+// Conditions gardées pour chaque sortie (tournée du matin) et, après coup, la pluie réelle mesurée (COMEPHORE).
+function conditionsLine(f) {
+  const c = f.conditions; if (!c) return '';
+  const r = c.comephore, parts = [];
+  if (r) parts.push(`pluie réelle avant : <b>${r.rain10} mm</b> sur 10 j, <b>${r.rain30} mm</b> sur 30 j <span class="muted">(radar + pluviomètres)</span>`);
+  else if (c.rain10 != null) parts.push(`pluie : ${c.rain10} mm sur 10 j${c.rain30 != null ? `, ${c.rain30} mm sur 30 j` : ''}`);
+  const ago = r ? r.bigRainAgo : c.bigRainAgo;
+  if (ago != null) parts.push(`grosse pluie ${ago} j avant`);
+  if (c.balance30 != null) parts.push(`bilan d'eau ${c.balance30 > 0 ? '+' : ''}${c.balance30} mm`);
+  if (c.soilM3 != null) parts.push(`sol ${Math.round(c.soilM3 * 100)} %`);
+  return parts.length ? `<div class="small muted">🌦️ ${parts.join(' · ')}</div>` : '';
 }
 
 async function renderMeteo(s) {
