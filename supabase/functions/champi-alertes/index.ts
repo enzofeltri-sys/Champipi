@@ -7,7 +7,8 @@
 //   POST { action: 'selftest', sub } → envoi chiffré vers une adresse de test (en-tête x-champi-token requis)
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import webpush from 'npm:web-push@3.6.7';
-// Règles du conseiller : copie générée depuis l'appli (node tools/build-alertes.mjs).
+// Règles du conseiller : copie générée depuis l'appli (node tools/build-alertes.mjs) ; le déploiement des fonctions
+// Supabase refuse les modules lus depuis le site publié.
 import { summarizeWeather, assess, burnedAt, outingConditions, swiAt, spotSpecies, SPECIES, MIN_FINDS, profileKey, recentFinds, historyRange, findConditions, spotProfile, personalAdvice } from './rules.js';
 import { rainIndex, mergeRain } from './rain.js';
 
