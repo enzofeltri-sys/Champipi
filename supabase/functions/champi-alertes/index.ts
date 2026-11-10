@@ -8,7 +8,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import webpush from 'npm:web-push@3.6.7';
 // Règles du conseiller : copie générée depuis l'appli (node tools/build-alertes.mjs).
-import { summarizeWeather, assess, spotSpecies, SPECIES, MIN_FINDS, profileKey, recentFinds, historyRange, findConditions, spotProfile, personalAdvice } from './rules.js';
+import { summarizeWeather, assess, burnedAt, outingConditions, spotSpecies, SPECIES, MIN_FINDS, profileKey, recentFinds, historyRange, findConditions, spotProfile, personalAdvice } from './rules.js';
 import { rainIndex, mergeRain } from './rain.js';
 
 const SITE = 'https://enzofeltri-sys.github.io/Champipi/';
@@ -93,7 +93,7 @@ async function morningRun(cfg: any) {
   const [subs, spots, finds, shares, allowed, profiles, log] = await Promise.all([
     admin.from('champi_push_subscriptions').select('*'),
     admin.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, trees, altitude, exposure, soil'),
-    admin.from('champi_finds').select('id, spot_id, found_on, species, empty'),
+    admin.from('champi_finds').select('id, spot_id, found_on, species, empty, conditions'),
     admin.from('champi_spot_shares').select('spot_id, user_id'),
     admin.from('champi_allowed_emails').select('email, grp'),
     admin.from('champi_profiles').select('id, notify_pousse'),
@@ -137,13 +137,30 @@ async function morningRun(cfg: any) {
   const idx = rainOk ? rainIndex(st.data, rows) : null;
   const daily = list.map((s: any, i: number) => mergeRain(om?.[i] ?? null, s.lat, s.lon, idx, day).daily);
   const learned = await learnedProfiles(list, finds.data!).catch(() => new Map());
+  // Humidité habituelle du sol (par case et par mois) et surfaces brûlées (morille).
+  const { data: climRows } = await admin.from('champi_soil_clim').select('key, months');
+  const clim = new Map((climRows ?? []).map((r: any) => [r.key, r.months]));
+  const burnedData = await fetch(`${SITE}data/burned.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  const cellOf = (s: any) => `${Math.floor(s.lat * 10)}:${Math.floor(s.lon * 10)}`;
   const verdict = new Map(list.filter((_: any, i: number) => daily[i]).map((s: any) => {
     const i = list.indexOf(s);
     const w = summarizeWeather(daily[i], day);
     const a = assess(w, { month, species: spotSpecies(s, finds.data!), trees: s.trees ?? [], history: finds.data!.filter((f: any) => f.spot_id === s.id), alt: s.altitude ?? null, exposure: s.exposure ?? null, soil: s.soil ?? null, today: day,
-      personal: learned.has(s.id) ? personalAdvice(w, learned.get(s.id)) : null });
+      personal: learned.has(s.id) ? personalAdvice(w, learned.get(s.id)) : null,
+      soilClim: clim.get(cellOf(s)) ?? null, burned: burnedData ? burnedAt(burnedData, s.lat, s.lon) : null });
     return [s.id, { s, a }];
   }));
+
+  // Conditions de chaque sortie des 3 derniers jours (trouvaille ou bredouille), gardées pour caler les seuils.
+  const since3 = new Date(Date.parse(day) - 3 * 86400000).toISOString().slice(0, 10);
+  let noted = 0;
+  for (const f of finds.data!.filter((f: any) => !f.conditions && f.found_on >= since3 && f.found_on <= day)) {
+    const i = list.findIndex((s: any) => s.id === f.spot_id);
+    if (i < 0 || !daily[i]) continue;
+    const c = outingConditions(summarizeWeather(daily[i], f.found_on), clim.get(cellOf(list[i])) ?? null, Number(f.found_on.slice(5, 7)));
+    const { error } = await admin.from('champi_finds').update({ conditions: { ...c, noted_on: day } }).eq('id', f.id);
+    if (!error) noted++;
+  }
 
   const recent = new Set(log.data!.map((l: any) => `${l.spot_id}|${l.user_id}`));
   const byUser = new Map<string, any[]>();
@@ -162,7 +179,7 @@ async function morningRun(cfg: any) {
     if (res.includes('ok')) await admin.from('champi_alert_log').insert(good.map((g: any) => ({ spot_id: g.s.id, user_id: uid, sent_on: day })));
     report.push({ uid, coins: good.length, envois: res });
   }
-  return { jour: day, abonnés: subs.data!.length, pluie_mesuree: idx ? idx.stations.length : 0, grille: grid.size, coins_appris: learned.size, report };
+  return { jour: day, abonnés: subs.data!.length, pluie_mesuree: idx ? idx.stations.length : 0, grille: grid.size, coins_appris: learned.size, sorties_notees: noted, report };
 }
 
 // Mêmes règles que la base.

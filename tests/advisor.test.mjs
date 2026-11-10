@@ -32,8 +32,7 @@ test('grosse pluie détectée (1 jour ≥ 15 mm ou 2 jours ≥ 20 mm)', () => {
   assert.equal(w.bigRainMm, 23);
   const a = assess(w, { month: 10, species: ['cepe'], trees: ['chataignier'] });
   assert.equal(a.level, 'bon');
-  assert.ok(a.reasons.some((r) => r.includes('bonne fenêtre')));
-  assert.deepEqual(a.perSpecies[0].reasons, ['mois de pic', 'milieu typique']);
+  assert.deepEqual(a.perSpecies[0].reasons, ['mois de pic', 'grosse pluie (23 mm) il y a 9 j : dans sa fenêtre de pousse (7–25 j)', 'milieu typique']);
 });
 
 test('évaluation : sec, hors saison, sans espèce, historique', () => {
@@ -119,14 +118,15 @@ function wx(days, f) {   // jours relatifs à aujourd'hui (2026-11-05) → daily
   for (let i = -14; i <= 2; i++) { const d = new Date(Date.UTC(2026, 10, 5 + i)).toISOString().slice(0, 10); const v = f(i); time.push(d); rr.push(v.rr ?? 0); tx.push(v.tx ?? 16); tn.push(v.tn ?? 7); st.push(v.st ?? null); sm.push(v.sm ?? null); }
   return summarizeWeather({ time, precipitation_sum: rr, temperature_2m_max: tx, temperature_2m_min: tn, soil_temperature_0_to_7cm_mean: st, soil_moisture_0_to_7cm_mean: sm }, '2026-11-05');
 }
-test('sol : température idéale par espèce, humidité, choc thermique', () => {
+test('sol : température idéale par espèce, humidité, fin des chaleurs', () => {
   assert.deepEqual(SOIL_T.cepe, [12, 18]);
-  const w = wx(0, (i) => ({ rr: i === -8 ? 30 : 0, st: 14, sm: 0.36, tn: i < -10 ? 13 : 7 }));
+  const w = wx(0, (i) => ({ rr: i === -8 ? 30 : 0, st: 14, sm: 0.36, tx: i < -6 ? 29 : 20 }));
   assert.equal(w.soilT3, 14); assert.equal(w.soilM3, 0.36);
-  assert.ok(w.shockAgo >= 3 && w.shockAgo <= 14, String(w.shockAgo));
+  assert.ok(w.heatEndAgo >= 3 && w.heatEndAgo <= 21, String(w.heatEndAgo));
   const a = assess(w, { month: 10, species: ['cepe', 'chanterelle-grise'] });
   assert.ok(a.reasons.some((r) => r.startsWith('Sol bien humide')));
-  assert.ok(a.reasons.some((r) => r.startsWith('Choc thermique')));
+  assert.ok(a.reasons.some((r) => r.startsWith('Fin des chaleurs')));
+  assert.ok(!assess(w, { month: 12, species: ['cepe', 'chanterelle-grise'] }).reasons.some((r) => r.startsWith('Fin des chaleurs')));
   const cepe = a.perSpecies.find((x) => x.id === 'cepe'), grise = a.perSpecies.find((x) => x.id === 'chanterelle-grise');
   assert.ok(cepe.reasons.some((r) => r.includes('idéal')));          // 14 °C dans 12–18
   assert.ok(grise.reasons.some((r) => r.includes('un peu chaud')));  // 14 °C au-dessus de 4–12
@@ -162,4 +162,61 @@ test('« Passé, rien trouvé » : avis plus prudent quelques jours, puis plus r
   // une vraie trouvaille après la sortie bredouille l'annule
   assert.equal(lastEmptyVisit([{ found_on: '2026-10-18', empty: true }, { found_on: '2026-10-19', species: ['cepe'] }], '2026-10-20'), null);
   assert.equal(lastEmptyVisit([{ found_on: '2026-10-18', empty: true }], null), null);
+});
+
+import { soilRank, burnedAt, DELAY } from '../site/js/advisor.js';
+function wx31(f, today = '2026-11-05') {   // 31 jours passés + 3 de prévision
+  const time = [], rr = [], tx = [], tn = [], st = [], sm = [];
+  for (let i = -31; i <= 2; i++) { const d = new Date(Date.parse(today) + i * 86400000).toISOString().slice(0, 10); const v = f(i); time.push(d); rr.push(v.rr ?? 0); tx.push(v.tx ?? 16); tn.push(v.tn ?? 7); st.push(v.st ?? null); sm.push(v.sm ?? null); }
+  return summarizeWeather({ time, precipitation_sum: rr, temperature_2m_max: tx, temperature_2m_min: tn, soil_temperature_0_to_7cm_mean: st, soil_moisture_0_to_7cm_mean: sm }, today);
+}
+test('délai par espèce : le cèpe profite d\'une pluie de 20 j, la girolle non', () => {
+  assert.deepEqual(DELAY.cepe, [7, 25]);
+  const w = wx31((i) => ({ rr: i === -20 ? 40 : 0 }));
+  assert.deepEqual(w.bigRains, [{ ago: 20, mm: 40 }]);
+  const a = assess(w, { month: 10, species: ['cepe', 'girolle'] });
+  const c = a.perSpecies.find((x) => x.id === 'cepe'), g = a.perSpecies.find((x) => x.id === 'girolle');
+  assert.ok(c.reasons.some((r) => r.includes('dans sa fenêtre de pousse (7–25 j)')));
+  assert.ok(!g.reasons.some((r) => r.includes('fenêtre')));
+  // pluie de 5 jours : bonne pour la girolle, trop tôt pour le cèpe
+  const b = assess(wx31((i) => ({ rr: i === -5 ? 30 : 0 })), { month: 10, species: ['cepe', 'girolle'] });
+  assert.ok(b.perSpecies.find((x) => x.id === 'girolle').reasons.some((r) => r.includes('fenêtre')));
+  assert.ok(b.perSpecies.find((x) => x.id === 'cepe').reasons.includes('grosse pluie il y a 5 j : il sort plutôt 7 à 25 j après'));
+});
+test('pluie extrême : pas de bonus en plus au-delà de 100 mm en 2 jours', () => {
+  const fort = assess(wx31((i) => ({ rr: i === -7 ? 90 : 0 })), { month: 10, species: ['girolle'] });   // 90 mm : réserve ≥ 80 aussi
+  const extreme = assess(wx31((i) => ({ rr: i === -7 || i === -6 ? 70 : 0 })), { month: 10, species: ['girolle'] });
+  assert.ok(extreme.reasons[0].startsWith('Pluie extrême : 140 mm en 2 jours'));
+  assert.equal(extreme.perSpecies[0].score, fort.perSpecies[0].score - 1);
+});
+test('humidité du sol comparée à celle du coin ; pas de bonus en novembre–janvier', () => {
+  const clim = { 10: [0.2, 0.22, 0.24, 0.26, 0.28, 0.3, 0.32, 0.34, 0.36], 12: [0.3, 0.31, 0.32, 0.33, 0.34, 0.35, 0.36, 0.37, 0.38] };
+  assert.equal(soilRank(clim, 10, 0.35), 0.8); assert.equal(soilRank(clim, 10, 0.19), 0); assert.equal(soilRank(null, 10, 0.3), null);
+  const w = wx31(() => ({ sm: 0.35, st: 14 }));
+  const oct = assess(w, { month: 10, species: ['cepe'], soilClim: clim });
+  assert.ok(oct.reasons.includes('Sol plus humide que 80 % des jours d\'octobre ici (35 %)'));
+  const sans = assess(w, { month: 10, species: ['cepe'] });
+  assert.equal(oct.perSpecies[0].score, sans.perSpecies[0].score);   // 0,35 ≥ 0,33 : bonus aussi sans climatologie
+  const dec = assess(w, { month: 12, species: ['cepe'], soilClim: clim });   // 0,35 en décembre : comme d'habitude
+  assert.ok(dec.reasons.includes('Sol humide comme d\'habitude en décembre ici (35 %)'));
+  const decWet = assess(w, { month: 12, species: ['cepe'] });
+  assert.ok(decWet.reasons.includes('Sol bien humide (35 %) (en fin de saison, ça compte peu)'));
+  const sec = assess(w, { month: 10, species: ['cepe'], soilClim: { 10: Array(9).fill(0.4) } });
+  assert.ok(sec.reasons.includes('Sol plus sec que d\'habitude en octobre ici (35 %)'));
+});
+test('morille : chaleur cumulée sur 20 j, zone brûlée', () => {
+  const froid = wx31(() => ({ st: 6 }), '2026-04-10');
+  const doux = wx31(() => ({ st: 12 }), '2026-04-10');
+  assert.equal(froid.degreeDays20, 120); assert.equal(doux.degreeDays20, 240); assert.equal(doux.ddSource, 'sol');
+  const air = wx31(() => ({ tn: 6, tx: 16 }), '2026-04-10');
+  assert.equal(air.degreeDays20, 220); assert.equal(air.ddSource, 'air');
+  const m = (w, extra = {}) => assess(w, { month: 4, species: ['morille'], today: '2026-04-10', ...extra }).perSpecies[0];
+  assert.ok(m(doux).reasons.includes('chaleur cumulée du sol : 240 °C·j sur 20 j (les morilles sortent vers 230)'));
+  assert.equal(m(doux).score - m(froid).score, 5);   // 2 pour la chaleur cumulée + 3 pour la température du sol (12 °C idéal, 6 °C trop froid)
+  const fires = { fires: [{ date: '2025-08-12', ha: 300, bbox: [5, 43, 5.1, 43.1], rings: [[[5, 43], [5.1, 43], [5.1, 43.1], [5, 43.1], [5, 43]]] }] };
+  const burned = burnedAt(fires, 43.05, 5.05);
+  assert.equal(burned.label, 'feu de août 2025, 300 ha');
+  assert.equal(burnedAt(fires, 43.2, 5.05), null);
+  assert.equal(m(doux, { burned }).score - m(doux).score, 1);
+  assert.ok(m(doux, { burned }).reasons.some((r) => r.startsWith('zone brûlée (feu de août 2025')));
 });

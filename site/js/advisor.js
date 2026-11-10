@@ -7,9 +7,13 @@ import { SPECIES, MONTHS, LATE_MAX_ALT } from './logic.js';
 export const SOIL_WET = 0.33, SOIL_DRY = 0.26;   // humidité du sol (m³/m³), à affiner avec vos trouvailles
 export const SOIL_T = {
   'lactaire-sanguin': [8, 16], 'petit-gris': [5, 12], cepe: [12, 18], girolle: [12, 18], 'pied-de-mouton': [6, 14],
-  trompette: [8, 15], oronge: [16, 24], coulemelle: [12, 20], berigoule: [10, 18], morille: [8, 14],
+  trompette: [8, 15], oronge: [16, 24], coulemelle: [12, 20], berigoule: [10, 18], morille: [10, 15],
   'saint-georges': [8, 14], 'chanterelle-grise': [4, 12], 'lactaire-delicieux': [8, 16],
 };
+// Délai (jours) entre une grosse pluie et la pousse : 5–15 j par défaut (règle de cueilleur) ; le cèpe 7–25 j
+// (une à trois semaines : étude toscane sur 21 j, règle du Luberon « une dizaine de jours »). Hypothèses à caler.
+export const DELAY_DEFAULT = [5, 15];
+export const DELAY = { cepe: [7, 25] };
 // Préférences de sol « souples » (un plus quand le sol convient, jamais un refus) : le cèpe pousse aussi sur calcaire,
 // mais il est plus fréquent sur sol acide ; trompette, saint-georges et morille aiment les sols riches, calcaires ou neutres.
 // Les préférences nettes (girolle, oronge… : GUIDE[].soil) excluent l'autre type de sol.
@@ -133,6 +137,36 @@ export function summarizeWeather(daily, today) {
     if (after != null && before != null && before - after >= 4) { shockAgo = dayDiff(p[i].date, today); shockDrop = Math.round(before - after); break; }
   }
 
+  // Toutes les grosses pluies des 30 derniers jours : le délai avant la pousse dépend de l'espèce (cèpe plutôt 10–25 j).
+  const bigRains = [];
+  const p30 = past.slice(-30);
+  for (let i = p30.length - 1; i >= 0; i--) {
+    const two = p30[i].rain + (p30[i + 1]?.rain ?? 0);
+    if (p30[i].rain >= 15 || (two >= 20 && p30[i].rain > 0 && p30[i + 1].rain > 0)) bigRains.push({ ago: dayDiff(p30[i].date, today), mm: Math.round(Math.max(p30[i].rain, two)) });
+  }
+  // Plus gros épisode (2 jours) des 10 derniers jours : au-delà de 100 mm, l'eau ruisselle (effet « en cloche », Poblet).
+  let episode10 = 0;
+  for (let i = 0; i < last10.length; i++) episode10 = Math.max(episode10, last10[i].rain + (last10[i + 1]?.rain ?? 0));
+  // Fin des chaleurs : dernier jour où la moyenne des maxi sur 7 jours dépassait 26 °C, si elle est redescendue à 24 °C ou moins.
+  let heatEndAgo = null;
+  const tmaxNow = avg(last7, 'tmax');
+  if (tmaxNow != null && tmaxNow <= 24) {
+    for (let i = past.length - 1; i >= 6; i--) {
+      const m = avg(past.slice(i - 6, i + 1), 'tmax');
+      if (m != null && m > 26) { heatEndAgo = dayDiff(past[i].date, today); break; }
+    }
+  }
+  // Morille : somme des températures du sol au-dessus de 0 °C sur 20 jours (≈ 230 °C·j à la première sortie, Missouri) ;
+  // à défaut de sol, la température moyenne de l'air.
+  const p20 = past.slice(-20);
+  let degreeDays20 = null, ddSource = null;
+  if (p20.length >= 20) {
+    const soilV = p20.map((r) => r.soilT).filter((x) => x != null);
+    const airV = p20.filter((r) => r.tmin != null && r.tmax != null).map((r) => (r.tmin + r.tmax) / 2);
+    const [v, src] = soilV.length >= 18 ? [soilV, 'sol'] : airV.length >= 18 ? [airV, 'air'] : [null, null];
+    if (v) { degreeDays20 = Math.round((v.reduce((s, x) => s + Math.max(0, x), 0) * 20) / v.length); ddSource = src; }
+  }
+
   return {
     days: last10,
     today: rows.find((r) => r.date === today) ?? null,
@@ -150,7 +184,52 @@ export function summarizeWeather(daily, today) {
     tmax7: avg(last7, 'tmax'),
     frost7: last7.filter((r) => r.tmin != null && r.tmin < 0).length,
     soilT3, soilM3, shockAgo, shockDrop,
+    bigRains, episode10: Math.round(episode10), heatEndAgo, degreeDays20, ddSource,
   };
+}
+
+/** Conditions d'une sortie (trouvaille ou bredouille), gardées avec elle pour caler les seuils plus tard. */
+export function outingConditions(w, soilClim = null, month = null) {
+  if (!w) return null;
+  return {
+    rain10: w.rain10, rain14: w.rain14, rain30: w.rain30, rainDays30: w.rainDays30,
+    bigRainAgo: w.bigRainAgo, bigRainMm: w.bigRainMm, bigRains: (w.bigRains ?? []).map((b) => b.ago),
+    episode10: w.episode10, tmin7: w.tmin7, tmax7: w.tmax7, frost7: w.frost7, heatEndAgo: w.heatEndAgo,
+    soilM3: w.soilM3, soilT3: w.soilT3, soilRank: month ? soilRank(soilClim, month, w.soilM3) : null,
+    degreeDays20: w.degreeDays20, ddSource: w.ddSource,
+  };
+}
+
+/** Rang de l'humidité du jour parmi les jours de ce mois ici (déciles de champi_soil_clim) : 0 … 0,9, ou null. */
+export function soilRank(clim, month, v) {
+  const d = clim?.[month] ?? clim?.[String(month)];
+  if (!Array.isArray(d) || d.length !== 9 || v == null) return null;
+  return d.filter((x) => v > x).length / 10;
+}
+
+/**
+ * Feu le plus récent (surfaces brûlées Copernicus EFFIS, site/data/burned.json) qui contient le point, ou null.
+ * @returns { date, ha, label }
+ */
+export function burnedAt(data, lat, lon) {
+  let best = null;
+  for (const f of data?.fires ?? []) {
+    const [w, sth, e, n] = f.bbox;
+    if (lon < w || lon > e || lat < sth || lat > n) continue;
+    if (!f.rings.some((ring) => inRing(ring, lon, lat))) continue;
+    if (!best || f.date > best.date) best = f;
+  }
+  if (!best) return null;
+  const m = Number(best.date.slice(5, 7));
+  return { date: best.date, ha: best.ha, label: `feu de ${MONTHS[m - 1]} ${best.date.slice(0, 4)}, ${best.ha} ha` };
+}
+function inRing(ring, x, y) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,7 +280,7 @@ export function seasonAt(id, alt) {
   return { months: sp.months, peak: sp.peak ?? [], late: sp.late ?? [] };
 }
 
-export function assess(w, { month, species = [], trees = [], history = [], personal = null, alt: alt0 = null, exposure = null, soil = null, today = null }) {
+export function assess(w, { month, species = [], trees = [], history = [], personal = null, alt: alt0 = null, exposure = null, soil = null, today = null, soilClim = null, burned = null }) {
   const alt = alt0 ?? w?.elevation ?? null;   // altitude du coin, sinon celle du point météo
   const known = species.filter((id) => SPECIES.some((s) => s.id === id && s.months.length));
   // Fin de saison (ex. cèpe en décembre en Provence) : seulement par temps doux, sans gel, à basse altitude.
@@ -218,13 +297,14 @@ export function assess(w, { month, species = [], trees = [], history = [], perso
   const common = [];
   let base = 0;
   if (w) {
-    if (w.rain10 >= 40) { base += 3; common.push(`Bien arrosé : ${w.rain10} mm sur 10 jours`); }
+    if (w.rain10 >= 40 && w.episode10 >= 100) { base += 2; common.push(`Pluie extrême : ${w.episode10} mm en 2 jours (beaucoup ruisselle : pas de bonus en plus)`); }
+    else if (w.rain10 >= 40) { base += 3; common.push(`Bien arrosé : ${w.rain10} mm sur 10 jours`); }
     else if (w.rain10 >= 20) { base += 2; common.push(`Assez arrosé : ${w.rain10} mm sur 10 jours`); }
     else if (w.rain10 >= 10) { base += 1; common.push(`Un peu de pluie : ${w.rain10} mm sur 10 jours`); }
     else common.push(`Sec : ${w.rain10} mm sur 10 jours`);
 
-    if (w.bigRainAgo != null && w.bigRainAgo >= 5 && w.bigRainAgo <= 15) { base += 2; common.push(`Grosse pluie (${w.bigRainMm} mm) il y a ${w.bigRainAgo} j : bonne fenêtre de pousse`); }
-    else if (w.bigRainAgo != null && w.bigRainAgo < 5) common.push(`Grosse pluie (${w.bigRainMm} mm) il y a ${w.bigRainAgo} j : les pousses arrivent en général 5 à 10 jours après`);
+    // Grosse pluie : le bonus dépend du délai propre à chaque espèce (plus bas) ; ici, seulement le « trop tôt ».
+    if (w.bigRainAgo != null && w.bigRainAgo < 5) common.push(`Grosse pluie (${w.bigRainMm} mm) il y a ${w.bigRainAgo} j : les pousses suivent en général 5 à 25 jours après selon l'espèce`);
 
     // Températures : en début de saison (août–octobre) la chaleur freine la pousse, en fin de saison (novembre–janvier)
     // c'est le froid ; des nuits douces la prolongent (études catalanes : Karavani 2018, Morera 2021).
@@ -233,15 +313,25 @@ export function assess(w, { month, species = [], trees = [], history = [], perso
     else if ([11, 12, 1].includes(month) && w.tmin7 != null && w.tmin7 >= 6) { base += 1; common.push(`Nuits douces (${w.tmin7} °C) : la saison se prolonge`); }
     // Humidité du sol (modèle, couche 0–7 cm, m³/m³) : la pluie compte, mais surtout ce que le sol a gardé.
     // Seuils réglés sur la Provence (près d'Aix : ~0,27 après deux semaines sèches, ~0,40 après une bonne pluie).
+    // Comparée d'abord à l'humidité habituelle de ce mois ici (même modèle, saisons 2022–2025) ; en novembre–janvier,
+    // un sol humide traduit surtout un sol froid (Poblet) : pas de bonus, seul le sol sec compte.
     if (w.soilM3 != null) {
-      if (w.soilM3 >= SOIL_WET) { base += 1; common.push(`Sol bien humide (${Math.round(w.soilM3 * 100)} %)`); }
-      else if (w.soilM3 < SOIL_DRY) { base -= 1; common.push(`Sol sec (${Math.round(w.soilM3 * 100)} %)`); }
-      else common.push(`Sol moyennement humide (${Math.round(w.soilM3 * 100)} %)`);
+      const pct = Math.round(w.soilM3 * 100), late = [11, 12, 1].includes(month), mo = MONTHS[month - 1];
+      const rank = soilRank(soilClim, month, w.soilM3);
+      const tail = late ? ' (en fin de saison, ça compte peu)' : '';
+      if (rank != null) {
+        if (rank >= 0.7) { if (!late) base += 1; common.push(`Sol plus humide que ${Math.round(rank * 100)} % des jours ${/^[ao]/.test(mo) ? 'd\'' : 'de '}${mo} ici (${pct} %)${tail}`); }
+        else if (rank < 0.3) { base -= 1; common.push(`Sol plus sec que d'habitude en ${mo} ici (${pct} %)`); }
+        else common.push(`Sol humide comme d'habitude en ${mo} ici (${pct} %)`);
+      } else if (w.soilM3 >= SOIL_WET) { if (!late) base += 1; common.push(`Sol bien humide (${pct} %)${tail}`); }
+      else if (w.soilM3 < SOIL_DRY) { base -= 1; common.push(`Sol sec (${pct} %)`); }
+      else common.push(`Sol moyennement humide (${pct} %)`);
     }
     // Réserve d'eau : un sol méditerranéen doit d'abord se recharger ; la pluie récente ne fait que choisir le moment.
     // Seuils provisoires (30 / 80 mm sur 30 jours), à caler sur les trouvailles de la famille.
     if (w.rain30 != null && w.rain30 >= 80) { base += 1; common.push(`Bonne réserve d'eau : ${w.rain30} mm sur 30 jours (${w.rainDays30} jours de pluie)`); }
-    if (w.shockAgo != null && w.shockAgo >= 3 && w.shockAgo <= 14) { base += 1; common.push(`Choc thermique il y a ${w.shockAgo} j (nuits plus fraîches de ${w.shockDrop} °C) : souvent un déclencheur`); }
+    // « Fin des chaleurs » plutôt que « choc thermique » (non testé par les études) : les maxi sont redescendus.
+    if ([9, 10, 11].includes(month) && w.heatEndAgo != null && w.heatEndAgo >= 3 && w.heatEndAgo <= 21) { base += 1; common.push(`Fin des chaleurs il y a ${w.heatEndAgo} j (maxi redescendus à ${w.tmax7} °C) : la pousse peut démarrer`); }
   }
 
   // Sortie récente sans rien trouver (« Passé, rien trouvé »), plus récente que la dernière vraie trouvaille.
@@ -255,6 +345,25 @@ export function assess(w, { month, species = [], trees = [], history = [], perso
     let score = base; const reasons = [];
     const season = seasonAt(id, alt);
     if (season.peak.includes(month)) { score += 1; reasons.push(alt != null && alt >= HIGH_ALT && HIGH_SHIFT.has(id) ? 'mois de pic en altitude' : 'mois de pic'); }
+    // Grosse pluie dans la fenêtre de pousse de l'espèce.
+    const rains = w?.bigRains ?? (w?.bigRainAgo != null ? [{ ago: w.bigRainAgo, mm: w.bigRainMm }] : []);
+    if (rains.length) {
+      const [lo, hi] = DELAY[id] ?? DELAY_DEFAULT;
+      const hit = rains.find((b) => b.ago >= lo && b.ago <= hi);
+      if (hit) { score += 2; reasons.push(`grosse pluie (${hit.mm} mm) il y a ${hit.ago} j : dans sa fenêtre de pousse (${lo}–${hi} j)`); }
+      else if (rains[0].ago < lo && lo > DELAY_DEFAULT[0]) reasons.push(`grosse pluie il y a ${rains[0].ago} j : il sort plutôt ${lo} à ${hi} j après`);
+    }
+    // Morille : chaleur cumulée sur 20 jours, et printemps qui suit un feu.
+    if (id === 'morille' && w?.degreeDays20 != null) {
+      const dd = w.degreeDays20, src = w.ddSource === 'air' ? 'de l\'air' : 'du sol';
+      if (dd >= 230) { score += 1; reasons.push(`chaleur cumulée ${src} : ${dd} °C·j sur 20 j (les morilles sortent vers 230)`); }
+      else if (dd < 150) { score -= 1; reasons.push(`encore froid : ${dd} °C·j ${src} sur 20 j (les morilles sortent vers 230)`); }
+      else reasons.push(`chaleur cumulée ${src} : ${dd} °C·j sur 20 j, bientôt le seuil (≈ 230)`);
+    }
+    if (id === 'morille' && burned?.date && today) {
+      const ago = (Date.parse(today) - Date.parse(burned.date)) / (30.4 * 86400000);
+      if (ago >= 4 && ago <= 20) { score += 1; reasons.push(`zone brûlée (${burned.label}) : les morilles aiment le printemps qui suit un feu`); }
+    }
     const st = SOIL_T[id];
     if (w?.soilT3 != null && st && !(w.frost7 >= 3)) {
       if (w.soilT3 >= st[0] && w.soilT3 <= st[1]) { score += 1; reasons.push(`sol à ${w.soilT3} °C : idéal (${st[0]}–${st[1]} °C)`); }

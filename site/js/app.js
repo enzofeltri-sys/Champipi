@@ -6,7 +6,7 @@ import {
   exifDate, searchSpots, searchHits, toGpx, toCsv, chipOrder, seasonOf, lateText,
 } from './logic.js';
 import { createPhotoStore, thumbPath } from './photos.js';
-import { GUIDE, SOIL_STRICT, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown } from './advisor.js';
+import { GUIDE, SOIL_STRICT, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown, burnedAt } from './advisor.js';
 import { dailyFor as openMeteoFor, forestAt, soilAt, historyFor, terrainAt, trophAt } from './weather.js';
 import { soilGuess, trophText } from './soil.js';
 import { ASPECT_TEXT } from './terrain.js';
@@ -566,6 +566,13 @@ $('#species-bar').addEventListener('click', (e) => {
 // Sol des forêts par case de 0,1° (relevés de l'Inventaire forestier, calculés une fois : data/soil-grid.json).
 let soilGridP = null;
 const soilGrid = () => (soilGridP ??= fetch('data/soil-grid.json').then((r) => (r.ok ? r.json() : null)).catch(() => null));
+// Surfaces brûlées (Copernicus EFFIS, tools/burned.py) : bonus « zone brûlée » de la morille.
+let burnedData = null, burnedP = null;
+const loadBurned = () => (burnedP ??= fetch('data/burned.json').then((r) => (r.ok ? r.json() : null)).then((j) => (burnedData = j)).catch(() => null));
+// Humidité habituelle du sol par case de 0,1° et par mois (champi_soil_clim, calculée la nuit sur le serveur).
+let soilClim = new Map(), soilClimP = null;
+const loadSoilClim = () => (soilClimP ??= sb.from('champi_soil_clim').select('key, months')
+  .then(({ data }) => { soilClim = new Map((data ?? []).map((r) => [r.key, r.months])); return soilClim; }).catch(() => soilClim));
 // « Bon moment ? » : avis du conseiller (pluie, températures, saison) au centre de la carte, pour chaque espèce.
 let momentTimer = null, momentCell = '';
 function scheduleMoment() { clearTimeout(momentTimer); momentTimer = setTimeout(() => { updateMoment(); updateHabitatWeather(); }, 700); }
@@ -1710,7 +1717,8 @@ async function autoSoilFor(s) {
 function spotContext(s, w = null) {
   const prof = profiles.get(s.id)?.profile;
   return { month: month(), species: spotSpecies(s, state.finds), trees: s.trees ?? [], history: state.finds.filter((f) => f.spot_id === s.id), alt: s.altitude ?? null, exposure: s.exposure ?? null, soil: spotSoil(s), today: todayIso(),
-    personal: w && prof ? personalAdvice(w, prof) : null };
+    personal: w && prof ? personalAdvice(w, prof) : null,
+    soilClim: soilClim.get(`${Math.floor(s.lat * 10)}:${Math.floor(s.lon * 10)}`) ?? null, burned: burnedData ? burnedAt(burnedData, s.lat, s.lon) : null };
 }
 
 // Profil appris de chaque coin (mémorisé tant que ses trouvailles ne changent pas).
@@ -1769,7 +1777,7 @@ async function renderMeteo(s) {
   const box = $('#spot-meteo');
   box.innerHTML = '<h3>Météo et conditions</h3><p class="small muted">Chargement de la météo…</p>';
   try {
-    const [daily] = await dailyFor([[s.lat, s.lon]]);
+    const [[daily]] = await Promise.all([dailyFor([[s.lat, s.lon]]), loadSoilClim(), loadBurned()]);
     if (state.openSpotId !== s.id) return;
     const w = summarizeWeather(daily, todayIso());
     await spotProfileFor(s).catch(() => null);
@@ -1870,7 +1878,7 @@ async function openAdvisor() {
   try {
     const grid = pacaGrid();
     const spots = state.spots.slice(0, 100);
-    const all = await dailyFor([...grid, ...spots.map((s) => [s.lat, s.lon])]);
+    const [all] = await Promise.all([dailyFor([...grid, ...spots.map((s) => [s.lat, s.lon])]), loadSoilClim(), loadBurned()]);
     const ws = all.map((d) => (d ? summarizeWeather(d, todayIso()) : null));
     const g = ws.slice(0, grid.length).filter(Boolean);
     if (!g.length) throw new Error('météo indisponible');

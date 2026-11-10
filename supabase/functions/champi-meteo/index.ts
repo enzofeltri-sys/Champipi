@@ -180,9 +180,10 @@ async function om(points: { lat: number; lon: number }[], vars: string, model: s
 }
 // Open-Meteo limite aussi le nombre d'appels par minute (et compte plus cher au-delà de 14 jours) : chaque passage
 // traite au plus 120 cases (les plus anciennes), en lots de 60 ; le planificateur fait 4 passages espacés de 2 minutes.
-// Pluie et températures : 31 jours passés (réserve d'eau du mois) ; sol : 14 jours, complétés au début par des vides
-// pour rester alignés sur les dates.
-const MAIN_PAST = 31, SOIL_PAST = 14;
+// Pluie et températures : 31 jours passés (réserve d'eau du mois) ; sol : 14 jours (21 de mars à juin, pour la chaleur
+// cumulée des morilles), complétés au début par des vides pour rester alignés sur les dates.
+const MAIN_PAST = 31;
+const soilPast = () => ([3, 4, 5, 6].includes(Number(today().slice(5, 7))) ? 21 : 14);
 const pad = (a: unknown[] | null | undefined, n: number) => (Array.isArray(a) ? [...new Array(Math.max(0, n - a.length)).fill(null), ...a] : null);
 async function grid() {
   const cells = gridCells();
@@ -198,7 +199,7 @@ async function grid() {
       try { main = await om(part, 'precipitation_sum,temperature_2m_max,temperature_2m_min', 'meteofrance_seamless', MAIN_PAST); }
       catch { main = await om(part, 'precipitation_sum,temperature_2m_max,temperature_2m_min', null, MAIN_PAST); }
       let soil: any[] = [];
-      try { soil = await om(part, 'soil_temperature_0_to_7cm_mean,soil_moisture_0_to_7cm_mean', null, SOIL_PAST); } catch (e) { errors.push('sol ' + String(e).slice(0, 80)); }
+      try { soil = await om(part, 'soil_temperature_0_to_7cm_mean,soil_moisture_0_to_7cm_mean', null, soilPast()); } catch (e) { errors.push('sol ' + String(e).slice(0, 80)); }
       const up = part.map((c, i) => {
         const n = main[i].daily.time.length;
         return {
@@ -212,6 +213,32 @@ async function grid() {
     } catch (e) { errors.push(String(e).slice(0, 120)); }
   }
   return { cases: cells.length, a_faire: todo.length, enregistrees: rows, erreurs: errors };
+}
+
+// Humidité habituelle du sol (déciles par mois, saisons des 4 dernières années, même modèle que la grille) pour les
+// cases de 0,1° qui ont des coins : une case par appel de nuit (≈ 100 appels Open-Meteo chacune), refaite chaque année.
+async function soilClim() {
+  const [{ data: spots }, { data: have }] = await Promise.all([admin.from('champi_spots').select('lat, lon'), admin.from('champi_soil_clim').select('key, updated_at')]);
+  const done = new Map((have ?? []).map((r: any) => [r.key, Date.parse(r.updated_at)]));
+  const keys = [...new Set((spots ?? []).map((s: any) => `${Math.floor(s.lat * 10)}:${Math.floor(s.lon * 10)}`))];
+  const todo = keys.find((k) => !done.has(k) || Date.now() - done.get(k)! > 365 * 86400000);
+  if (!todo) return 'à jour';
+  const [i, j] = todo.split(':').map(Number);
+  const y = Number(today().slice(0, 4));
+  const r = await fetch(`https://historical-forecast-api.open-meteo.com/v1/forecast?latitude=${((i + 0.5) / 10).toFixed(2)}&longitude=${((j + 0.5) / 10).toFixed(2)}&start_date=${y - 4}-01-01&end_date=${y - 1}-12-31&daily=soil_moisture_0_to_7cm_mean&timezone=Europe%2FParis`);
+  if (!r.ok) return `Open-Meteo ${r.status}`;
+  const d = (await r.json()).daily;
+  const byMonth: Record<string, number[]> = {};
+  d.time.forEach((t: string, k: number) => { const v = d.soil_moisture_0_to_7cm_mean[k]; if (v != null) (byMonth[String(Number(t.slice(5, 7)))] ??= []).push(v); });
+  const months: Record<string, number[]> = {};
+  for (const [m, v] of Object.entries(byMonth)) {
+    if (v.length < 30) continue;
+    v.sort((a, b) => a - b);
+    months[m] = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((q) => Math.round(v[Math.floor((q / 10) * (v.length - 1))] * 1000) / 1000);
+  }
+  const { error } = await admin.from('champi_soil_clim').upsert({ key: todo, months, updated_at: new Date().toISOString() });
+  if (error) throw error;
+  return todo;
 }
 
 // Diagnostic : API ouvertes par la clé (lues dans le jeton, jamais renvoyé) et réponse de chacune.
@@ -251,7 +278,8 @@ Deno.serve(async (req) => {
     const { data: cfg } = await admin.from('champi_push_config').select('cron_token').eq('id', true).single();
     if (req.headers.get('x-champi-token') !== cfg?.cron_token) return json({ error: 'jeton invalide' }, 401);
     const body = await req.json().catch(() => ({}));
-    if (body.action === 'run') return json(await run());
+    if (body.action === 'run') return json({ ...(await run()), sol_habituel: await soilClim().catch((e) => String(e).slice(0, 80)) });
+    if (body.action === 'soilclim') return json({ sol_habituel: await soilClim() });
     if (body.action === 'hourly') return json(await hourly());
     if (body.action === 'grid') return json(await grid());
     if (body.action === 'probe') return json(await probe());
