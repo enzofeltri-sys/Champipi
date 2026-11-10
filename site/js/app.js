@@ -15,7 +15,7 @@ import { treesAt, soilKind, whatGrows, fix as cleanText } from './here.js';
 import { historyRange, findConditions, spotProfile, personalAdvice, profileSummary, profileKey, recentFinds } from './learn.js';
 import { massifAt, accessFor, inFireSeason, DEPT_PAGES, ACCESS_ICON } from './access.js';
 import { favorableColors, favorableColorsMany, favorableLabels, colorKeyMap } from './forests.js';
-import { habitatTable, gridStep, cellsFor, cellCodes, pixelCode, pxLat, pxLon, COLORS, ALPHA, BAD_SOIL, soilOfCell } from './moment-map.js';
+import { habitatTable, gridStep, cellsFor, cellCodes, pixelCode, pxLat, pxLon, COLORS, ALPHA, BAD_SOIL, soilOfCell, SOIL_INDEX, SOIL_KINDS } from './moment-map.js';
 import { buildJournal, unreadCount, dayTitle } from './journal.js';
 import { INFO, DANGER } from './species-info.js';
 import { avatarOf, avatarHtml, AVATAR_EMOJIS, AVATAR_COLORS } from './avatars.js';
@@ -594,21 +594,24 @@ async function updateMoment() {
 // (une couleur = un type de forêt) pour ne garder que les forêts où pousse le champignon choisi.
 let habitatLayer = null, habitatKeys = new Map();
 // Forêts favorables coloriées selon le « bon moment » (vert / jaune / rouge, gris = hors saison ou en attente).
-const habitat = { ids: [], table: new Map(), step: 0.1, codes: new Map(), allOff: false };
+const habitat = { ids: [], table: new Map(), step: 0.1, codes: new Map(), allOff: false, soilGrid: null };
 function paintTile(c) {
   if (!c._w) return;
   const g = c.getContext('2d', { willReadFrequently: true });
   const d = g.createImageData(256, 256), px = d.data;
-  const s = habitat.step, z = c._z;
-  const cols = new Int32Array(256);
-  for (let x = 0; x < 256; x++) cols[x] = Math.floor(pxLon(c._x * 256 + x + 0.5, z) / s);
+  const s = habitat.step, z = c._z, sg = habitat.soilGrid;
+  const cols = new Int32Array(256), lons = new Float64Array(256);
+  for (let x = 0; x < 256; x++) { lons[x] = pxLon(c._x * 256 + x + 0.5, z); cols[x] = Math.floor(lons[x] / s); }
   for (let y = 0; y < 256; y++) {
-    const row = Math.floor(pxLat(c._y * 256 + y + 0.5, z) / s);
-    let lastJ = null, codes = null;
+    const lat = pxLat(c._y * 256 + y + 0.5, z);
+    const row = Math.floor(lat / s);
+    let lastJ = null, cell = null;
     for (let x = 0; x < 256; x++) {
       const p = y * 256 + x, w = c._w[p];
       if (!w) continue;
-      if (cols[x] !== lastJ) { lastJ = cols[x]; codes = habitat.codes.get(`${row}:${lastJ}`) ?? null; }
+      if (cols[x] !== lastJ) { lastJ = cols[x]; cell = habitat.codes.get(`${row}:${lastJ}`) ?? null; }
+      // Sol du pixel (carte de ~1 km) : on prend l'avis de la case calculé pour ce sol-là.
+      const codes = cell ? cell[SOIL_INDEX[soilOfCell(sg, lat, lons[x])] ?? 0] : null;
       const code = codes ? pixelCode(c._m[p], codes) : habitat.allOff ? 0 : -1;
       if (code === BAD_SOIL) continue;   // sol qui ne convient pas : forêt laissée sans couleur
       const col = COLORS[code];
@@ -656,17 +659,19 @@ async function updateHabitatWeather() {
   const b = { south: b0.getSouth(), north: b0.getNorth(), west: b0.getWest(), east: b0.getEast() };
   const step = gridStep(b), cells = cellsFor(b, step);
   const seq = ++habitatSeq;
-  const grid = await soilGrid();
+  habitat.soilGrid = await soilGrid();
+  // Avis de chaque case pour les trois sols possibles (inconnu, calcaire, acide) : le dessin choisit selon le sol du pixel.
+  const bySoil = (w) => SOIL_KINDS.map((soil) => cellCodes(habitat.ids, m, w, assess, soil));
   if (habitat.allOff) {   // hors saison : forêts en gris, mais toujours sans celles dont le sol ne convient pas
     if (seq !== habitatSeq) return;
-    habitat.step = step; habitat.codes = new Map(cells.map((c) => [c.key, cellCodes(habitat.ids, m, null, assess, soilOfCell(grid, c.lat, c.lon)).map((x) => (x === -1 ? 0 : x))]));
+    habitat.step = step; habitat.codes = new Map(cells.map((c) => [c.key, bySoil(null).map((a) => a.map((x) => (x === -1 ? 0 : x)))]));
     repaintHabitat(); return;
   }
   try {
     const all = await dailyFor(cells.map((c) => [c.lat, c.lon]));
     if (seq !== habitatSeq) return;
     const today = todayIso(), codes = new Map();
-    cells.forEach((c, i) => codes.set(c.key, cellCodes(habitat.ids, m, all[i] ? summarizeWeather(all[i], today) : null, assess, soilOfCell(grid, c.lat, c.lon))));
+    cells.forEach((c, i) => codes.set(c.key, bySoil(all[i] ? summarizeWeather(all[i], today) : null)));
     habitat.step = step; habitat.codes = codes;
   } catch {
     if (seq !== habitatSeq) return;

@@ -45,13 +45,26 @@ export const ALPHA = { 2: 205, 1: 120 };
 
 export const BAD_SOIL = -3;   // le sol de la case ne convient pas à l'espèce : forêt non coloriée
 
-/** Sol d'une case (grille de 0,1° tirée des relevés de l'Inventaire forestier) : 'calcaire' | 'siliceux' | null. */
+/**
+ * Sol à un point d'après la carte précalculée (data/soil-grid.json, cases de 0,01° ≈ 1 km : relevés de l'Inventaire
+ * forestier, sinon carte des sols INRAE) → 'calcaire' | 'siliceux' | null (neutre, mixte ou inconnu).
+ * Accepte aussi l'ancien format (cases de 0,1° : { cells: { 'i:j': niveau } }).
+ */
 export function soilOfCell(grid, lat, lon) {
+  if (grid?.data) {
+    const i = Math.floor((lat - grid.south) / grid.step), j = Math.floor((lon - grid.west) / grid.step);
+    if (i < 0 || j < 0 || i >= grid.rows || j >= grid.cols) return null;
+    const ch = grid.data[i * grid.cols + j];
+    return ch === 'a' ? 'siliceux' : ch === 'c' ? 'calcaire' : null;
+  }
   const v = grid?.cells?.[`${Math.floor(lat * 10)}:${Math.floor(lon * 10)}`];
   if (v == null) return null;
   const k = trophClass(v).kind;
   return k === 'neutre' ? null : k;
 }
+/** Index du sol pour le dessin pixel par pixel : 0 = inconnu ou neutre, 1 = calcaire, 2 = acide. */
+export const SOIL_INDEX = { calcaire: 1, siliceux: 2 };
+export const SOIL_KINDS = [null, 'calcaire', 'siliceux'];
 
 /** Avis pour une case : un code par espèce choisie (0 si hors saison, BAD_SOIL si le sol ne lui convient pas). */
 export function cellCodes(ids, month, w, assess, soil = null) {

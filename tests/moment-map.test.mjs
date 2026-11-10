@@ -52,3 +52,14 @@ test('carte du moment : le sol de la case compte (lactaire jamais sur sol acide 
   assert.equal(pc2(0b01, [BAD_SOIL, 3]), BAD_SOIL);              // pixel où seule la girolle est concernée
   assert.equal(pc2(0b11, [BAD_SOIL, 2]), 2);                     // forêt aussi bonne pour le cèpe : couleur du cèpe
 });
+
+test('carte du sol à ~1 km (format v2) : lecture d\'une case', () => {
+  const grid = { v: 2, step: 0.01, south: 43, west: 5, rows: 2, cols: 3, data: 'acn.ca' };   // rangée sud « acn », rangée nord « .ca »
+  assert.equal(soilOfCell(grid, 43.005, 5.005), 'siliceux');
+  assert.equal(soilOfCell(grid, 43.005, 5.015), 'calcaire');
+  assert.equal(soilOfCell(grid, 43.005, 5.025), null);     // neutre
+  assert.equal(soilOfCell(grid, 43.015, 5.005), null);     // inconnu
+  assert.equal(soilOfCell(grid, 43.015, 5.025), 'siliceux');
+  assert.equal(soilOfCell(grid, 42.99, 5.005), null);      // hors carte
+  assert.equal(soilOfCell(grid, 43.005, 5.04), null);
+});

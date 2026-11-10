@@ -56,7 +56,7 @@ const REF = 'vvegujltsjgwszeloyaz', ME = '11111111-1111-1111-1111-111111111111';
   const g1 = await look(43.64, 5.10, 'Girolle', 'Grans (calcaire)');
   const g2 = await look(43.27, 6.30, 'Girolle', 'Maures (acide)');
   const l2 = await look(43.15, 6.30, 'Lactaire', 'Maures-sud (acide)');
-  console.log('résultat : girolle Grans', g1.vert === 0 && g1.jaune > 0 ? 'jaune, pas de vert ✔' : '✘', '| girolle Maures', g2.vert > 0 ? 'verte ✔' : '✘', '| lactaire Maures', l2.vert + l2.jaune + l2.rouge === 0 ? 'absent ✔' : '✘ ' + JSON.stringify(l2));
+  console.log('résultat : girolle Grans', g1.jaune > 0 && g1.vert < g1.jaune / 20 ? `jaune (vert seulement dans les poches neutres : ${Math.round(100 * g1.vert / (g1.vert + g1.jaune))} %) ✔` : '✘', '| girolle Maures', g2.vert > 0 ? 'verte ✔' : '✘', '| lactaire Maures', l2.vert + l2.jaune + l2.rouge === 0 ? 'absent ✔' : '✘ ' + JSON.stringify(l2));
   console.log('ERREURS :', errors.length ? errors : 'aucune');
   await b.close();
 })();
