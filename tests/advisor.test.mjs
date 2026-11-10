@@ -131,7 +131,7 @@ test('sol : température idéale par espèce, humidité, fin des chaleurs', () =
   assert.ok(cepe.reasons.some((r) => r.includes('idéal')));          // 14 °C dans 12–18
   assert.ok(grise.reasons.some((r) => r.includes('un peu chaud')));  // 14 °C au-dessus de 4–12
   assert.ok(cepe.score > grise.score);
-  // sol froid : le cèpe chute, la chanterelle grise est dans sa plage
+  // sol froid : le cèpe chute, la chanterelle est dans sa plage
   const froid = assess(wx(0, (i) => ({ rr: i === -8 ? 30 : 0, st: 6, sm: 0.36 })), { month: 11, species: ['cepe', 'chanterelle-grise'] });
   assert.ok(froid.perSpecies.find((x) => x.id === 'cepe').reasons.includes('sol trop froid (6 °C)'));
   assert.equal(froid.perSpecies[0].id, 'chanterelle-grise');

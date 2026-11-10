@@ -16,7 +16,7 @@ export const SPECIES = [
   { id: 'berigoule', label: 'Bérigoule (pleurote du panicaut)', months: [3, 4, 5, 9, 10, 11, 12] },
   { id: 'morille', label: 'Morille', months: [3, 4, 5, 6], peak: [4, 5] },
   { id: 'saint-georges', label: 'Tricholome de la Saint-Georges', months: [4, 5, 6], peak: [5] },
-  { id: 'chanterelle-grise', label: 'Chanterelle grise', months: [9, 10, 11, 12], late: [1] },
+  { id: 'chanterelle-grise', label: 'Chanterelle', months: [9, 10, 11, 12], late: [1] },
   { id: 'autre', label: 'Autre', months: [] },
 ];
 const BY_ID = new Map(SPECIES.map((s) => [s.id, s]));

@@ -196,11 +196,11 @@ export const INFO = {
   },
   'chanterelle-grise': {
     look: [
-      ['Chapeau', '2 à 5 cm, brun-gris, creusé ou troué au centre.'],
-      ['Dessous', 'Des plis gris-jaunâtres (pas de vraies lames).'],
-      ['Pied', 'Creux, jaune-gris.'],
+      ['Chapeau', '2 à 5 cm, creusé ou troué au centre : brun-gris (chanterelle grise) ou brun orangé (chanterelle jaune).'],
+      ['Dessous', 'Des plis gris-jaunâtres ou orangés, presque lisses chez la jaune (pas de vraies lames).'],
+      ['Pied', 'Creux : jaune-gris (grise) ou jaune orangé vif (jaune).'],
     ],
-    where: 'Sols acides et moussus, sous conifères et feuillus, tard en saison, souvent en grand nombre.',
+    where: 'La grise sur sols acides et moussus (conifères, châtaigniers, hêtres) ; la jaune sur calcaire, dans les combes et les bords de ruisseaux humides. Tard en saison, souvent en grand nombre.',
     tips: 'Petite mais abondante : couper aux ciseaux pour garder la terre au sol.',
     cook: 'Poêlée, en omelette ; se sèche bien.',
     looks: [

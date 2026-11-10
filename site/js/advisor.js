@@ -85,8 +85,10 @@ export const GUIDE = {
   'saint-georges': { latin: 'Calocybe gambosa', trees: ['prairie'], soil: null, alt: [0, 1800],
     habitat: 'Prairies, haies, lisières ; pousse en ronds au printemps.',
     lookalikes: '⚠️⚠️ Entolome livide et inocybe de Patouillard, MORTELS. Odeur de farine fraîche caractéristique.' },
-  'chanterelle-grise': { latin: 'Craterellus tubaeformis', trees: ['pin-sylvestre', 'hetre', 'chataignier'], soil: 'siliceux', alt: [300, 1800],
-    habitat: 'Sols acides et moussus, sous conifères et feuillus, souvent tard en saison.',
+  // « Chanterelle » : les chanterelles en tube, grise (C. tubaeformis, sols acides) et jaune (C. lutescens, calcaire
+  // humide) — ensemble, pas de préférence de sol. (La girolle, parfois appelée chanterelle, est à part.)
+  'chanterelle-grise': { latin: 'Craterellus tubaeformis, C. lutescens', trees: ['pin-sylvestre', 'hetre', 'chataignier', 'chene-blanc'], soil: null, alt: [300, 1800],
+    habitat: 'Chanterelles en tube : la grise sur sols acides et moussus (conifères, châtaigniers, hêtres), la jaune sur calcaire dans les combes humides, sous les chênes et les pins ; tard en saison, en troupes.',
     lookalikes: 'Peu de confusion dangereuse ; plis (pas de vraies lamelles), pied creux.' },
 };
 
@@ -287,7 +289,7 @@ export function lastEmptyVisit(history, today) {
   return Math.round((Date.parse(today) - Date.parse(lastEmpty)) / 86400000);
 }
 
-// Au-dessus de 1 000 m, cèpe, girolle, trompette, pied-de-mouton et chanterelle grise sortent en juillet–octobre,
+// Au-dessus de 1 000 m, cèpe, girolle, trompette, pied-de-mouton et chanterelle sortent en juillet–octobre,
 // avec un pic en août–septembre, et presque plus rien en novembre (observations GBIF / iNaturalist, PACA).
 export const HIGH_ALT = 1000;
 const HIGH_SEASON = { months: [7, 8, 9, 10], peak: [8, 9], late: [] };
