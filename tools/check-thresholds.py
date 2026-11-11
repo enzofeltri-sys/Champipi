@@ -4,7 +4,7 @@
 # bilan pluie − évaporation sur 30 jours, délai depuis la dernière grosse pluie. On compare à tous les jours de la
 # même saison dans les mêmes cases (le « fond ») : si un seuil compte, les observations le dépassent plus souvent.
 # Limites : observations rares, biais du week-end et de l'effort (on sort quand ça pousse), météo à 25–50 km.
-# Usage : python3 -I tools/check-thresholds.py <dossier de travail vide> > rapport.md
+# Usage : python3 -I tools/check-thresholds.py <dossier de travail> [--cache] > rapport.md
 import collections, json, math, os, statistics, sys, time, urllib.parse, urllib.request
 
 OUT = sys.argv[1]; os.makedirs(OUT, exist_ok=True)
@@ -53,7 +53,10 @@ def weather(c):
             for i, t in enumerate(d['time']): days[t] = (d['precipitation_sum'][i] or 0, d['et0_fao_evapotranspiration'][i] or 0)
             time.sleep(0.4)
     return days
+# --cache : seulement les cases déjà téléchargées (quand Open-Meteo a coupé pour la journée).
+if '--cache' in sys.argv: cells = [c for c in cells if os.path.exists(os.path.join(OUT, f'w_{c[0]}_{c[1]}.json'))]
 W = {c: cached(f'w_{c[0]}_{c[1]}.json', lambda c=c: weather(c)) for c in cells}
+print('cases utilisées :', len(cells), '— observations :', sum(counts[c] for c in cells), file=sys.stderr)
 
 def cond(days, day):
     t = time.mktime(time.strptime(day, '%Y-%m-%d'))
