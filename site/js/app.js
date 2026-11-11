@@ -7,7 +7,7 @@ import {
 } from './logic.js';
 import { createPhotoStore, thumbPath } from './photos.js';
 import { GUIDE, SOIL_STRICT, LEVELS, summarizeWeather, assess, forestToTrees, pacaGrid, rainColor, nearestTown, burnedAt, swiAt } from './advisor.js';
-import { dailyFor as openMeteoFor, forestAt, soilAt, historyFor, terrainAt, trophAt } from './weather.js';
+import { dailyFor as openMeteoFor, forestAt, forestText, soilAt, historyFor, terrainAt, trophAt } from './weather.js';
 import { soilGuess, trophText } from './soil.js';
 import { ASPECT_TEXT } from './terrain.js';
 import { lidarAt, terrainText, oldForestAt, oldForestText, zonesAt, zonesText } from './lieu.js';
@@ -902,7 +902,7 @@ async function analyzeHere(lat, lon) {
   ]);
   if (!$('#dlg-here').open || herePoint.lat !== round6(lat) || herePoint.lon !== round6(lon)) return;
   const m = month();
-  const tfv = forest.status === 'fulfilled' ? (forest.value?.tfv ? cleanText(forest.value.tfv) : null) : undefined;
+  const tfv = forest.status === 'fulfilled' ? (forestText(forest.value) ? cleanText(forestText(forest.value)) : null) : undefined;
   const sk = soil.status === 'fulfilled' ? soilKind(soil.value) : undefined;
   const ter = alt.status === 'fulfilled' ? alt.value : null;
   const z = ter?.alt ?? null, expo = ter?.aspect ?? null;
@@ -1163,7 +1163,7 @@ async function fillForest(d) {
   try {
     const f = await forestAt(d.lat, d.lon);
     if (state.draft !== d) return;
-    d.forest = f.tfv || 'Pas de forêt cartographiée ici';
+    d.forest = forestText(f) || 'Pas de forêt cartographiée ici';
   } catch { d.forest = null; box.hidden = true; return; }
   showForest(d);
 }
@@ -1171,6 +1171,12 @@ function showForest(d) {
   const box = $('#edit-forest');
   const sugg = forestToTrees(d.forest).filter((t) => !chipValues('#edit-trees').includes(t));
   box.hidden = !d.forest;
+  // Coin sans arbres cochés : on coche d'office ceux de la carte (modifiables) ; sinon on propose.
+  if (sugg.length && !chipValues('#edit-trees').length) {
+    for (const t of sugg) { const c = $(`#edit-trees [data-sp="${t}"]`); if (c) { c.classList.add('on'); c.setAttribute('aria-pressed', 'true'); } }
+    box.innerHTML = `🌲 <b>Forêt IGN</b> : ${esc(d.forest)} <span class="small muted">(arbres cochés d'après la carte, à corriger si besoin)</span>`;
+    return;
+  }
   box.innerHTML = `🌲 <b>Forêt IGN</b> : ${esc(d.forest)}`
     + (sugg.length ? ` <button type="button" class="btn link" id="forest-apply">Cocher ${esc(sugg.map((t) => labelOf(TREES, t)).join(', '))}</button>` : '');
   $('#forest-apply')?.addEventListener('click', () => {

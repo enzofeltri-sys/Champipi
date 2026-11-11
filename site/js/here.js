@@ -20,6 +20,10 @@ export function treesAt(tfv) {
   if (/mélange de pins/.test(t)) put(PINS, 1);
   if (/chênes? sempervirent/.test(t)) put(['chene-vert', 'chene-liege'], 2);
   if (/chênes? décidu/.test(t)) put(['chene-blanc'], 2);
+  // Essences de l'ancienne carte (V1), ajoutées au texte quand la carte actuelle ne dit que « mélange ».
+  if (/chênes? pubescents?|chênes? blancs?/.test(t)) put(['chene-blanc'], 2);
+  if (/chênes? verts?|yeuse/.test(t)) put(['chene-vert'], 2);
+  if (/liège/.test(t)) put(['chene-liege'], 2);
   if (/hêtre/.test(t)) put(['hetre'], 2);
   if (/châtaignier/.test(t)) put(['chataignier'], 2);
   if (/mélèze/.test(t)) put(['meleze'], 2);

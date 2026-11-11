@@ -82,11 +82,26 @@ export async function forestAt(lat, lon) {
     + '&LAYERS=LANDCOVER.FORESTINVENTORY.V2&QUERY_LAYERS=LANDCOVER.FORESTINVENTORY.V2&STYLES=&FORMAT=image/png'
     + `&CRS=EPSG:4326&BBOX=${lat - d},${lon - d},${lat + d},${lon + d}&WIDTH=101&HEIGHT=101&I=50&J=50`
     + '&INFO_FORMAT=application/json&FEATURE_COUNT=1';
-  const j = await fetchJson(url, 1);
+  // Ancienne carte des forêts (BD Forêt V1, années 1990) : elle nomme les essences même dans les forêts mélangées
+  // (« futaie de pin d'Alep sur taillis de chêne pubescent »), là où la V2 ne dit que « mélange ».
+  const d1 = 0.0002;
+  const urlV1 = 'https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=LANDCOVER.FORESTINVENTORY.V1:resu_bdv1_shape'
+    + `&OUTPUTFORMAT=application/json&COUNT=1&SRSNAME=EPSG:4326&BBOX=${lat - d1},${lon - d1},${lat + d1},${lon + d1},urn:ogc:def:crs:EPSG::4326`;
+  const [j, j1] = await Promise.all([fetchJson(url, 1), fetchJson(urlV1, 1).catch(() => null)]);
   const p = j.features?.[0]?.properties;
-  const v = p ? { tfv: p.tfv, essence: p.essence, code: p.code_tfv } : { tfv: null };
+  const old = j1?.features?.[0]?.properties?.libelle ?? null;
+  const v = p ? { tfv: p.tfv, essence: p.essence, code: p.code_tfv, old } : { tfv: null, old };
   forestCache.set(k, v);
   return v;
+}
+
+/** Texte de forêt complet : type actuel (V2) et, s'il ne nomme pas les arbres, les essences de l'ancienne carte. */
+export function forestText(f) {
+  if (!f) return null;
+  const old = f.old ? f.old.replace(/\s+/g, ' ').trim() : null;
+  if (!f.tfv) return old ? `Essences (IGN, années 1990) : ${old}` : null;
+  if (old && /mélange|mixte|feuillus|conifères/i.test(f.tfv)) return `${f.tfv} — essences : ${old}`;
+  return f.tfv;
 }
 
 // Sol dominant à un point : carte des sols de France (INRAE, référentiels régionaux au 1/250 000), diffusée par l'IGN.

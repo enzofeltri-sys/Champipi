@@ -265,3 +265,15 @@ test('fenêtres de pousse calées sur les observations : trompette et lactaires 
   const pm = b.perSpecies.find((x) => x.id === 'pied-de-mouton'), gi = b.perSpecies.find((x) => x.id === 'girolle');
   assert.ok(pm.reasons.some((r) => r.includes('fenêtre')) && gi.reasons.some((r) => r.includes('fenêtre')));
 });
+
+
+import { forestText } from '../site/js/weather.js';
+test('forêts mélangées : les essences de l\'ancienne carte IGN (V1) complètent la nouvelle', () => {
+  const f = { tfv: 'Forêt fermée à mélange de conifères prépondérants et feuillus', old: "futaie de pin d'alep sur taillis de chêne pubescent (conifères majoritaires)" };
+  assert.equal(forestText(f), "Forêt fermée à mélange de conifères prépondérants et feuillus — essences : futaie de pin d'alep sur taillis de chêne pubescent (conifères majoritaires)");
+  assert.deepEqual(forestToTrees(forestText(f)), ['pin-alep', 'chene-blanc']);
+  assert.equal(forestText({ tfv: 'Forêt fermée de chênes décidus purs', old: 'taillis de chêne vert' }), 'Forêt fermée de chênes décidus purs');   // la V2 suffit
+  assert.equal(forestText({ tfv: null, old: 'garrigue ou maquis boisé de chêne-liège' }), 'Essences (IGN, années 1990) : garrigue ou maquis boisé de chêne-liège');
+  assert.deepEqual(forestToTrees('Forêt fermée de pin dAlep pur'), ['pin-alep']);
+  assert.deepEqual(forestToTrees('taillis de chêne-liège et châtaignier'), ['chene-liege', 'chataignier']);
+});

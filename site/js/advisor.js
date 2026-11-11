@@ -455,16 +455,19 @@ export function forestToTrees(tfv) {
   const t = (tfv || '').toLowerCase();
   const out = [];
   const add = (re, id) => { if (re.test(t)) out.push(id); };
-  add(/pin d.alep/, 'pin-alep');
+  // Noms de la carte actuelle (V2) et de l'ancienne (V1 : « futaie de pin d'Alep sur taillis de chêne pubescent »…).
+  add(/pin d.?alep/, 'pin-alep');
   add(/pin sylvestre/, 'pin-sylvestre');
   add(/pin maritime/, 'pin-maritime');
-  add(/chênes? sempervirent/, 'chene-vert');
-  add(/chênes? décidu/, 'chene-blanc');
+  add(/chênes? sempervirent|chênes? verts?|yeuse/, 'chene-vert');
+  add(/chênes? décidu|chênes? pubescents?|chênes? blancs?|chênes? rouvres?|chênes? sessiles?/, 'chene-blanc');
+  add(/liège/, 'chene-liege');
   add(/hêtre/, 'hetre');
   add(/châtaignier/, 'chataignier');
+  add(/cèdre/, 'cedre');
   add(/mélèze/, 'meleze');
   add(/herbacée/, 'prairie');
-  return out;
+  return [...new Set(out)];
 }
 
 // ---------------------------------------------------------------------------
