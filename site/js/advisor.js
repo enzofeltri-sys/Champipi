@@ -13,7 +13,10 @@ export const SOIL_T = {
 // Délai (jours) entre une grosse pluie et la pousse : 5–15 j par défaut (règle de cueilleur) ; le cèpe 7–25 j
 // (une à trois semaines : étude toscane sur 21 j, règle du Luberon « une dizaine de jours »). Hypothèses à caler.
 export const DELAY_DEFAULT = [5, 15];
-export const DELAY = { cepe: [7, 25] };
+// Contrôle avec les observations GBIF de l'arc méditerranéen (tools/check-thresholds.py, nov. 2026) : beaucoup de
+// trompettes et de lactaires sortent 20 à 30 jours après la grosse pluie ; le pied-de-mouton y réagit peu.
+export const DELAY = { cepe: [7, 25], trompette: [5, 25], 'lactaire-sanguin': [5, 25], 'lactaire-delicieux': [5, 25] };
+export const RAIN_BONUS = { 'pied-de-mouton': 1 };   // sinon +2
 // Préférences de sol « souples » (un plus quand le sol convient, jamais un refus) : le cèpe pousse aussi sur calcaire,
 // mais il est plus fréquent sur sol acide ; trompette, saint-georges et morille aiment les sols riches, calcaires ou neutres.
 // Les préférences nettes (girolle, oronge… : GUIDE[].soil) excluent l'autre type de sol.
@@ -381,7 +384,7 @@ export function assess(w, { month, species = [], trees = [], history = [], perso
     if (rains.length) {
       const [lo, hi] = DELAY[id] ?? DELAY_DEFAULT;
       const hit = rains.find((b) => b.ago >= lo && b.ago <= hi);
-      if (hit) { score += 2; reasons.push(`grosse pluie (${hit.mm} mm) il y a ${hit.ago} j : dans sa fenêtre de pousse (${lo}–${hi} j)`); }
+      if (hit) { score += RAIN_BONUS[id] ?? 2; reasons.push(`grosse pluie (${hit.mm} mm) il y a ${hit.ago} j : dans sa fenêtre de pousse (${lo}–${hi} j)`); }
       else if (rains[0].ago < lo && lo > DELAY_DEFAULT[0]) reasons.push(`grosse pluie il y a ${rains[0].ago} j : il sort plutôt ${lo} à ${hi} j après`);
     }
     // Morille : chaleur cumulée sur 20 jours, et printemps qui suit un feu.

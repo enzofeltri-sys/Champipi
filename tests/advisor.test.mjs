@@ -253,3 +253,15 @@ test('indice d\'humidité des sols Météo-France : un seul point de réserve, p
   assert.equal(sec.level, 'moyen');
   assert.ok(sec.reasons.some((r) => r.startsWith('Sol profond encore sec : réserve à 20 %')));
 });
+
+import { RAIN_BONUS } from '../site/js/advisor.js';
+test('fenêtres de pousse calées sur les observations : trompette et lactaires jusqu\'à 25 j, pied-de-mouton +1', () => {
+  assert.deepEqual(DELAY.trompette, [5, 25]); assert.deepEqual(DELAY['lactaire-sanguin'], [5, 25]); assert.equal(RAIN_BONUS['pied-de-mouton'], 1);
+  const w = wx31((i) => ({ rr: i === -22 ? 40 : 0 }));
+  const a = assess(w, { month: 11, species: ['trompette', 'girolle'] });
+  assert.ok(a.perSpecies.find((x) => x.id === 'trompette').reasons.some((r) => r.includes('(5–25 j)')));
+  assert.ok(!a.perSpecies.find((x) => x.id === 'girolle').reasons.some((r) => r.includes('fenêtre')));
+  const b = assess(wx31((i) => ({ rr: i === -8 ? 40 : 0 })), { month: 11, species: ['pied-de-mouton', 'girolle'] });
+  const pm = b.perSpecies.find((x) => x.id === 'pied-de-mouton'), gi = b.perSpecies.find((x) => x.id === 'girolle');
+  assert.ok(pm.reasons.some((r) => r.includes('fenêtre')) && gi.reasons.some((r) => r.includes('fenêtre')));
+});
