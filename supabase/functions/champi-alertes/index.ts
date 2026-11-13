@@ -3,7 +3,8 @@
 //   GET                         → { publicKey }   (clé VAPID publique ; générée au premier appel)
 //   POST { action: 'test' }     → notification de test au demandeur (session requise)
 //   POST { action: 'run' }      → tournée du matin (en-tête x-champi-token requis)
-//   POST { action: 'news', find_id } → nouvelle trouvaille annoncée à la famille (déclencheur SQL, jeton requis)
+//   POST { action: 'news', find_id } → nouvelle sortie : commentaire IA (Groq), puis annonce des trouvailles (déclencheur SQL, jeton requis)
+//   POST { action: 'comment', find_id, save } → commentaire IA d'une sortie sans annonce (jeton requis)
 //   POST { action: 'selftest', sub } → envoi chiffré vers une adresse de test (en-tête x-champi-token requis)
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import webpush from 'npm:web-push@3.6.7';
@@ -11,6 +12,7 @@ import webpush from 'npm:web-push@3.6.7';
 // Supabase refuse les modules lus depuis le site publié.
 import { summarizeWeather, assess, burnedAt, outingConditions, swiAt, spotSpecies, SPECIES, MIN_FINDS, profileKey, recentFinds, historyRange, findConditions, spotProfile, personalAdvice } from './rules.js';
 import { rainIndex, mergeRain } from './rain.js';
+import { outingFacts, groqComment } from './ia.js';
 
 const SITE = 'https://enzofeltri-sys.github.io/Champipi/';
 const ORIGINS = ['https://enzofeltri-sys.github.io', 'http://localhost:5173'];
@@ -215,18 +217,52 @@ export function newsText(who: string, spotName: string, species: string[], note:
   const what = species.length ? species.map(label).join(', ').toLowerCase() : null;
   return {
     title: `${who} ${what ? `a trouvé : ${what}` : 'est allé·e aux champignons'}`,
-    body: `${spotName}${note ? ` — ${note.length > 90 ? note.slice(0, 89) + '…' : note}` : ''}`,
+    body: `${spotName}${note ? ` — ${note.length > 140 ? note.slice(0, 139) + '…' : note}` : ''}`,
   };
 }
 
-// Nouvelle trouvaille : prévenir ceux qui voient le coin (sauf l'auteur), s'ils n'ont pas coupé ces nouvelles.
+// Commentaire de l'IA sur une sortie (trouvaille ou bredouille) : faits calculés par l'appli, reformulés par Groq.
+// Rien n'est inventé : le texte est refusé s'il contient un chiffre absent des faits (voir ia.js).
+async function commentOuting(f: any, s: any, save = true) {
+  const key = Deno.env.get('GROQ_API_KEY');
+  if (!key) return null;
+  const cell = `${Math.floor(s.lat * 10)}:${Math.floor(s.lon * 10)}`;
+  const [{ data: g }, { data: hist }, { data: climRow }, { data: swiRows }] = await Promise.all([
+    admin.from('champi_meteo_grid').select('daily, elevation').eq('key', cell).maybeSingle(),
+    admin.from('champi_finds').select('id, spot_id, found_on, species, empty').eq('spot_id', s.id),
+    admin.from('champi_soil_clim').select('months').eq('key', cell).maybeSingle(),
+    admin.from('champi_swi').select('w, s, e, n, swi, normal, rain15, date').range(0, 1999),
+  ]);
+  let daily = g?.daily ?? null;
+  if (!daily?.time?.includes(f.found_on)) daily = (await weatherFor([[s.lat, s.lon]]).catch(() => null))?.[0] ?? null;
+  const month = Number(f.found_on.slice(5, 7));
+  const w = daily?.time?.includes(f.found_on) ? summarizeWeather(daily, f.found_on) : null;
+  const swi = swiAt(swiRows ?? [], s.lat, s.lon);
+  const c = w ? outingConditions(w, climRow?.months ?? null, month, swi) : null;
+  if (c && !f.conditions && save) await admin.from('champi_finds').update({ conditions: { ...c, noted_on: today() } }).eq('id', f.id);
+  const finds = hist ?? [];
+  const same = finds.filter((x: any) => x.found_on.slice(0, 7) === f.found_on.slice(0, 7));
+  const facts = outingFacts({
+    empty: !!f.empty, spotName: s.name, found: (f.species ?? []).map(label), w, rank: c?.soilRank ?? null,
+    month: same.length > 1 ? { trouvailles: same.filter((x: any) => !x.empty).length, bredouilles: same.filter((x: any) => x.empty).length } : null,
+  });
+  const text = await groqComment(key, facts);
+  if (!save) return { text, facts };
+  if (text) await admin.from('champi_finds').update({ ai_comment: text }).eq('id', f.id);
+  return text;
+}
+
+// Nouvelle sortie : commentaire de l'IA, puis, pour une trouvaille, prévenir ceux qui voient le coin (sauf l'auteur),
+// s'ils n'ont pas coupé ces nouvelles. Une sortie bredouille n'est pas annoncée.
 async function announce(cfg: any, findId: string) {
-  const { data: f, error } = await admin.from('champi_finds').select('id, spot_id, user_id, found_on, species, note').eq('id', findId).single();
+  const { data: f, error } = await admin.from('champi_finds').select('id, spot_id, user_id, found_on, species, note, empty, conditions').eq('id', findId).single();
   if (error) throw error;
-  // Trouvaille ancienne (saisie après coup, photo de l'an dernier…) : pas d'annonce.
-  if (Date.parse(f.found_on) < Date.parse(today()) - 3 * 86400000) return { annonce: 'trouvaille ancienne' };
-  const { data: s, error: e2 } = await admin.from('champi_spots').select('id, owner, visibility, name').eq('id', f.spot_id).single();
+  // Sortie ancienne (saisie après coup, photo de l'an dernier…) : ni commentaire ni annonce (pas de météo de ce jour-là).
+  if (Date.parse(f.found_on) < Date.parse(today()) - 3 * 86400000) return { annonce: 'sortie ancienne' };
+  const { data: s, error: e2 } = await admin.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, trees, altitude, exposure, soil').eq('id', f.spot_id).single();
   if (e2) throw e2;
+  const comment = await commentOuting(f, s).catch(() => null);
+  if (f.empty) return { annonce: 'bredouille, pas d\'annonce', commentaire: comment };
   const [shares, profiles, subs] = await Promise.all([
     admin.from('champi_spot_shares').select('user_id').eq('spot_id', s.id),
     admin.from('champi_profiles').select('id, display_name, avatar_emoji, notify_news'),
@@ -239,11 +275,11 @@ async function announce(cfg: any, findId: string) {
   const prof = new Map(profiles.data!.map((p: any) => [p.id, p]));
   const author = prof.get(f.user_id);
   const who = `${author?.avatar_emoji ?? '🍄'} ${author?.display_name ?? 'Quelqu\'un'}`;
-  const text = newsText(who, s.name, f.species ?? [], f.note);
+  const text = newsText(who, s.name, f.species ?? [], comment ?? f.note);
   const targets = subs.data!.filter((sub: any) => sub.user_id !== f.user_id && sees(sub.user_id) && prof.get(sub.user_id)?.notify_news !== false);
   const payload = { ...text, url: `${SITE}#journal=f:${f.id}`, tag: `champi-news-${f.id}` };   // ouvre le journal sur cette trouvaille
   const res = await Promise.all(targets.map((sub: any) => send(cfg, sub, payload)));
-  return { destinataires: new Set(targets.map((t: any) => t.user_id)).size, envois: res };
+  return { destinataires: new Set(targets.map((t: any) => t.user_id)).size, envois: res, commentaire: comment };
 }
 
 Deno.serve(async (req) => {
@@ -259,6 +295,14 @@ Deno.serve(async (req) => {
     if (body.action === 'news') {
       if (req.headers.get('x-champi-token') !== cfg.cron_token) return json(req, { error: 'jeton invalide' }, 401);
       return json(req, await announce(cfg, String(body.find_id ?? '')));
+    }
+    if (body.action === 'comment') {   // commentaire IA d'une sortie, sans annonce ; save=false : essai à blanc (jeton requis)
+      if (req.headers.get('x-champi-token') !== cfg.cron_token) return json(req, { error: 'jeton invalide' }, 401);
+      const { data: f, error } = await admin.from('champi_finds').select('id, spot_id, found_on, species, empty, conditions').eq('id', String(body.find_id ?? '')).single();
+      if (error) throw error;
+      const { data: s, error: e2 } = await admin.from('champi_spots').select('id, name, lat, lon, species, trees, altitude, exposure, soil').eq('id', f.spot_id).single();
+      if (e2) throw e2;
+      return json(req, { commentaire: await commentOuting(f, s, body.save !== false) });
     }
     if (body.action === 'selftest') {   // vérifie le chiffrement Web Push vers une adresse de test (jeton requis)
       if (req.headers.get('x-champi-token') !== cfg.cron_token) return json(req, { error: 'jeton invalide' }, 401);

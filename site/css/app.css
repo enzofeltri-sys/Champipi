@@ -534,3 +534,4 @@ dialog.viewer[open] { display: flex; flex-direction: column; }
 dialog.viewer img { flex: 1 1 auto; min-height: 0; height: auto; }
 .viewer-bar { flex-wrap: wrap; gap: 8px; }
 .viewer-bar .small { flex: 1 1 100%; }
+.ai-comment { margin-top: 4px; padding: 4px 8px; border-left: 3px solid #9ab48a; background: rgba(154, 180, 138, 0.12); border-radius: 4px; font-style: italic; }

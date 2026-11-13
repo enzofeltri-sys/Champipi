@@ -12,7 +12,7 @@ const db = {
   spots: [{ id: S1, owner: ME, visibility: 'family', name: 'Pinède du Vallon', lat: 43.32, lon: 5.6, species: ['lactaire-sanguin'], trees: [], created_at: '2026-09-01T00:00:00Z' },
     { id: S2, owner: TATA, visibility: 'family', name: 'Châtaigneraie de Tata', lat: 43.34, lon: 5.66, species: ['cepe'], trees: [], created_at: '2026-09-02T00:00:00Z' }],
   finds: [
-    { id: 'f-new', spot_id: S2, user_id: TATA, found_on: day(now), species: ['cepe', 'girolle'], quantity: 'panier', note: 'Sous les châtaigniers, après la barrière', created_at: iso(now - 3600e3) },
+    { id: 'f-new', spot_id: S2, user_id: TATA, found_on: day(now), species: ['cepe', 'girolle'], quantity: 'panier', note: 'Sous les châtaigniers, après la barrière', ai_comment: 'Pousse cohérente avec la grosse pluie de 98 mm tombée 17 jours avant ; celle de 50 mm d’il y a 2 jours n’a pas encore agi.', created_at: iso(now - 3600e3) },
     { id: 'f-mine', spot_id: S1, user_id: ME, found_on: day(now - 86400e3), species: ['lactaire-sanguin'], created_at: iso(now - 86400e3) },
     { id: 'f-old', spot_id: S2, user_id: TATA, found_on: '2026-10-12', species: ['cepe'], created_at: '2026-10-12T10:00:00Z' },
   ],

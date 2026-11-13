@@ -365,7 +365,7 @@ async function loadData() {
   }
   const [spots, finds, shares, people, pics, alertLog] = await Promise.all([
     sb.from('champi_spots').select('id, owner, visibility, name, lat, lon, species, note, trees, soil, exposure, access, altitude, forest_type, created_at, updated_at, author:champi_profiles!champi_spots_owner_fkey(display_name)'),
-    sb.from('champi_finds').select('id, spot_id, user_id, found_on, species, note, quantity, condition, weather, empty, conditions, created_at, author:champi_profiles!champi_finds_user_id_fkey(display_name)')
+    sb.from('champi_finds').select('id, spot_id, user_id, found_on, species, note, quantity, condition, weather, empty, conditions, ai_comment, created_at, author:champi_profiles!champi_finds_user_id_fkey(display_name)')
       .order('found_on', { ascending: false }).order('created_at', { ascending: false }),
     sb.from('champi_spot_shares').select('spot_id, user_id'),
     sb.from('champi_profiles').select('id, display_name, avatar_emoji, avatar_color').order('display_name'),
@@ -1243,6 +1243,7 @@ $('#edit-form').addEventListener('submit', async (e) => {
     if (r.error && isNetworkError(r.error)) await queue.add({ kind: 'find', row: find, files: findPhotos });
     else if (r.error) toast(`Coin enregistré, mais trouvaille non notée : ${frError(r.error)}`, 6000);
     else if (findPhotos.length) await uploadAll(data.id, r.data.id, findPhotos);
+    if (!r.error) awaitComment(r.data.id).catch(() => {});
   }
   toast(d.id ? 'Coin modifié ✔' : find ? 'Coin et trouvaille enregistrés ✔' : 'Coin enregistré ✔');
   if (spotPhoto) {
@@ -1363,6 +1364,7 @@ function renderSpot(id) {
       ${findDetails(f)}
       ${conditionsLine(f)}
       ${f.note ? `<div class="note">${esc(f.note)}</div>` : ''}
+      ${aiLine(f)}
       <div class="photos">${thumbs(state.photos.filter((p) => p.find_id === f.id))}</div>
     </li>`).join('') : '<li class="muted small">Pas encore de trouvaille notée.</li>';
   photos.hydrate($('#dlg-spot')).catch((err) => console.warn('photos', err));
@@ -1508,6 +1510,7 @@ $('#find-form').addEventListener('submit', async (e) => {
   busy(btn, false);
   toast('Trouvaille notée ✔');
   await loadData();
+  awaitComment(data.id).catch(() => {});
 });
 
 // « 🚶 Passé, rien trouvé » : un toucher, aujourd'hui, sur ce coin (gardé sur le téléphone sans réseau).
@@ -1527,6 +1530,7 @@ $('#visit-empty').addEventListener('click', async () => {
   if (error) { toast(`Impossible de noter le passage : ${frError(error)}`, 6000); return; }
   toast('🚶 Passage noté : le conseiller en tiendra compte quelques jours.', 5000);
   await loadData();
+  awaitComment(row.id).catch(() => {});
 });
 
 $('#find-list').addEventListener('click', async (e) => {
@@ -1822,6 +1826,24 @@ async function renderLieu(s) {
 }
 
 // Conditions gardées pour chaque sortie (tournée du matin) et, après coup, la pluie réelle mesurée (COMEPHORE).
+// Commentaire de l'IA (Groq), écrit par le serveur quelques secondes après la sortie, à partir des faits de l'appli.
+function aiLine(f) {
+  return f.ai_comment ? `<div class="small ai-comment" title="Commentaire automatique, tiré de la météo calculée par l'appli">🤖 ${esc(f.ai_comment)}</div>` : '';
+}
+// Après une sortie : le commentaire arrive quelques secondes plus tard ; on le récupère sans recharger toute l'appli.
+async function awaitComment(id) {
+  for (const wait of [7000, 8000, 12000]) {
+    await new Promise((r) => setTimeout(r, wait));
+    const { data } = await sb.from('champi_finds').select('ai_comment').eq('id', id).maybeSingle();
+    if (!data?.ai_comment) continue;
+    const f = state.finds.find((x) => x.id === id); if (!f) return;
+    f.ai_comment = data.ai_comment;
+    if ($('#dlg-journal').open) renderJournal();
+    if (state.openSpotId === f.spot_id && $('#dlg-spot').open) renderSpot(f.spot_id);
+    return;
+  }
+}
+
 function conditionsLine(f) {
   const c = f.conditions; if (!c) return '';
   const r = c.comephore, parts = [];
@@ -2303,6 +2325,7 @@ function renderJournal(focus = null) {
         <div class="j-body"><div>${f.empty ? (f.user_id === state.user?.id ? '<b>Tu</b> es passé·e, <b>rien trouvé</b>' : `<b>${esc(nameOf(f.user_id))}</b> ${verb}`) : `${f.user_id === state.user?.id ? '<b>Tu</b> as ' : `<b>${esc(nameOf(f.user_id))}</b> a `}${f.species?.length ? `trouvé <b>${esc(what)}</b>` : 'noté une trouvaille'}`}${tag}</div>
           <div class="small muted">📍 ${esc(it.spot.name)}${extra ? ' · ' + extra : ''}</div>
           ${f.note ? `<div class="small j-note">${esc(f.note)}</div>` : ''}
+          ${aiLine(f)}
           ${pics.length ? `<div class="photos strip">${thumbs(pics)}</div>` : ''}</div></div>`;
     } else {
       html += `<div class="${cls}" data-key="${it.key}" data-spot="${it.spot.id}">
