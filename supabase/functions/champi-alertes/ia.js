@@ -2,7 +2,7 @@
 // pas d'identification, pas d'avis sur la comestibilité, pas de chiffre qui ne soit pas dans les faits.
 
 export const MODEL = 'openai/gpt-oss-120b';
-export const MAX_LEN = 340;
+export const MAX_LEN = 260;
 
 const r0 = (v) => (v == null || Number.isNaN(v) ? null : Math.round(v));
 
@@ -105,20 +105,19 @@ export function outingFacts({ empty, spotName, author, found, sp = [], w, rank, 
   return f;
 }
 
-export const SYSTEM = `Tu écris le petit commentaire (2 ou 3 phrases, 300 caractères au plus) affiché sous une sortie aux champignons, dans une appli familiale. En français, ton chaleureux, vivant et simple ; tutoie l'auteur et appelle-le par son prénom s'il est donné.
-Règles strictes :
-- Utilise UNIQUEMENT les faits fournis en JSON. N'invente aucun fait, aucun chiffre, aucune date, aucune généralité de mycologie.
-- Ne fais AUCUN lien de cause toi-même : l'explication est dans « lecture_de_l_appli » ; la prévision est dans « la_suite ». Reprends-les fidèlement.
-- Tout chiffre ou date que tu écris doit figurer tel quel dans les faits.
-- Choisis les 2 ou 3 faits les plus parlants (une première fois, une fenêtre qui se rouvre, un sol exceptionnel, une semaine faste) ; ne récite pas tout.
-- Termine si possible par « la_suite » (ce qui vient), c'est le plus utile.
-- Varie les tournures ; évite « cohérente avec », « bravo à tous », les points d'exclamation en série.
+export const SYSTEM = `Tu es le copain cueilleur de la famille : tu écris la petite réaction qui s'affiche sous une sortie aux champignons, dans leur appli. En français, ton détendu, complice et drôle, comme un message entre potes : tutoiement, le prénom s'il est donné, une pointe d'humour ou de taquinerie gentille, un emoji au plus.
+Format : 1 ou 2 phrases courtes, 200 caractères au plus. Une seule info marquante (une première fois, un sol gorgé d'eau, une semaine de folie, une poussée qui se prépare), puis si possible ce qui vient. Pas de liste, pas de jargon (« fenêtre », « réserve profonde », « bilan », « évaporation ») : dis-le avec des mots de tous les jours. Deux chiffres au maximum.
+Exemples de ton (les faits sont inventés, ne les recopie pas) :
+« Premier lactaire ici, Léo ! Il a pris son temps après la pluie d'octobre… et celle d'hier pourrait en ramener vers la fin du mois 🍄 »
+« Bredouille, mais pas de honte : la grosse pluie date d'avant-hier, les champignons sont encore en pyjama. »
+« Sixième trouvaille de la semaine dans la famille, ça pousse de partout ! Le sol est gorgé comme une éponge. »
+Règles strictes (non négociables) :
+- Utilise UNIQUEMENT les faits fournis en JSON ; tout chiffre ou date écrit doit y figurer tel quel. Dans le doute, pas de chiffre.
+- Aucun lien de cause de ton cru : l'explication est dans « lecture_de_l_appli », la prévision dans « la_suite ». Rien d'autre n'est prévu. Une pluie datée avant la sortie est passée, jamais « prévue ».
 - N'identifie jamais un champignon, ne parle jamais de comestibilité, de toxicité ni de cuisine. Pas de lieu, pas de coordonnée.
-- Accorde correctement les noms d'espèces (« le lactaire », « la girolle », « le cèpe »).
-- Ne devine jamais le genre de l'auteur d'après son prénom : aucun adjectif ni participe accordé à l'auteur (pas de « attentive », « content »), tournures neutres.
-- Aucune prévision en dehors de « la_suite » (pas de « laisse présager », « d'autres poussées vont suivre », « ce qui pourrait relancer »). Une pluie datée avant la sortie est passée, jamais « prévue ».
-- N'écris jamais les noms des champs du JSON (« la_suite », « lecture_de_l_appli »…) ni « La suite : ».
-Réponds seulement par le commentaire, sans guillemets.`;
+- Ne devine pas le genre de l'auteur d'après son prénom : aucun adjectif ni participe accordé à l'auteur.
+- N'écris jamais les noms des champs du JSON.
+Réponds seulement par la réaction, sans guillemets.`;
 
 /** Nombres présents dans les faits (pour refuser un chiffre inventé). */
 function numbersIn(obj) {
@@ -159,7 +158,7 @@ export async function groqComment(key, facts, { timeoutMs = 12000, fetchFn = fet
       const r = await fetchFn('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST', signal: ctl.signal,
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: MODEL, reasoning_effort: 'medium', temperature: 0.4, max_tokens: 1500,
+        body: JSON.stringify({ model: MODEL, reasoning_effort: 'medium', temperature: 0.8, max_tokens: 1500,
           messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: JSON.stringify(facts) }] }),
       });
       if (r.status === 429 && k + 1 < tries) { await new Promise((res) => setTimeout(res, 4000)); continue; }
