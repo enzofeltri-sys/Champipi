@@ -10,7 +10,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import webpush from 'npm:web-push@3.6.7';
 // Règles du conseiller : copie générée depuis l'appli (node tools/build-alertes.mjs) ; le déploiement des fonctions
 // Supabase refuse les modules lus depuis le site publié.
-import { summarizeWeather, assess, burnedAt, outingConditions, swiAt, spotSpecies, SPECIES, MIN_FINDS, profileKey, recentFinds, historyRange, findConditions, spotProfile, personalAdvice } from './rules.js';
+import { summarizeWeather, assess, burnedAt, outingConditions, swiAt, DELAY, DELAY_DEFAULT, spotSpecies, SPECIES, MIN_FINDS, profileKey, recentFinds, historyRange, findConditions, spotProfile, personalAdvice } from './rules.js';
 import { rainIndex, mergeRain } from './rain.js';
 import { outingFacts, groqComment } from './ia.js';
 
@@ -227,11 +227,15 @@ async function commentOuting(f: any, s: any, save = true) {
   const key = Deno.env.get('GROQ_API_KEY');
   if (!key) return null;
   const cell = `${Math.floor(s.lat * 10)}:${Math.floor(s.lon * 10)}`;
-  const [{ data: g }, { data: hist }, { data: climRow }, { data: swiRows }] = await Promise.all([
+  const since7 = new Date(Date.parse(f.found_on) - 7 * 86400000).toISOString().slice(0, 10);
+  const [{ data: g }, { data: hist }, { data: climRow }, { data: swiRows }, { data: prof }, { data: week }] = await Promise.all([
     admin.from('champi_meteo_grid').select('daily, elevation').eq('key', cell).maybeSingle(),
     admin.from('champi_finds').select('id, spot_id, found_on, species, empty').eq('spot_id', s.id),
     admin.from('champi_soil_clim').select('months').eq('key', cell).maybeSingle(),
     admin.from('champi_swi').select('w, s, e, n, swi, normal, rain15, date').range(0, 1999),
+    admin.from('champi_profiles').select('display_name').eq('id', f.user_id).maybeSingle(),
+    // Trouvailles des 7 jours d'avant dans les coins partagés (famille ou amis) : un nombre, jamais un lieu.
+    admin.from('champi_finds').select('id, champi_spots!inner(visibility)').eq('empty', false).gte('found_on', since7).lte('found_on', f.found_on).neq('champi_spots.visibility', 'private'),
   ]);
   let daily = g?.daily ?? null;
   if (!daily?.time?.includes(f.found_on)) daily = (await weatherFor([[s.lat, s.lon]]).catch(() => null))?.[0] ?? null;
@@ -240,11 +244,15 @@ async function commentOuting(f: any, s: any, save = true) {
   const swi = swiAt(swiRows ?? [], s.lat, s.lon);
   const c = w ? outingConditions(w, climRow?.months ?? null, month, swi) : null;
   if (c && !f.conditions && save) await admin.from('champi_finds').update({ conditions: { ...c, noted_on: today() } }).eq('id', f.id);
-  const finds = hist ?? [];
-  const same = finds.filter((x: any) => x.found_on.slice(0, 7) === f.found_on.slice(0, 7));
+  const finds = (hist ?? []).filter((x: any) => x.id !== f.id);
+  // Espèces de la sortie (ou attendues au coin si bredouille) avec leur fenêtre pluie → pousse.
+  const ids = f.empty || !(f.species ?? []).length ? spotSpecies(s, finds) : f.species;
+  const sp = ids.filter((id: string) => id !== 'autre').map((id: string) => ({ id, label: label(id), win: (DELAY as any)[id] ?? DELAY_DEFAULT }));
   const facts = outingFacts({
-    empty: !!f.empty, spotName: s.name, found: (f.species ?? []).map(label), w, rank: c?.soilRank ?? null,
-    month: same.length > 1 ? { trouvailles: same.filter((x: any) => !x.empty).length, bredouilles: same.filter((x: any) => x.empty).length } : null,
+    empty: !!f.empty, spotName: s.name, author: String(prof?.display_name ?? '').split(' ')[0] || null,
+    found: (f.species ?? []).map(label), sp, w, rank: c?.soilRank ?? null, swi, history: finds, day: f.found_on,
+    week: week ? week.filter((x: any) => x.id !== f.id).length : null,
+    forecast: f.found_on >= new Date(Date.parse(today()) - 86400000).toISOString().slice(0, 10),
   });
   const text = await groqComment(key, facts);
   if (!save) return { text, facts };
@@ -298,7 +306,7 @@ Deno.serve(async (req) => {
     }
     if (body.action === 'comment') {   // commentaire IA d'une sortie, sans annonce ; save=false : essai à blanc (jeton requis)
       if (req.headers.get('x-champi-token') !== cfg.cron_token) return json(req, { error: 'jeton invalide' }, 401);
-      const { data: f, error } = await admin.from('champi_finds').select('id, spot_id, found_on, species, empty, conditions').eq('id', String(body.find_id ?? '')).single();
+      const { data: f, error } = await admin.from('champi_finds').select('id, spot_id, user_id, found_on, species, empty, conditions').eq('id', String(body.find_id ?? '')).single();
       if (error) throw error;
       const { data: s, error: e2 } = await admin.from('champi_spots').select('id, name, lat, lon, species, trees, altitude, exposure, soil').eq('id', f.spot_id).single();
       if (e2) throw e2;

@@ -2,65 +2,122 @@
 // pas d'identification, pas d'avis sur la comestibilité, pas de chiffre qui ne soit pas dans les faits.
 
 export const MODEL = 'openai/gpt-oss-120b';
-export const MAX_LEN = 260;
+export const MAX_LEN = 340;
 
 const r0 = (v) => (v == null || Number.isNaN(v) ? null : Math.round(v));
 
-export const WINDOW = [5, 25];   // délai pluie → pousse retenu par l'appli (selon l'espèce, 5 à 25 jours)
+export const WINDOW = [5, 25];   // délai pluie → pousse, toutes espèces confondues (sinon fenêtre de l'espèce)
+const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+const addDays = (iso, k) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + k); return d.toISOString().slice(0, 10); };
+export const dateFr = (iso) => `${Number(iso.slice(8, 10))} ${MOIS[Number(iso.slice(5, 7)) - 1]}`;
+const plural = (n, w) => `${n} ${w}${n > 1 ? 's' : ''}`;
 
 /**
- * Lecture de la sortie, calculée ici (l'IA ne fait aucun lien de cause elle-même) :
- * quelle grosse pluie peut expliquer la pousse, ou pourquoi c'était bredouille.
+ * Lecture de la sortie, calculée ici (l'IA ne fait aucun lien de cause elle-même).
+ * sp = [{ label, win: [lo, hi] }] : espèces trouvées (ou attendues au coin si bredouille), avec leur fenêtre pluie → pousse.
  */
-export function outingReading(empty, w) {
+export function outingReading(empty, w, sp = [], day = null) {
   if (!w) return [];
   const rains = (w.bigRains ?? []).slice().sort((a, b) => a.ago - b.ago);
-  const fit = rains.find((r) => r.ago >= WINDOW[0] && r.ago <= WINDOW[1]);
-  const fresh = rains.find((r) => r.ago < WINDOW[0]);
-  const bal = w.balance30;
+  const when = (r) => (day ? `les ${r0(r.mm)} mm du ${dateFr(addDays(day, -r.ago))}` : `la grosse pluie de ${r0(r.mm)} mm`);
   const out = [];
+  const list = sp.length ? sp : [{ label: null, win: WINDOW }];
   if (!empty) {
-    if (fit) out.push(`pousse cohérente avec la grosse pluie de ${r0(fit.mm)} mm tombée ${fit.ago} jours avant (l'appli compte 5 à 25 jours entre pluie et pousse)`);
-    else if (fresh) out.push(`la grosse pluie de ${r0(fresh.mm)} mm tombée ${fresh.ago} jour${fresh.ago > 1 ? 's' : ''} avant est trop récente pour expliquer cette pousse : elle vient de l'humidité accumulée avant`);
-    else out.push(bal != null && bal >= 0 ? 'pas de grosse pluie juste avant : la pousse s\'appuie sur la réserve d\'eau du sol' : 'pas de grosse pluie juste avant : pousse discrète, sur l\'humidité restante');
-    if (fit && fresh) out.push(`la grosse pluie de ${r0(fresh.mm)} mm d'il y a ${fresh.ago} jour${fresh.ago > 1 ? 's' : ''} n'a pas encore agi`);
+    for (const { label, win } of list.slice(0, 3)) {
+      const fit = rains.find((r) => r.ago >= win[0] && r.ago <= win[1]);
+      const who = label ? `${label} : ` : '';
+      if (fit) {
+        const pos = (fit.ago - win[0]) / (win[1] - win[0]);
+        out.push(`${who}sorti ${fit.ago} jours après ${when(fit)} (sa fenêtre : ${win[0]} à ${win[1]} jours, ${pos < 0.34 ? 'en début' : pos > 0.66 ? 'en bout' : 'au milieu'} de fenêtre)`);
+      } else if (rains.some((r) => r.ago < win[0])) out.push(`${who}la dernière grosse pluie est trop récente pour expliquer cette pousse, qui vient de l'humidité accumulée avant`);
+      else out.push(`${who}aucune grosse pluie dans la fenêtre habituelle (${win[0]} à ${win[1]} jours avant) : cette pousse vient de la réserve d'eau du sol`);
+    }
   } else {
-    if (!rains.length) out.push(bal != null && bal < 0 ? 'aucune grosse pluie depuis 30 jours et sol en déficit : rien d\'étonnant' : 'aucune grosse pluie depuis 30 jours : rien d\'étonnant');
-    else if (fresh && !fit) out.push(`la dernière grosse pluie (${r0(fresh.mm)} mm) date de ${fresh.ago} jour${fresh.ago > 1 ? 's' : ''} : trop tôt pour une pousse`);
-    else if (fit) out.push(`les conditions semblaient correctes (grosse pluie de ${r0(fit.mm)} mm ${fit.ago} jours avant) : ce passage aide l'appli à mieux connaître ce coin`);
-    else out.push('la dernière grosse pluie remonte à plus de 25 jours : la poussée est sans doute passée');
+    const lo = Math.min(...list.map((x) => x.win[0])), hi = Math.max(...list.map((x) => x.win[1]));
+    const fit = rains.find((r) => r.ago >= lo && r.ago <= hi), fresh = rains.find((r) => r.ago < lo);
+    if (fit) out.push(`conditions pourtant correctes (${when(fit)}, ${fit.ago} jours avant) : ce passage aide l'appli à mieux connaître ce coin`);
+    else if (fresh) out.push(`la dernière grosse pluie (${when(fresh)}) date de ${plural(fresh.ago, 'jour')} : trop tôt pour une pousse`);
+    else if (!rains.length) out.push(w.balance30 != null && w.balance30 < 0 ? 'aucune grosse pluie depuis 30 jours et sol en déficit : rien d\'étonnant' : 'aucune grosse pluie depuis 30 jours : rien d\'étonnant');
+    else out.push(`la dernière grosse pluie remonte à plus de ${hi} jours : la poussée est sans doute passée`);
   }
   return out;
 }
 
-/** Faits d'une sortie (aucune coordonnée). month = sorties de ce coin ce mois-ci. */
-export function outingFacts({ empty, spotName, found, w, rank, month }) {
-  const humid = rank == null ? null : rank <= 0.2 ? 'nettement plus sec que d\'habitude' : rank < 0.4 ? 'un peu plus sec que d\'habitude'
-    : rank >= 0.8 ? 'nettement plus humide que d\'habitude' : rank > 0.6 ? 'un peu plus humide que d\'habitude' : 'habituel pour la saison';
-  const f = { sortie: empty ? 'bredouille (rien trouvé)' : 'trouvaille', coin: spotName };
+/** La suite (calculée) : prochaine fenêtre de pousse ouverte par une pluie récente, gel annoncé. */
+export function outingNext(w, sp = [], day, forecast = true) {
+  if (!w || !day) return [];
+  const list = sp.length ? sp : [{ win: WINDOW }];
+  const lo = Math.min(...list.map((x) => x.win[0])), hi = Math.max(...list.map((x) => x.win[1]));
+  const fresh = (w.bigRains ?? []).filter((r) => r.ago < lo).sort((a, b) => b.mm - a.mm)[0];
+  const out = [];
+  if (fresh) {
+    const rainDay = addDays(day, -fresh.ago);
+    out.push(`les ${r0(fresh.mm)} mm du ${dateFr(rainDay)} peuvent relancer une poussée entre le ${dateFr(addDays(rainDay, lo))} et le ${dateFr(addDays(rainDay, hi))}`);
+  } else if (!(w.bigRains ?? []).length) out.push('pas de grosse pluie récente : pas de nouvelle poussée en vue pour l\'instant');
+  // Prévisions (gel, pluie annoncée) seulement pour une sortie du jour ou de la veille : sinon ce serait du passé.
+  const fut = forecast ? (w.future ?? []).slice(0, 3).filter((r) => r.tmin != null) : [];
+  if (fut.length) {
+    const gel = fut.filter((r) => r.tmin < 0).length;
+    out.push(gel ? `gel annoncé ${plural(gel, 'nuit')} sur les ${fut.length} prochaines` : `pas de gel annoncé sur les ${fut.length} prochains jours`);
+  }
+  const next3 = forecast ? (w.future ?? []).slice(0, 3).reduce((a, r) => a + (r.rain || 0), 0) : 0;
+  if (next3 >= 15) out.push(`${r0(next3)} mm de pluie annoncés sur les 3 prochains jours`);
+  return out;
+}
+
+/** Historique du coin avant cette sortie. hist = sorties du coin (sans celle-ci), ids = espèces trouvées, labelOf. */
+export function spotHistory(hist, day, ids, labelOf) {
+  const before = hist.filter((x) => x.found_on <= day);
+  const real = before.filter((x) => !x.empty);
+  const out = [];
+  if (!real.length) out.push('première trouvaille notée à ce coin');
+  else out.push(`${plural(real.length, 'trouvaille')} déjà notée${real.length > 1 ? 's' : ''} à ce coin avant celle-ci`);
+  const seen = new Set(real.flatMap((x) => x.species ?? []));
+  const neu = ids.filter((id) => !seen.has(id));
+  if (real.length && neu.length) out.push(`première fois noté ici : ${neu.map(labelOf).join(', ')}`);
+  const m = day.slice(5, 7), y = Number(day.slice(0, 4));
+  const years = [...new Set(real.filter((x) => x.found_on.slice(5, 7) === m && Number(x.found_on.slice(0, 4)) < y).map((x) => x.found_on.slice(0, 4)))].sort();
+  if (years.length) out.push(`déjà trouvé ici en ${MOIS[Number(m) - 1]} ${years.join(', ')}`);
+  const nth = before.filter((x) => x.found_on.slice(0, 7) === day.slice(0, 7)).length + 1;
+  if (nth > 1) out.push(`${nth}e sortie du mois à ce coin`);
+  return out;
+}
+
+/** Faits d'une sortie (aucune coordonnée, aucun autre coin nommé). */
+export function outingFacts({ empty, spotName, author, found, sp = [], w, rank, swi, history = [], day, week = null, forecast = true }) {
+  const f = { sortie: empty ? 'bredouille (rien trouvé)' : 'trouvaille', auteur: author ?? null, coin: spotName };
   if (!empty) f.trouve = found;
   if (w) {
-    f.lecture_de_l_appli = outingReading(empty, w);
+    f.lecture_de_l_appli = outingReading(empty, w, sp, day);
+    const next = outingNext(w, sp, day, forecast);
+    if (next.length) f.la_suite = next;
     f.pluie_10_jours_mm = r0(w.rain10);
     if (w.rain30 != null) f.pluie_30_jours_mm = r0(w.rain30);
-    if (w.balance30 != null) f.bilan_pluie_moins_evaporation_30_jours_mm = r0(w.balance30);
-    if (humid) f.humidite_du_sol = humid;
+    const cmp = [];
+    if (rank != null && day) cmp.push(rank >= 0.6 ? `sol plus humide que ${Math.round(rank * 10)} jours de ${MOIS[Number(day.slice(5, 7)) - 1]} sur 10 ici` : rank <= 0.3 ? `sol plus sec que ${10 - Math.round(rank * 10)} jours de ${MOIS[Number(day.slice(5, 7)) - 1]} sur 10 ici` : 'sol humide comme d\'habitude en cette saison');
+    if (swi?.swi != null && swi.normal != null) cmp.push(`réserve profonde du sol (Météo-France) à ${Math.round(swi.swi * 100)} %, normale ${Math.round(swi.normal * 100)} %`);
+    if (w.balance30 != null) cmp.push(`bilan pluie moins évaporation sur 30 jours : ${w.balance30 > 0 ? '+' : ''}${r0(w.balance30)} mm`);
+    if (cmp.length) f.comparaison_avec_la_saison = cmp;
     if (w.soilT3 != null) f.temperature_du_sol_c = r0(w.soilT3);
-    if (w.frost7) f.nuits_de_gel_7_jours = w.frost7;
   }
-  if (month) f.sorties_a_ce_coin_ce_mois = month;
+  if (history.length || day) f.historique_du_coin = spotHistory(history, day, empty ? [] : (sp.map((x) => x.id).filter(Boolean)), (id) => sp.find((x) => x.id === id)?.label ?? id);
+  if (week != null) f.cette_semaine_dans_l_appli = week ? `${week} autre${week > 1 ? 's' : ''} trouvaille${week > 1 ? 's' : ''} ces 7 derniers jours` : 'aucune autre trouvaille ces 7 derniers jours';
   return f;
 }
 
-export const SYSTEM = `Tu écris un court commentaire (1 ou 2 phrases, 220 caractères au plus) sous une sortie aux champignons d'une appli familiale, en français, ton chaleureux et simple, tutoiement collectif.
+export const SYSTEM = `Tu écris le petit commentaire (2 ou 3 phrases, 300 caractères au plus) affiché sous une sortie aux champignons, dans une appli familiale. En français, ton chaleureux, vivant et simple ; tutoie l'auteur et appelle-le par son prénom s'il est donné.
 Règles strictes :
-- Utilise UNIQUEMENT les faits fournis en JSON. N'invente aucun fait, aucun chiffre, aucun délai, aucune généralité de mycologie.
-- Ne fais AUCUN lien de cause toi-même : l'explication est dans « lecture_de_l_appli », reprends-la fidèlement (tu peux la raccourcir).
-- Tout chiffre que tu écris doit figurer tel quel dans les faits. Dans le doute, n'écris pas de chiffre.
-- N'identifie jamais un champignon, ne parle jamais de comestibilité, de toxicité ni de cuisine.
-- Ne donne aucun lieu, aucune coordonnée, aucun conseil de sécurité.
-- Pas d'exclamations en série, pas de « bravo à tous », pas de « exactement ce qui était prévu ». Sobre et amical.
-- Pour une sortie bredouille : sobre, sans promettre de date.
+- Utilise UNIQUEMENT les faits fournis en JSON. N'invente aucun fait, aucun chiffre, aucune date, aucune généralité de mycologie.
+- Ne fais AUCUN lien de cause toi-même : l'explication est dans « lecture_de_l_appli » ; la prévision est dans « la_suite ». Reprends-les fidèlement.
+- Tout chiffre ou date que tu écris doit figurer tel quel dans les faits.
+- Choisis les 2 ou 3 faits les plus parlants (une première fois, une fenêtre qui se rouvre, un sol exceptionnel, une semaine faste) ; ne récite pas tout.
+- Termine si possible par « la_suite » (ce qui vient), c'est le plus utile.
+- Varie les tournures ; évite « cohérente avec », « bravo à tous », les points d'exclamation en série.
+- N'identifie jamais un champignon, ne parle jamais de comestibilité, de toxicité ni de cuisine. Pas de lieu, pas de coordonnée.
+- Accorde correctement les noms d'espèces (« le lactaire », « la girolle », « le cèpe »).
+- Ne devine jamais le genre de l'auteur d'après son prénom : aucun adjectif ni participe accordé à l'auteur (pas de « attentive », « content »), tournures neutres.
+- Aucune prévision en dehors de « la_suite » (pas de « laisse présager », « d'autres poussées vont suivre », « ce qui pourrait relancer »). Une pluie datée avant la sortie est passée, jamais « prévue ».
+- N'écris jamais les noms des champs du JSON (« la_suite », « lecture_de_l_appli »…) ni « La suite : ».
 Réponds seulement par le commentaire, sans guillemets.`;
 
 /** Nombres présents dans les faits (pour refuser un chiffre inventé). */
@@ -71,12 +128,17 @@ function numbersIn(obj) {
 }
 
 const BANNED = /comestible|toxique|mortel|poison|v[ée]n[ée]neu|cuisin|recette|manger|consomm|identifi/i;
+// Liens de cause ou promesses que le modèle ajoute de lui-même (la cause est dans lecture_de_l_appli, pas ailleurs).
+const INVENTED = /favoris|grâce à|a permis|permet(tent)? |a laissé|laisse(nt)? présager|ce qui a |idéal|parfait|découvres ce coin/i;
 
 /** Nettoie la réponse ; null si elle sort des règles (chiffre inventé, comestibilité…). */
 export function checkComment(text, facts) {
   if (!text) return null;
   let t = String(text).replace(/\s+/g, ' ').trim().replace(/^["«»“”\s]+|["«»“”\s]+$/g, '');
-  if (!t || BANNED.test(t)) return null;
+  // Nom de champ recopié par le modèle (« la_suite ») : on l'enlève avec sa ponctuation.
+  t = t.replace(/\s*[,;:–-]?\s*\b[a-z]+(?:_[a-z]+)+\b\s*/gi, ' ').replace(/\s+([.,;!?])/g, '$1').replace(/\s{2,}/g, ' ').trim();
+  if (t && !/[.!?…]$/.test(t)) t += '.';
+  if (!t || BANNED.test(t) || INVENTED.test(t)) return null;
   const known = numbersIn(facts);
   for (const m of t.match(/\d+(?:[.,]\d+)?/g) ?? []) if (!known.has(String(Number(m.replace(',', '.'))))) return null;
   if (t.length > MAX_LEN) {
@@ -88,19 +150,24 @@ export function checkComment(text, facts) {
 }
 
 /** Appel Groq ; null en cas d'échec ou de réponse refusée (on n'affiche alors rien). */
-export async function groqComment(key, facts, { timeoutMs = 9000, fetchFn = fetch } = {}) {
+export async function groqComment(key, facts, { timeoutMs = 12000, fetchFn = fetch, tries = 2 } = {}) {
   if (!key) return null;
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), timeoutMs);
-  try {
-    const r = await fetchFn('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST', signal: ctl.signal,
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: MODEL, reasoning_effort: 'low', temperature: 0.4, max_tokens: 500,
-        messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: JSON.stringify(facts) }] }),
-    });
-    if (!r.ok) return null;
-    const j = await r.json();
-    return checkComment(j?.choices?.[0]?.message?.content, facts);
-  } catch { return null; } finally { clearTimeout(timer); }
+  for (let k = 0; k < tries; k++) {   // texte refusé (cause inventée…) ou limite de débit : un deuxième essai
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeoutMs);
+    try {
+      const r = await fetchFn('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST', signal: ctl.signal,
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: MODEL, reasoning_effort: 'medium', temperature: 0.4, max_tokens: 1500,
+          messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: JSON.stringify(facts) }] }),
+      });
+      if (r.status === 429 && k + 1 < tries) { await new Promise((res) => setTimeout(res, 4000)); continue; }
+      if (!r.ok) return null;
+      const j = await r.json();
+      const t = checkComment(j?.choices?.[0]?.message?.content, facts);
+      if (t) return t;
+    } catch { /* réseau ou délai dépassé : nouvel essai */ } finally { clearTimeout(timer); }
+  }
+  return null;
 }

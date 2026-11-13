@@ -3,7 +3,7 @@
 // Usage : node tools/build-alertes.mjs   (à relancer après toute modification des règles, puis redéployer)
 import { build } from 'esbuild';
 await build({
-  stdin: { contents: "export { summarizeWeather, assess, burnedAt, outingConditions, swiAt } from './site/js/advisor.js'; export { spotSpecies, SPECIES } from './site/js/logic.js'; export { MIN_FINDS, profileKey, recentFinds, historyRange, findConditions, spotProfile, personalAdvice } from './site/js/learn.js';", resolveDir: '.', loader: 'js' },
+  stdin: { contents: "export { summarizeWeather, assess, burnedAt, outingConditions, swiAt, DELAY, DELAY_DEFAULT } from './site/js/advisor.js'; export { spotSpecies, SPECIES } from './site/js/logic.js'; export { MIN_FINDS, profileKey, recentFinds, historyRange, findConditions, spotProfile, personalAdvice } from './site/js/learn.js';", resolveDir: '.', loader: 'js' },
   bundle: true, format: 'esm', minifyWhitespace: true, treeShaking: true, legalComments: 'none',
   banner: { js: '// FICHIER GÉNÉRÉ par tools/build-alertes.mjs depuis site/js/advisor.js et logic.js : ne pas modifier à la main.' },
   outfile: 'supabase/functions/champi-alertes/rules.js',
