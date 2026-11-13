@@ -1,5 +1,5 @@
 // Service worker : l'appli s'ouvre même sans réseau, et les cartes téléchargées (Plan IGN) restent disponibles hors ligne.
-const VERSION = 'champi-v55';
+const VERSION = 'champi-v56';
 const TILES = 'champi-tuiles-v1';           // cartes enregistrées par l'utilisateur (menu « Cartes hors ligne »)
 const SHELL = [
   './', 'index.html', 'css/app.css', 'js/app.js', 'js/logic.js', 'js/config.js', 'js/photos.js', 'js/advisor.js', 'js/weather.js',
@@ -23,9 +23,10 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   if (url.origin !== location.origin) return;
-  // Appli : réseau d'abord (dernière version), copie locale en secours.
+  // Appli : réseau d'abord (dernière version), copie locale en secours. « no-cache » : le navigateur revérifie
+  // chaque fichier auprès du serveur (sinon GitHub Pages le garde 10 min et une mise à jour n'arrive pas tout de suite).
   e.respondWith(
-    fetch(e.request).then((res) => {
+    fetch(e.request.url, { cache: 'no-cache' }).then((res) => {   // l'adresse seule : une requête de navigation ne se recopie pas avec des options
       if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(e.request, copy)); }
       return res;
     }).catch(() => caches.match(e.request, { ignoreSearch: true }).then((r) => r || caches.match('index.html'))),
