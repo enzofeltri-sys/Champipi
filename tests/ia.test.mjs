@@ -68,3 +68,8 @@ test('cause inventée refusée, deuxième essai', async () => {
   const seq = async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: n++ ? 'Le sol a reçu 118 mm sur 30 jours.' : 'Ça a favorisé la pousse.' } }] }) });
   assert.equal(await groqComment('k', facts, { fetchFn: seq }), 'Le sol a reçu 118 mm sur 30 jours.');
 });
+
+test('prédictions trop sûres refusées', () => {
+  assert.equal(checkComment('Les 48 mm devraient bien nourrir la suite.', facts), null);
+  assert.equal(checkComment('Prépare-toi, ça va relancer !', facts), null);
+});

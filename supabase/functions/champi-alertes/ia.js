@@ -128,7 +128,7 @@ function numbersIn(obj) {
 
 const BANNED = /comestible|toxique|mortel|poison|v[ée]n[ée]neu|cuisin|recette|manger|consomm|identifi/i;
 // Liens de cause ou promesses que le modèle ajoute de lui-même (la cause est dans lecture_de_l_appli, pas ailleurs).
-const INVENTED = /favoris|grâce à|a permis|permet(tent)? |a laissé|laisse(nt)? présager|ce qui a |idéal|parfait|découvres ce coin/i;
+const INVENTED = /favoris|grâce à|a permis|permet(tent)? |a laissé|laisse(nt)? présager|ce qui a |idéal|parfait|découvres ce coin|devrai(en)?t|vont |va relancer|prépare-toi|prévus? bientôt/i;
 
 /** Nettoie la réponse ; null si elle sort des règles (chiffre inventé, comestibilité…). */
 export function checkComment(text, facts) {
