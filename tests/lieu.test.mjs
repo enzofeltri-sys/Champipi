@@ -40,3 +40,31 @@ test('réserve géologique : les champignons ne sont pas visés', () => {
   assert.ok(z.some((x) => x.level === 'info' && x.text.startsWith('Périmètre de protection d\'une réserve')));
   assert.ok(z.some((x) => x.level === 'stop' && x.text.startsWith('Réserve naturelle Sainte-Victoire')));
 });
+
+import { ringHa, standOf, distToLine, nearestWays, accessRating } from '../site/js/lieu.js';
+test('peuplement : surface du polygone qui contient le point', () => {
+  const sq = (x, y, d) => [[x, y], [x + d, y], [x + d, y + d], [x, y + d], [x, y]];
+  assert.ok(Math.abs(ringHa(sq(6, 44.5, 0.01)) - 88) < 3);   // ~795 m × 1 107 m
+  const fs = [{ properties: { tfv: 'petit' }, geometry: { type: 'Polygon', coordinates: [sq(6.02, 44.5, 0.001)] } },
+    { properties: { tfv: 'grand' }, geometry: { type: 'Polygon', coordinates: [sq(6, 44.5, 0.01)] } }];
+  assert.deepEqual(standOf(fs, 44.505, 6.005), { ha: 88, tfv: 'grand' });
+  assert.equal(standOf(fs, 44.6, 6.1), null);
+});
+test('accès : route, sentier, pente, privé', () => {
+  assert.ok(Math.abs(distToLine(44.5, 6, [[6.001, 44.49], [6.001, 44.51]]) - 79) < 2);
+  const line = (lon) => ({ type: 'LineString', coordinates: [[lon, 44.49], [lon, 44.51]] });
+  const w = nearestWays([
+    { properties: { nature: 'Route à 1 chaussée', acces_vehicule_leger: 'Libre' }, geometry: line(6.003) },
+    { properties: { nature: 'Route empierrée', acces_vehicule_leger: 'Restreint aux ayants droit' }, geometry: line(6.0005) },
+    { properties: { nature: 'Sentier', acces_vehicule_leger: 'Physiquement impossible' }, geometry: line(6.001) },
+  ], 44.5, 6);
+  assert.equal(w.road.nature, 'Route à 1 chaussée'); assert.ok(w.road.m > 230 && w.road.m < 245);
+  assert.equal(w.path.nature, 'Sentier');
+  assert.equal(accessRating({ ...w, slope: 10, isPublic: true, ha: 100 }).level, 'facile');
+  assert.equal(accessRating({ ...w, slope: 30, isPublic: true }).level, 'moyen');
+  assert.equal(accessRating({ road: { m: 1500, nature: 'Route à 1 chaussée' } }).level, 'difficile');
+  assert.equal(accessRating({}).level, 'difficile');
+  const priv = accessRating({ ...w, slope: 10, isPublic: false, ha: 12 });
+  assert.equal(priv.text, '🟢 Accès facile · petit bois · accord du propriétaire nécessaire');
+  assert.ok(priv.parts.includes('peuplement de 12 ha') && priv.parts.includes('privé probable'));
+});

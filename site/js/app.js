@@ -10,7 +10,7 @@ import { GUIDE, SOIL_STRICT, LEVELS, summarizeWeather, assess, forestToTrees, pa
 import { dailyFor as openMeteoFor, forestAt, forestText, soilAt, historyFor, terrainAt, trophAt } from './weather.js';
 import { soilGuess, trophText } from './soil.js';
 import { ASPECT_TEXT } from './terrain.js';
-import { lidarAt, terrainText, oldForestAt, oldForestText, zonesAt, zonesText } from './lieu.js';
+import { lidarAt, terrainText, oldForestAt, oldForestText, zonesAt, zonesText, standAt, waysAt, accessRating } from './lieu.js';
 import { rainIndex, mergeRain, rainSource, distKm } from './rain.js';
 import { treesAt, soilKind, whatGrows, fix as cleanText } from './here.js';
 import { historyRange, findConditions, spotProfile, personalAdvice, profileSummary, profileKey, recentFinds } from './learn.js';
@@ -1795,15 +1795,21 @@ function meteoHtml(w, a, src = '') {
 const lieuCache = new Map();
 function lieuFor(lat, lon) {
   const k = `${lat.toFixed(5)},${lon.toFixed(5)}`;
-  if (!lieuCache.has(k)) lieuCache.set(k, Promise.allSettled([lidarAt(lat, lon), oldForestAt(lat, lon), zonesAt(lat, lon)]));
+  if (!lieuCache.has(k)) lieuCache.set(k, Promise.allSettled([lidarAt(lat, lon), oldForestAt(lat, lon), zonesAt(lat, lon), standAt(lat, lon), waysAt(lat, lon)]));
   return lieuCache.get(k);
 }
-function lieuHtml([lidar, old, zones]) {
+function lieuHtml([lidar, old, zones, stand, ways]) {
+  // Accès : route ou piste, sentier, pente, forêt publique ou privée, taille du peuplement.
+  const val = (r) => (r?.status === 'fulfilled' ? r.value : null);
+  const z = val(zones);
+  const acc = val(ways) ? accessRating({ ...val(ways), slope: val(lidar)?.slope ?? null, ha: val(stand)?.ha ?? null,
+    isPublic: z ? z.some((x) => x.kind === 'onf') : null }) : null;
+  const accHtml = acc ? `<div class="lieu-access"><b>${esc(acc.text)}</b><div class="small">${esc(acc.parts.join(' · '))}</div></div>` : '';
   const lines = [...(lidar.status === 'fulfilled' ? terrainText(lidar.value) : []),
     ...(old.status === 'fulfilled' && oldForestText(old.value) ? [oldForestText(old.value)] : [])];
   const rules = zones.status === 'fulfilled' ? zonesText(zones.value) : [];
   const icon = { stop: '⛔', warn: '⚠️', info: 'ℹ️' };
-  return `${lines.length ? lines.map((l) => `<div>${l}</div>`).join('') : '<div class="muted small">Pas de relevé laser (LiDAR) ici pour l\'instant.</div>'}
+  return `${accHtml}${lines.length ? lines.map((l) => `<div>${l}</div>`).join('') : '<div class="muted small">Pas de relevé laser (LiDAR) ici pour l\'instant.</div>'}
     ${rules.length ? `<div class="lieu-rules">${rules.map((r) => `<div class="small">${icon[r.level]} ${esc(r.text)}${r.url ? ` · <a href="${esc(r.url)}" target="_blank" rel="noopener">fiche</a>` : ''}</div>`).join('')}</div>` : ''}
     <p class="small muted">Relevés laser et cartes de l'IGN, zones protégées de l'INPN : pour choisir et comprendre le coin ; ça ne change pas l'avis météo.</p>`;
 }

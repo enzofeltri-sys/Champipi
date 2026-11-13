@@ -136,3 +136,99 @@ export function zonesText(zones) {
   const rank = { stop: 0, warn: 1, info: 2 };
   return out.sort((a, b) => rank[a.level] - rank[b.level]);
 }
+
+
+// ---------------------------------------------------------------------------
+// Taille du peuplement (même type de forêt d'un seul tenant, IGN BD Forêt V2) et accès (routes, pistes et sentiers de
+// la BD TOPO de l'IGN), pour savoir si le coin est un vrai bois et si on y va facilement.
+
+const ringIn = (ring, x, y) => {
+  let c = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+};
+/** Surface d'un anneau [lon, lat] en hectares (approximation plane, suffisante à cette échelle). */
+export function ringHa(ring) {
+  const lat0 = ring.reduce((s, p) => s + p[1], 0) / ring.length;
+  const kx = 111320 * Math.cos((lat0 * Math.PI) / 180), ky = 110540;
+  let a = 0;
+  for (let i = 0; i + 1 < ring.length; i++) a += ring[i][0] * kx * ring[i + 1][1] * ky - ring[i + 1][0] * kx * ring[i][1] * ky;
+  return Math.abs(a) / 2 / 1e4;
+}
+/** Polygone de forêt qui contient le point (parmi des entités GeoJSON) → { ha, tfv } ou null. */
+export function standOf(features, lat, lon) {
+  for (const f of features ?? []) {
+    const g = f.geometry; if (!g) continue;
+    const polys = g.type === 'MultiPolygon' ? g.coordinates : [g.coordinates];
+    if (polys.some((p) => ringIn(p[0], lon, lat) && !p.slice(1).some((h) => ringIn(h, lon, lat)))) {
+      const ha = polys.reduce((s, p) => s + ringHa(p[0]) - p.slice(1).reduce((t, h) => t + ringHa(h), 0), 0);
+      return { ha: Math.round(ha), tfv: f.properties?.tfv ?? null };
+    }
+  }
+  return null;
+}
+export async function standAt(lat, lon, fetchFn = fetch) {
+  const d = 0.0002;
+  const r = await fetchFn(`${WFS}&TYPENAMES=LANDCOVER.FORESTINVENTORY.V2:formation_vegetale&COUNT=30&BBOX=${lat - d},${lon - d},${lat + d},${lon + d},urn:ogc:def:crs:EPSG::4326`);
+  if (!r.ok) throw new Error(`peuplement ${r.status}`);
+  return standOf((await r.json()).features, lat, lon);
+}
+
+/** Distance (m) d'un point à une ligne [[lon, lat], …]. */
+export function distToLine(lat, lon, line) {
+  const kx = 111320 * Math.cos((lat * Math.PI) / 180), ky = 110540;
+  const pts = line.map(([x, y]) => [(x - lon) * kx, (y - lat) * ky]);
+  let best = Infinity;
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const [x1, y1] = pts[i], [x2, y2] = pts[i + 1], dx = x2 - x1, dy = y2 - y1, L = dx * dx + dy * dy;
+    const t = L ? Math.max(0, Math.min(1, -(x1 * dx + y1 * dy) / L)) : 0;
+    best = Math.min(best, Math.hypot(x1 + t * dx, y1 + t * dy));
+  }
+  return best;
+}
+const DRIVABLE = ['Route à 1 chaussée', 'Route à 2 chaussées', 'Route empierrée'];
+/** Tronçons BD TOPO → { road: { m, nature } | null, path: { m, nature } | null }. */
+export function nearestWays(features, lat, lon) {
+  let road = null, path = null;
+  for (const f of features ?? []) {
+    const p = f.properties ?? {}, g = f.geometry; if (!g) continue;
+    const lines = g.type === 'MultiLineString' ? g.coordinates : [g.coordinates];
+    const m = Math.round(Math.min(...lines.map((l) => distToLine(lat, lon, l.map((c) => c.slice(0, 2))))));
+    if (DRIVABLE.includes(p.nature) && p.acces_vehicule_leger === 'Libre' && (!road || m < road.m)) road = { m, nature: p.nature };
+    if (['Sentier', 'Chemin'].includes(p.nature) && (!path || m < path.m)) path = { m, nature: p.nature };
+  }
+  return { road, path };
+}
+export async function waysAt(lat, lon, fetchFn = fetch, radius = 1200) {
+  const dl = radius / 111320, dn = radius / (111320 * Math.cos((lat * Math.PI) / 180));
+  const r = await fetchFn(`${WFS}&TYPENAMES=BDTOPO_V3:troncon_de_route&COUNT=1500&PROPERTYNAME=nature,acces_vehicule_leger,geometrie`
+    + `&BBOX=${lat - dl},${lon - dn},${lat + dl},${lon + dn},urn:ogc:def:crs:EPSG::4326`);
+  if (!r.ok) throw new Error(`routes ${r.status}`);
+  return nearestWays((await r.json()).features, lat, lon);
+}
+
+/**
+ * Accès au coin : { level: 'facile' | 'moyen' | 'difficile' | null, text, parts[] }.
+ * @param a { road, path } (nearestWays), slope (°), isPublic (bool | null), ha (taille du peuplement)
+ */
+export function accessRating({ road = null, path = null, slope = null, isPublic = null, ha = null } = {}) {
+  const parts = [];
+  if (road) parts.push(`🚗 ${road.nature === 'Route empierrée' ? 'piste' : 'route'} à ${road.m} m`);
+  else parts.push('🚗 pas de route à moins de 1,2 km');
+  if (path) parts.push(`🥾 ${path.nature.toLowerCase()} à ${path.m} m`);
+  if (slope != null) parts.push(`pente ${slope}°`);
+  if (ha != null) parts.push(`peuplement de ${ha} ha`);
+  if (isPublic === true) parts.push('forêt publique');
+  if (isPublic === false) parts.push('privé probable');
+  // Distance à vol d'oiseau depuis la route la plus proche ; un sentier près du coin aide si la route est un peu loin.
+  const steepOk = (max) => slope == null || slope <= max;
+  const level = !road ? 'difficile'
+    : road.m <= 300 && steepOk(25) ? 'facile'
+      : road.m <= 1000 && (road.m <= 500 || (path && path.m <= 200)) && steepOk(35) ? 'moyen' : 'difficile';
+  const icon = { facile: '🟢', moyen: '🟡', difficile: '🔴' }[level];
+  const extra = [ha != null && ha < 20 ? 'petit bois' : null, isPublic === false ? 'accord du propriétaire nécessaire' : null].filter(Boolean);
+  return { level, parts, text: `${icon} Accès ${level}${extra.length ? ` · ${extra.join(' · ')}` : ''}` };
+}

@@ -227,6 +227,7 @@ dialog.viewer img { width: 100%; height: calc(100dvh - 64px); object-fit: contai
 .meteo:empty { display: none; }
 .meteo h3 { margin-top: 6px; }
 .lieu:empty { display: none; }
+.lieu-access { margin: 4px 0 8px; padding: 8px 10px; border-radius: 10px; background: var(--card-2, rgba(0,0,0,.04)); }
 .lieu h3 { margin-top: 6px; }
 .lieu > div, .here-lieu > div { margin: 3px 0; }
 .lieu-rules { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: var(--card-2, rgba(0,0,0,.04)); }
