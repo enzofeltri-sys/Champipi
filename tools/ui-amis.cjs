@@ -1,4 +1,4 @@
-// Parcours « groupe amis » : un ami ne peut pas choisir 👪 Famille ; badges 👥 Amis ; l'admin choisit le groupe.
+// Parcours « groupes » (amis, 🐆 Grrr) : un ami ne peut pas choisir 👪 Famille ; badges 👥 Amis ; l'admin choisit le groupe.
 const { chromium, devices } = require('playwright');
 const fakeMeteo = require('./fake-meteo.cjs');
 const [, , SITE, OUT] = process.argv;
@@ -7,7 +7,7 @@ const sp = (id, owner, name, vis, lat, lon) => ({ id, owner, visibility: vis, na
 
 async function run(grp, admin) {
   const db = {
-    spots: [sp('aaaaaaaa-0000-0000-0000-000000000001', MAME, 'Coin des amis', 'friends', 43.40, 5.60), sp('aaaaaaaa-0000-0000-0000-000000000002', ME, 'Mon coin', 'private', 43.41, 5.62)],
+    spots: [sp('aaaaaaaa-0000-0000-0000-000000000001', MAME, 'Coin des amis', 'friends', 43.40, 5.60), sp('aaaaaaaa-0000-0000-0000-000000000002', ME, 'Mon coin', 'private', 43.41, 5.62), sp('aaaaaaaa-0000-0000-0000-000000000003', MAME, 'Coin Grrr', 'grrr', 43.42, 5.61)],
     members: [{ email: 'enzo@test.fr', label: 'Enzo', grp: 'famille', added_at: '2026-01-01T00:00:00Z' }, { email: 'paul@test.fr', label: 'Paul', grp: 'ami', added_at: '2026-02-01T00:00:00Z' }],
     requests: [{ email: 'lea@test.fr', display_name: 'Léa', message: 'Coucou', created_at: '2026-11-01T00:00:00Z' }],
     posts: [], patches: [],
@@ -89,6 +89,28 @@ async function run(grp, admin) {
   await page.locator('#member-list [data-grp-set]').first().click(); await page.waitForTimeout(500);
   console.log('ADMIN · changement de groupe → envoyé :', JSON.stringify(db.patches.at(-1)));
   await page.screenshot({ path: `${OUT}/m4-admin-apres.png` });
+  await page.click('#req-list [data-grp=grrr]').catch(() => {}); 
+  await page.click('#add-grp [data-grp=grrr]');
+  await page.fill('#add-email', 'leo@test.fr'); await page.fill('#add-label', 'Léo');
+  await page.click('#add-form button[type=submit]'); await page.waitForTimeout(600);
+  console.log('ADMIN · ajout Léo en Grrr → envoyé :', JSON.stringify(db.posts.at(-1)));
+  console.log('ADMIN · membres après :', await page.textContent('#member-count'));
+  await page.screenshot({ path: `${OUT}/m5-admin-grrr.png` });
   console.log('FAMILLE · ERREURS :', errors.length ? errors : 'aucune');
+  await b.close();
+
+  // 3. Un membre 🐆 Grrr (la base ne lui renvoie que ses coins et les coins Grrr : on simule ce filtre ici)
+  ({ b, page, errors } = await run('grrr', false));
+  await page.click('#btn-add'); await page.click('#add-here');
+  await page.waitForSelector('#dlg-edit[open], #dlg-near[open]'); if (await page.isVisible('#dlg-near')) await page.click('#near-no');
+  await page.waitForSelector('#dlg-edit[open]');
+  console.log('GRRR · choix :', await vis());
+  await page.click('#edit-vis [data-vis=grrr]'); await page.waitForTimeout(100);
+  console.log('GRRR · après clic 🐆 :', await vis());
+  await page.screenshot({ path: `${OUT}/m6-grrr-formulaire.png` });
+  await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+  await page.click('#menu-btn'); await page.click('#list-btn'); await page.waitForTimeout(300);
+  console.log('GRRR · liste (badges) :', (await page.locator('.spot-item').allTextContents()).map((x) => x.replace(/\s+/g, ' ').trim().slice(0, 50)));
+  console.log('GRRR · ERREURS :', errors.length ? errors : 'aucune');
   await b.close();
 })();

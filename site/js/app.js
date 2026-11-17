@@ -97,7 +97,7 @@ async function doRoute(session) {
   state.isAdmin = admin.data.length > 0;
   state.request = request.data;
   if (!allowed.data.length) { showDenied(); return; }
-  state.group = allowed.data[0].grp === 'ami' ? 'ami' : 'famille';
+  state.group = ['ami', 'grrr'].includes(allowed.data[0].grp) ? allowed.data[0].grp : 'famille';
   store.set('champi-group', state.group);
   const { data: profile, error: e2 } = await sb.from('champi_profiles')
     .select('id, display_name, avatar_emoji, avatar_color, notify_pousse, notify_news').eq('id', state.user.id).maybeSingle();
@@ -343,7 +343,7 @@ function pinIcon(kind, seasonal = false, draft = false, person = null) {
     html: `<div class="pin${draft ? ' draft' : ''}"><svg viewBox="0 0 30 40" aria-hidden="true">
       <path d="M15 1C7.3 1 1 7.2 1 14.9 1 25.3 15 39 15 39s14-13.7 14-24.1C29 7.2 22.7 1 15 1z" style="fill:${color}" stroke="#fff" stroke-width="2"/>
       <circle cx="15" cy="14.5" r="9.5" fill="rgba(255,255,255,.92)"/></svg>${inner}
-      ${kind === 'private' ? '<span class="lock">🔒</span>' : kind === 'shared' ? '<span class="lock">🤝</span>' : kind === 'friends' ? '<span class="lock">👥</span>' : ''}${seasonal ? '<span class="dot"></span>' : ''}</div>`,
+      ${kind === 'private' ? '<span class="lock">🔒</span>' : kind === 'shared' ? '<span class="lock">🤝</span>' : kind === 'friends' ? '<span class="lock">👥</span>' : kind === 'grrr' ? '<span class="lock">🐆</span>' : ''}${seasonal ? '<span class="dot"></span>' : ''}</div>`,
   });
 }
 
@@ -504,6 +504,7 @@ function badgesHtml(s, season) {
   const vis = s.sharedWithMe ? `<span class="badge shared">🤝 Partagé par ${esc(nameOf(s.owner))}</span>`
     : s.visibility === 'family' ? '<span class="badge family">👪 Famille</span>'
     : s.visibility === 'friends' ? '<span class="badge friends">👥 Amis</span>'
+    : s.visibility === 'grrr' ? '<span class="badge grrr">🐆 Grrr</span>'
     : '<span class="badge private">🔒 Moi seul</span>' + (s.sharedWith?.length ? `<span class="badge shared">🤝 ${esc(names(s.sharedWith))}</span>` : '');
   const peak = season.some((x) => x.peak);
   const seasonBadge = season.length
@@ -1040,12 +1041,11 @@ for (const sel of ['#nf-species', '#find-species', '#edit-trees']) {
 let editVis = 'private';
 for (const b of $$('#edit-vis button')) b.addEventListener('click', () => { editVis = b.dataset.vis; syncVis(); });
 function syncVis() {
-  // Famille et amis sont séparés : la famille choisit 👪, les amis 👥 ; seul l'admin a les deux (la base le vérifie aussi).
-  const ami = state.group === 'ami', both = state.isAdmin;
-  $('#edit-vis [data-vis="family"]').hidden = ami && !both;
-  $('#edit-vis [data-vis="friends"]').hidden = !ami && !both;
-  if (editVis === 'family' && ami && !both) editVis = 'friends';
-  if (editVis === 'friends' && !ami && !both) editVis = 'family';
+  // Groupes séparés : la famille choisit 👪, les amis 👥, Grrr 🐆 ; seul l'admin a les trois (la base le vérifie aussi).
+  const mine = { famille: 'family', ami: 'friends', grrr: 'grrr' }[state.group] ?? 'family';
+  const allowed = new Set(['private', ...(state.isAdmin ? ['family', 'friends', 'grrr'] : [mine])]);
+  for (const v of ['family', 'friends', 'grrr']) $(`#edit-vis [data-vis="${v}"]`).hidden = !allowed.has(v);
+  if (!allowed.has(editVis)) editVis = 'private';
   for (const b of $$('#edit-vis button')) b.classList.toggle('on', b.dataset.vis === editVis);
 }
 
@@ -2106,6 +2106,8 @@ async function refreshAdminBadge() {
   return count;
 }
 
+// Groupes de personnes (séparés : chacun ne voit que les coins de son groupe ; l'admin voit tout).
+const GROUPS = { famille: { label: '👪 Famille', cls: 'family' }, ami: { label: '👥 Ami', cls: 'friends' }, grrr: { label: '🐆 Grrr', cls: 'grrr' } };
 async function loadAdmin() {
   const [reqs, members] = await Promise.all([
     sb.from('champi_access_requests').select('email, display_name, message, created_at').order('created_at'),
@@ -2121,20 +2123,21 @@ async function loadAdmin() {
       <div class="req-actions">
         <button class="btn primary" type="button" data-accept="${esc(r.email)}" data-name="${esc(r.display_name)}" data-grp="famille">👪 Famille</button>
         <button class="btn" type="button" data-accept="${esc(r.email)}" data-name="${esc(r.display_name)}" data-grp="ami">👥 Ami</button>
+        <button class="btn" type="button" data-accept="${esc(r.email)}" data-name="${esc(r.display_name)}" data-grp="grrr">🐆 Grrr</button>
         <button class="btn" type="button" data-refuse="${esc(r.email)}">Refuser</button>
       </div></li>`).join('') : '<li class="muted small">Aucune demande.</li>';
   $('#member-count').textContent = `(${members.data.length})`;
-  const fam = members.data.filter((m) => m.grp !== 'ami').length;
-  $('#member-count').textContent = `(${fam} famille · ${members.data.length - fam} ami${members.data.length - fam > 1 ? 's' : ''})`;
+  const n = (g) => members.data.filter((m) => (GROUPS[m.grp] ? m.grp : 'famille') === g).length;
+  $('#member-count').textContent = `(${n('famille')} famille · ${n('ami')} ami${n('ami') > 1 ? 's' : ''} · ${n('grrr')} grrr)`;
   $('#member-list').innerHTML = members.data.map((m) => {
-    const ami = m.grp === 'ami';
+    const g = GROUPS[m.grp] ? m.grp : 'famille';
     return `<li>
       <div class="head"><span>${esc(m.label || m.email.split('@')[0])}${m.email === me ? ' 👑' : ''}
-        <span class="badge grp ${ami ? 'friends' : 'family'}">${ami ? '👥 Ami' : '👪 Famille'}</span></span>
+        <span class="badge grp ${GROUPS[g].cls}">${GROUPS[g].label}</span></span>
         ${m.email === me ? '' : `<button class="del" type="button" data-remove="${esc(m.email)}">Retirer</button>`}</div>
       <div class="small muted">${esc(m.email)} · depuis le ${formatDate(m.added_at)}</div>
       ${m.email === me ? '' : `<div class="row"><button class="btn link" type="button" data-invite="${esc(m.email)}">✉️ Envoyer l'invitation</button>
-        <button class="btn link" type="button" data-grp-set="${ami ? 'famille' : 'ami'}" data-email="${esc(m.email)}">${ami ? 'Passer dans la famille' : 'Passer en ami'}</button></div>`}</li>`;
+        ${Object.keys(GROUPS).filter((x) => x !== g).map((x) => `<button class="btn link" type="button" data-grp-set="${x}" data-email="${esc(m.email)}">→ ${GROUPS[x].label}</button>`).join('')}</div>`}</li>`;
   }).join('');
   await refreshAdminBadge();
 }
@@ -2176,15 +2179,15 @@ $('#dlg-admin').addEventListener('click', async (e) => {
   try {
     if (inv) { await inviteMember(inv.dataset.invite); return; }
     if (gs) {
-      const ami = gs.dataset.grpSet === 'ami';
-      if (!confirm(ami ? 'Passer cette personne en ami ? Elle ne verra plus les coins 👪 Famille (ses propres coins restent à elle).' : 'Faire entrer cette personne dans la famille ? Elle verra les coins 👪 Famille.')) return;
+      const to = GROUPS[gs.dataset.grpSet];
+      if (!confirm(`Passer cette personne dans le groupe ${to.label} ? Elle ne verra plus que les coins ${to.label} et les siens (ses propres coins restent à elle).`)) return;
       const { error } = await sb.from('champi_allowed_emails').update({ grp: gs.dataset.grpSet }).eq('email', gs.dataset.email);
       if (error) throw error;
     } else if (acc) {
       await addMember(acc.dataset.accept, acc.dataset.name, acc.dataset.grp);
       const { error } = await sb.from('champi_access_requests').delete().eq('email', acc.dataset.accept);
       if (error) throw error;
-      toast(acc.dataset.grp === 'ami' ? `${acc.dataset.name} est ajouté(e) aux amis ✔` : `${acc.dataset.name} fait partie de la famille ✔`);
+      toast(`${acc.dataset.name} est dans le groupe ${GROUPS[acc.dataset.grp]?.label ?? '👪 Famille'} ✔`);
     } else if (ref) {
       if (!confirm('Refuser cette demande ?')) return;
       const { error } = await sb.from('champi_access_requests').delete().eq('email', ref.dataset.refuse);
@@ -2446,7 +2449,7 @@ function readSnapshot() {
 }
 function openFromSnapshot(snap) {
   state.profile = snap.profile; state.isAdmin = false;
-  state.group = store.get('champi-group') === 'ami' ? 'ami' : 'famille';
+  state.group = ['ami', 'grrr'].includes(store.get('champi-group')) ? store.get('champi-group') : 'famille';
   showMe();
   show('app');
   loadData().catch(fatal);

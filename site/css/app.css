@@ -10,6 +10,7 @@
   --private: #7a4cc2;      /* coins « Moi seul » */
   --family: #d9720b;       /* coins « Famille » */
   --friends: #1f7a8c;      /* coins « Amis » */
+  --grrr: #a8641a;         /* coins « Grrr » (léopard) */
   --shared: #13867f;       /* coins partagés avec moi */
   --season: #1f8a4c;
   --danger: #c0392b;
@@ -22,14 +23,14 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #111713; --surface: #1b231d; --surface-2: #243026; --text: #e8ece6; --muted: #9ba79c;
-    --border: #344236; --primary: #6fbf83; --primary-text: #0c140e; --private: #b08cf0; --family: #f59a3c; --friends: #4fb3c8;
+    --border: #344236; --primary: #6fbf83; --primary-text: #0c140e; --private: #b08cf0; --family: #f59a3c; --friends: #4fb3c8; --grrr: #e0a050;
     --season: #5fd393; --danger: #ff7a6b; --warn-bg: #3a3214; --warn-text: #f5e2a8;
     --shadow: 0 4px 16px rgba(0, 0, 0, .5); color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #111713; --surface: #1b231d; --surface-2: #243026; --text: #e8ece6; --muted: #9ba79c;
-  --border: #344236; --primary: #6fbf83; --primary-text: #0c140e; --private: #b08cf0; --family: #f59a3c; --friends: #4fb3c8;
+  --border: #344236; --primary: #6fbf83; --primary-text: #0c140e; --private: #b08cf0; --family: #f59a3c; --friends: #4fb3c8; --grrr: #e0a050;
   --season: #5fd393; --danger: #ff7a6b; --warn-bg: #3a3214; --warn-text: #f5e2a8;
   --shadow: 0 4px 16px rgba(0, 0, 0, .5); color-scheme: dark;
 }
@@ -106,6 +107,7 @@ label { font-size: .9rem; font-weight: 600; }
 .seg .vis-private.on { background: var(--private); color: #fff; }
 .seg .vis-family.on { background: var(--family); color: #fff; }
 .seg .vis-friends.on { background: var(--friends); color: #fff; }
+.seg .vis-grrr.on { background: var(--grrr); color: #fff; }
 
 .menu { position: absolute; z-index: 1001; top: calc(58px + env(safe-area-inset-top)); right: 8px; width: min(290px, calc(100% - 16px)); display: flex; flex-direction: column; gap: 12px; }
 .check { display: flex; gap: 8px; align-items: center; font-weight: 500; }
@@ -156,6 +158,7 @@ label { font-size: .9rem; font-weight: 600; }
 .badge.private { background: var(--private); color: #fff; }
 .badge.family { background: var(--family); color: #fff; }
 .badge.friends { background: var(--friends); color: #fff; }
+.badge.grrr { background: var(--grrr); color: #fff; }
 .badge.grp { font-size: .7rem; }
 .badge.season { background: var(--season); color: #fff; }
 

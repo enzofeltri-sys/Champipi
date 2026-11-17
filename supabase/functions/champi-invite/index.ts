@@ -40,7 +40,8 @@ Deno.serve(async (req) => {
     if (await userExists(email)) return json(req, { status: 'exists' });
     const { error: e2 } = await admin.auth.admin.inviteUserByEmail(email, {
       redirectTo: SITE,
-      data: { grp: m.grp ?? 'famille', label: m.label ?? '', invited_by: me },
+      // Le modèle du mail ne connaît que « famille » et « ami » : un membre 🐆 Grrr reçoit la version « ami » (groupe à part).
+      data: { grp: m.grp === 'grrr' ? 'ami' : (m.grp ?? 'famille'), groupe: m.grp ?? 'famille', label: m.label ?? '', invited_by: me },
     });
     if (e2) return json(req, { error: e2.message }, 502);
     return json(req, { status: 'sent' });

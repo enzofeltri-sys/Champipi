@@ -267,6 +267,7 @@
         <button type="button" data-vis="private" class="on vis-private">🔒 Moi seul</button>
         <button type="button" data-vis="family" class="vis-family">👪 Famille</button>
         <button type="button" data-vis="friends" class="vis-friends">👥 Amis</button>
+        <button type="button" data-vis="grrr" class="vis-grrr">🐆 Grrr</button>
       </div>
       <label for="edit-note">Notes sur le coin</label>
       <textarea id="edit-note" rows="3" maxlength="2000" placeholder="Repères pour le retrouver, astuces…"></textarea>
@@ -719,9 +720,10 @@
         <div class="seg" id="add-grp" role="radiogroup" aria-label="Groupe">
           <button type="button" data-grp="famille" class="on vis-family">👪 Famille</button>
           <button type="button" data-grp="ami" class="vis-friends">👥 Ami</button>
+          <button type="button" data-grp="grrr" class="vis-grrr">🐆 Grrr</button>
         </div>
         <button class="btn primary" type="submit">Ajouter</button>
-        <p class="small muted">La personne reçoit aussitôt un mail d'invitation (bienvenue, mode d'emploi et lien qui la connecte directement). La famille et les amis sont séparés : un <b>ami</b> ne voit que les coins 👥 Amis et les prénoms des amis ; la famille ne voit pas les amis. Toi, tu vois les deux.</p>
+        <p class="small muted">La personne reçoit aussitôt un mail d'invitation (bienvenue, mode d'emploi et lien qui la connecte directement). Les trois groupes sont séparés : un <b>ami</b> ne voit que les coins 👥 Amis et les prénoms des amis, un membre <b>Grrr</b> que les coins 🐆 Grrr et les prénoms du groupe ; la famille ne voit ni l'un ni l'autre. Toi, tu vois tout.</p>
       </form>
       <p id="admin-error" class="error" role="alert" hidden></p>
       <h3>Membres <span id="member-count" class="muted small"></span></h3>

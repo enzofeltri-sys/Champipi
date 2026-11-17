@@ -187,11 +187,12 @@ async function morningRun(cfg: any) {
 }
 
 // Mêmes règles que la base.
-// Famille et amis séparés : 👪 pour la famille, 👥 pour les amis ; l'admin voit les deux.
+// Groupes séparés : 👪 famille, 👥 amis, 🐆 Grrr ; l'admin voit les trois.
 function canSee(grp: string | undefined, uid: string, s: any, isShared: boolean, isAdmin = false) {
   if (s.owner === uid) return true;
   if (!grp) return false;
-  return (s.visibility === 'family' && grp === 'famille') || (s.visibility === 'friends' && (grp === 'ami' || isAdmin)) || isShared;
+  return (s.visibility === 'family' && grp === 'famille') || (s.visibility === 'friends' && (grp === 'ami' || isAdmin))
+    || (s.visibility === 'grrr' && (grp === 'grrr' || isAdmin)) || isShared;
 }
 async function adminEmails() {
   const { data } = await admin.from('champi_admins').select('email');
