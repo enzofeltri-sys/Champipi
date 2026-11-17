@@ -235,8 +235,11 @@ async function commentOuting(f: any, s: any, save = true) {
     admin.from('champi_soil_clim').select('months').eq('key', cell).maybeSingle(),
     admin.from('champi_swi').select('w, s, e, n, swi, normal, rain15, date').range(0, 1999),
     admin.from('champi_profiles').select('display_name').eq('id', f.user_id).maybeSingle(),
-    // Trouvailles des 7 jours d'avant dans les coins partagés (famille ou amis) : un nombre, jamais un lieu.
-    admin.from('champi_finds').select('id, champi_spots!inner(visibility)').eq('empty', false).gte('found_on', since7).lte('found_on', f.found_on).neq('champi_spots.visibility', 'private'),
+    // Trouvailles des 7 jours d'avant dans les coins du même groupe que ce coin (famille, amis ou Grrr) : un nombre,
+    // jamais un lieu, et rien pour un coin « Moi seul » (les groupes restent séparés, même dans les commentaires).
+    s.visibility && s.visibility !== 'private'
+      ? admin.from('champi_finds').select('id, champi_spots!inner(visibility)').eq('empty', false).gte('found_on', since7).lte('found_on', f.found_on).eq('champi_spots.visibility', s.visibility)
+      : Promise.resolve({ data: null }),
   ]);
   let daily = g?.daily ?? null;
   if (!daily?.time?.includes(f.found_on)) daily = (await weatherFor([[s.lat, s.lon]]).catch(() => null))?.[0] ?? null;
@@ -309,7 +312,7 @@ Deno.serve(async (req) => {
       if (req.headers.get('x-champi-token') !== cfg.cron_token) return json(req, { error: 'jeton invalide' }, 401);
       const { data: f, error } = await admin.from('champi_finds').select('id, spot_id, user_id, found_on, species, empty, conditions').eq('id', String(body.find_id ?? '')).single();
       if (error) throw error;
-      const { data: s, error: e2 } = await admin.from('champi_spots').select('id, name, lat, lon, species, trees, altitude, exposure, soil').eq('id', f.spot_id).single();
+      const { data: s, error: e2 } = await admin.from('champi_spots').select('id, name, visibility, lat, lon, species, trees, altitude, exposure, soil').eq('id', f.spot_id).single();
       if (e2) throw e2;
       return json(req, { commentaire: await commentOuting(f, s, body.save !== false) });
     }
